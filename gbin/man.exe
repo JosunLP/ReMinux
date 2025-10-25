@@ -1,0 +1,48 @@
+-- manual menu, part of main menu but can be called seperate
+local listman = {}
+listman = fs.list("/etc/man/")
+ogTerm = term.current()
+
+function buildMenu()
+	 title = "Installed Manuals (/etc/man)"
+	 choices = {}
+	choices[1] = "return/exit"
+	 actions = {}
+	actions[1] = function()
+		minux.debug("softmenu:return/exit" , "minux")
+		manmenuactive = false
+	end
+-- here we build the menu
+	local appcount = 1
+	local listcount = 2
+	while listman[appcount] ~= nil do
+		choices[listcount] = listman[appcount]
+		actions[listcount] = function(selected)
+		local baseTerm = term.redirect(term.native())
+		term.clear()
+		term.setCursorPos(1,1)
+		shell.run("less /etc/man/"..listman[selected-1])
+		print("hit enter to continue")
+		read()
+		term.clear()
+		term.setCursorPos(1,1)
+		local colortable = minux.getbashcolor()
+		local termX, termY = term.getSize()
+		term.setBackgroundColor(colortable[2])
+		term.setTextColor(colortable[3])
+		local title = "Minux V:".._G.version.." U-".._G.login
+		print(title..string.rep(" ", termX - #title))
+		print(string.rep(" ", termX))
+		term.redirect(baseTerm)
+		end
+		appcount = appcount + 1
+		listcount = listcount + 1
+
+	end
+end
+
+manmenuactive = true
+buildMenu()
+while manmenuactive == true do
+	menu.menuOptions(title, choices, actions)
+end

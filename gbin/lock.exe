@@ -1,0 +1,2 @@
+-- lock launcher
+minux.lock()

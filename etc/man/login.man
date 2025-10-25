@@ -1,0 +1,71 @@
+login, Minux login
+executable location: 
+'/bin/login.sh'  
+alias:'login'
+login is part of base
+
+syntax: 
+'login username pass'
+
+login can be used to 
+change username on the
+fly, when using 
+'login username pass' 
+your password will be 
+displayed in plain text
+by using 'login' the 
+program will ask you to
+provide the username and
+password and mask the 
+input,a slower but more 
+private process.
+
+login can use two 
+potential ways to verify 
+users, local and network 
+for network an AUTH
+server must be installed.
+
+to change to network or 
+local login, use either
+'login set network' or 
+'login set local' or 
+'login set disable'
+
+local login stores it's
+user files in 
+/usr/local/auth,
+
+a very insecure method 
+of storing passwords,
+the only possible admin
+user is 'root', any 
+other user is a normal 
+user and cannot get 
+admin powers any 
+network command will 
+not function at all, 
+since you are not 
+authenticated on the 
+network.
+
+network login will store
+ the usernames and pass
+on the AUTH server, a 
+much more secure method
+to store them, assuming
+your AUTH server is in 
+a secure location.
+it also enables any 
+network application, 
+since the AUTH can now 
+verify who you are.
+
+using network login is 
+highly recommended.
+
+Important locations:
+/etc/auth.cfg
+auth config file
+/usr/local/auth 
+user files local login

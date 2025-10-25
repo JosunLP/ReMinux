@@ -1,0 +1,22 @@
+-- file created by missooni
+-- this can be used as a template for your own versions
+-- do remember to change image paths if you do.
+
+local imgPath = "/etc/minux-main/welcome/tuxcc.nfp"
+local bannerPath = "/etc/minux-main/welcome/mnx.nfp"
+  local tX, tY = term.getSize()
+  local img = paintutils.loadImage(imgPath)
+  local banner = paintutils.loadImage(bannerPath)
+  term.clear()
+  paintutils.drawFilledBox(1, 1, tX, tY-2, colors.gray)
+  paintutils.drawImage(img, 0, 2)
+  if not pocket then
+    paintutils.drawImage(banner, 22, 5)
+    local mX, mY = term.getCursorPos()
+    term.setCursorPos(28, mY+1)
+    print("Version: "..version)
+    term.setCursorPos(1, tY-1)
+  else
+    local mX, mY = term.getCursorPos()
+    term.setCursorPos(1, tY-1)
+  end

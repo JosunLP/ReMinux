@@ -1,0 +1,94 @@
+APT-inspired by debian's
+apt system
+
+executable location: 
+'/bin/apt.sh' 
+alias: 'apt'
+apt is part of the 
+'minux-main' app
+
+apt is used to manage 
+software packages,be it
+install, remove, update
+
+it keeps a list of the 
+software installed on 
+the machine and uses 
+this to knowwhat apps 
+and associated files 
+to fetch.
+
+syntax: 
+'apt command app'
+
+command parameters: 
+-l : 'list' , 
+lists all installed 
+software
+
+-i : 'install', 
+install an app
+
+-r : 'remove', 
+remove an app
+
+-u : 'update', updates 
+an app, if no app name 
+is provided update all.
+
+-U : 'forced update', 
+force update all.
+
+-s : 'source' ,sets an 
+additional repo source
+
+-c : 'source" 
+clears an apt source
+
+-ls : lists currently 
+active apt sources
+
+-la : lists available 
+software on apt sources
+
+-a : 'autoupdate' sets 
+automatic updates
+
+-i and -r require you 
+are logged in as an
+admin/owner, -u and -U 
+work for every user.
+apt will refuse to work
+if no user is logged in
+
+to install an app, use 
+the -i option, 
+eg: 'apt -i tron' will 
+install the 'tron' app.
+
+important locations:
+/etc/apt/list - keeps 
+the .db files of what 
+app	is installed and 
+what files are linked.
+changing the list .db 
+files allows you to
+manually edit what 
+programs are installed
+on the machine, in case 
+of corruption.
+
+/etc/apt/version -keeps
+ the version files.
+changing these files 
+will alter the known
+version and trigger an 
+update for that program 
+when 'apt -u' is used.
+	
+/usr/apt/source.ls - 
+apt source file
+this file containts the
+apt repository sources, 
+you can delete the ones 
+you don't want

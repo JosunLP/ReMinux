@@ -1,0 +1,17 @@
+-- gbin useradd, made to be run without input
+term.clear()
+term.setCursorPos(1,1)
+print("Adding new user")
+
+write("username:")
+local username = read()
+write("Password:")
+local password = read("*")
+write("confirm password:")
+local tmppass = read("*")
+
+if tmppass ~= password then print("password missmatch")
+else shell.run("/bin/useradd.sh "..username.." "..password) end
+print("")
+print("hit enter to continue")
+read()

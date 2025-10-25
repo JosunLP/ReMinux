@@ -1,0 +1,31 @@
+ls - file lister
+executable location: 
+'/bin/ls.sh' alias:'ls'
+ls is part of the 
+'minux-main' app
+
+ls is used to list 
+folder contents.
+
+syntax: 
+'ls folderpath option'
+
+if no option is given, 
+it simply lists 
+folderpath by using the
+normal CC list.lua.
+
+options can be provided
+they do the following:
+ -r: recursive, lists 
+ files recursively 
+ showing not only the 
+ listed folder but 
+ also it's sub folders
+ and their contents.
+
+ -a: Additional info, 
+ lists the folder's 
+ contents and shows 
+ file size for each 
+ file.

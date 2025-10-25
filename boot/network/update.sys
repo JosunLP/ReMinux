@@ -1,0 +1,37 @@
+-- auto updater
+local line = nil
+if fs.exists("/usr/apt/update.cfg") then
+	local temp = fs.open("/usr/apt/update.cfg","r")
+	line = temp.readLine()
+	temp.close()
+	local updatecount = 0
+	if line == "enabled" then
+		if fs.exists("/temp/apt/updatecount.tmp") == true then
+			minux.debug("update file found","minux")
+			local cnf = fs.open("/temp/apt/updatecount.tmp","r")
+			local updateread= cnf.readLine()
+			local updatecount = tonumber(updateread)
+			cnf.close()
+		end
+		if updatecount == 5 then
+			minux.debug("update count = 5, running update","minux")
+			shell.run("/bin/apt.sh -u")
+			updatecount = 0
+		else
+			minux.debug("update count less then 5, skipping","minux")
+			updatecount = updatecount + 1
+		end
+		local cnf = fs.open("/temp/apt/updatecount.tmp","w")
+		cnf.writeLine(updatecount)
+		cnf.close()
+	elseif line == "always" then
+		minux.debug("update set to always, running")
+		shell.run("/bin/apt.sh -U")
+	else
+		minux.debug("update file corrupt, resetting","minux")
+		print("update file corrupt, resetting to disabled")
+		fs.delete("/usr/apt/update.cfg")
+	end
+else
+	minux.debug("Auto update disabled","minux")
+end

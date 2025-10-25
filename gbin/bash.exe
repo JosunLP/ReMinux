@@ -1,0 +1,2 @@
+-- bash shell launcher
+shell.run("/etc/minux-main/workspace/shell.lua")

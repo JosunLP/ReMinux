@@ -1,0 +1,23 @@
+-- dhcp client program
+-- exception if we are the dhcp ourself!
+if fs.exists("/etc/dhcp-server/dhcp-server.sys") then
+	_G.server = "[US!]"
+	return 0
+elseif _G.modemside == "NONE" then
+	_G.server = "[none]"
+	return 0
+end
+-- in case of network clutter, we should wait for a few replies
+rednet.broadcast("DHCP-REQ")
+netcounter = 0
+_G.server = "[none]"
+while netcounter ~= 3 do
+	client, data = rednet.receive(2)
+	netcounter = netcounter + 1
+	if data == "DHCP-ACK" then 
+		_G.server = client 
+		netcounter = 3
+	else
+		rednet.broadcast("DHCP-REQ")
+	end
+end

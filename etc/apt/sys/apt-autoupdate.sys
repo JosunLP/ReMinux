@@ -1,0 +1,20 @@
+-- apt auto update settings
+args = {...}
+local command = args[1]
+
+if command == "always" then
+	print("setting autoupdate to always")
+	tempfile = fs.open("/usr/apt/update.cfg","w")
+	tempfile.writeLine(command)
+	tempfile.close()
+elseif command == "enabled" then
+	print("setting autoupdate to enabled")
+	tempfile = fs.open("/usr/apt/update.cfg","w")
+	tempfile.writeLine(command)
+	tempfile.close()
+elseif command == "disabled" then
+	print("setting autoupdate to disabled")
+	fs.delete("/usr/apt/update.cfg","w")
+else
+	print("invalid input, try 'man apt'")
+end

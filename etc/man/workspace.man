@@ -1,0 +1,27 @@
+Workspace, made by LDDestroier
+see https://forums.computercraft.cc/index.php?topic=661.new#new for more
+
+
+CTRL+SHIFT+Arrow  
+to move between 
+workspaces.
+
+CTRL+SHIFT+TAB+Arrow  
+to swap the currently 
+selected workspace with 
+another.
+
+CTRL+SHIFT+[WASD]
+add a new workspace.
+
+CTRL+SHIFT+Q 
+delete a workspace.
+
+CTRL+SHIFT+P 
+pause a workspace.
+
+You can even use 
+CTRL+SHIFT+Mouse1 to 
+click and drag to 
+navigate between 
+workspaces!

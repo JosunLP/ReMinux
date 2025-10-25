@@ -1,0 +1,1 @@
+-- minux autorun example file, anything in here would run on bootup.

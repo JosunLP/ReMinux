@@ -1,0 +1,6 @@
+-- Minux Bootloader
+shell.run("clear")
+shell.run("/boot/init.sys")
+
+-- in case someone wants to kill us, or init, or login
+os.shutdown()

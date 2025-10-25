@@ -1,0 +1,57 @@
+Usermod, local user 
+manager
+executable location:
+/bin/usermod.sh   
+alias:usermod
+usermod is part of the 
+'minux-main' app.
+
+syntax: 
+usermod action arg1 arg2
+eg:"usermod add foo bar"
+
+action options:
+add : adds a user, this
+must be followed by the
+username and password.
+
+del : Deletes a user, 
+this must be followed by
+the username
+
+psw : changes a user's 
+password, this must be
+followed by the username
+and password
+
+Usermod allows you to 
+manage local user 
+accounts,these accounts
+will be disabled when 
+the system is set to 
+network login. the 
+'root' account is the 
+only admin and cannot
+be deleted, no other 
+user can be made admin.
+
+remember: local AUTH 
+must store the user and
+password files on the 
+local machine, making
+them accessable to 
+anyone who can gain 
+access to this computer
+do NOT use passwords 
+that you also use on 
+other services with 
+local AUTH, the security
+this provides is minimal
+at best.
+
+important locations:
+/usr/local/auth/users 
+- this is where user 
+files are stored. for 
+now passwords are not 
+hashed.

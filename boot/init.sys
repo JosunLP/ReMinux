@@ -1,0 +1,428 @@
+local bash = "/etc/minux-main/workspace/shell.lua"
+local oldshell = "/rom/programs/shell.lua"
+local crashstage = 0
+local cursorhor, cursorver = term.getCursorPos()
+function getcrashhandler(stage)
+	local stagestate = 0
+	if fs.exists("/temp/minux/boot/fail"..stage..".tmp") then
+		local tempfile = fs.open("/temp/minux/boot/fail"..stage..".tmp" ,"r")
+		stagestate = tempfile.readLine()
+		tempfile.close()
+	end
+	return stagestate
+end
+function setcrashhandler(stage, value)
+	local tempfile = fs.open("/temp/minux/boot/fail"..stage..".tmp" ,"w")
+	tempfile.writeLine(value)
+	tempfile.close()
+end
+function repairshell(stage)
+	term.clear()
+	term.setCursorPos(1,1)
+	if stage == "1" or stage == 1 then
+		print("Kernel panic")
+	else
+		print("Minux-V:".._G.version.." Init fail")
+	end
+	print("Init stage:"..stage)
+	if stage == 4 or stage == "4" then
+		print(" ")
+		print("Causes:")
+		print("1) your UI or bootup program is broken")
+		print("2) you shut down the computer with the button")
+		print("3) the Minecraft Chunk reloaded")
+		print("you can disable this stage using 'config'")
+	end
+	print(" ")
+	print("hit enter to launch repair shell")
+	read()
+	setcrashhandler("1","0")
+	shell.run(oldshell)
+end
+function screenpos(cursorver)
+	if pocket or turtle then
+		term.setCursorPos(15,cursorver)
+	else
+		term.setCursorPos(40,cursorver)
+	end
+end
+if pocket or turtle then
+	print("-----------Minux----------")
+else
+	print("--------------------Minux--------------------------")
+end
+crashstage = getcrashhandler("1")
+if crashstage == "2" or crashstage == 2 then
+	setcrashhandler("1","0")
+	repairshell("1")
+else
+	crashstage = crashstage + 1
+	setcrashhandler("1",crashstage)
+end
+cursorhor, cursorver = term.getCursorPos()
+print("Kernel:")
+os.loadAPI("/etc/api/minux")
+os.loadAPI("/etc/api/apt")
+os.loadAPI("/etc/minux-main/sys/menu.lua")
+expectfile = "/rom/modules/main/cc/expect.lua"
+_G.expect = dofile(expectfile)
+if term.isColor() then
+	term.setTextColor(colors.green)
+end
+local dbfile = "/etc/apt/list/minux-main.db"
+if fs.exists(dbfile) then
+	local templinenr = minux.findline(dbfile,"version=")
+	local templinedata = minux.printline(dbfile,templinenr)
+	local result = string.sub(templinedata, 9)
+	_G.version = result
+else
+	_G.version = "Cleaninstall"
+end
+screenpos(cursorver)
+print("[V:".._G.version.."]")
+shell.run("/boot/alias.ls")
+if term.isColor() then term.setTextColor(colors.white) end
+cursorhor, cursorver = term.getCursorPos()
+print("Sanitycheck:")
+minux.sanitycheck()
+if term.isColor() then
+	term.setTextColor(colors.green)
+end
+screenpos(cursorver)
+print("[Cleared]")
+if term.isColor() then
+	term.setTextColor(colors.white)
+end
+cursorhor, cursorver = term.getCursorPos()
+print("Modem:")
+_G.modemside = minux.perfind("modem")
+if term.isColor() then
+	if _G.modemside ~= "NONE" then
+		term.setTextColor(colors.green)
+	else
+		term.setTextColor(colors.red)
+	end
+end
+screenpos(cursorver)
+print("[".._G.modemside.."]")
+if term.isColor() then
+	term.setTextColor(colors.white)
+end
+if _G.modemside ~= "NONE" then
+	rednet.open(_G.modemside)
+end
+cursorhor, cursorver = term.getCursorPos()
+print("Diskdrive:")
+_G.diskside = minux.perfind("drive")
+if term.isColor() then
+	if _G.diskside ~= "NONE" then
+		term.setTextColor(colors.green)
+	else
+		term.setTextColor(colors.red)
+	end
+end
+screenpos(cursorver)
+print("[".._G.diskside.."]")
+if term.isColor() then
+	term.setTextColor(colors.white)
+end
+cursorhor, cursorver = term.getCursorPos()
+print("Monitor:")
+_G.monitorside = minux.perfind("monitor")
+if term.isColor() then
+	if _G.monitorside ~= "NONE" then
+		term.setTextColor(colors.green)
+	else
+		term.setTextColor(colors.red)
+	end
+end
+screenpos(cursorver)
+print("[".._G.monitorside.."]")
+if term.isColor() then
+	term.setTextColor(colors.white)
+end
+if _G.monitorside ~= "NONE" then
+	_G.monitor = peripheral.wrap(_G.monitorside)
+end
+cursorhor, cursorver = term.getCursorPos()
+print("Printer:")
+_G.printerside = minux.perfind("printer")
+if term.isColor() then
+	if _G.printerside ~= "NONE" then
+		term.setTextColor(colors.green)
+	else
+		term.setTextColor(colors.red)
+	end
+end
+screenpos(cursorver)
+print("[".._G.printerside.."]")
+if term.isColor() then
+	term.setTextColor(colors.white)
+end
+if printerside ~= "NONE" then
+	_G.printer = peripheral.wrap(_G.printerside)
+end
+cursorhor, cursorver = term.getCursorPos()
+print("Speaker:")
+_G.speakerside = minux.perfind("speaker")
+if term.isColor() then
+	if _G.speakerside ~= "NONE" then
+		term.setTextColor(colors.green)
+	else
+		term.setTextColor(colors.red)
+	end
+end
+screenpos(cursorver)
+print("[".._G.speakerside.."]")
+if term.isColor() then
+	term.setTextColor(colors.white)
+end
+_G.server = "[none]"
+if minux.getconfig("network") == "enabled" then
+	local cursorhor, cursorver = term.getCursorPos()
+	print("DHCP:")
+	shell.run("/boot/network/dhcp.sys")
+	screenpos(cursorver)
+	if term.isColor() then
+		if _G.server == "[none]" then
+			term.setTextColor(colors.red)
+		else
+			term.setTextColor(colors.green)
+		end
+	end
+	if server ~= "[none]" then
+		print("[".._G.server.."]")
+	else
+		print(_G.server)
+	end
+	if term.isColor() then
+		term.setTextColor(colors.white)
+	end
+end
+cursorhor, cursorver = term.getCursorPos()
+print("Crashhandler:")
+local temp = minux.getconfig("crashhandler")
+if term.isColor() then
+	if temp == "enabled" then
+		term.setTextColor(colors.green)
+	else
+		term.setTextColor(colors.red)
+	end
+end
+screenpos(cursorver)
+print("["..temp.."]")
+if term.isColor() then
+	term.setTextColor(colors.white)
+end
+setcrashhandler("1","0")
+crashstage = getcrashhandler("2")
+if crashstage == "2" or crashstage == 2 then
+	setcrashhandler("2","0")
+	repairshell("2")
+else
+	crashstage = crashstage + 1
+	setcrashhandler("2",crashstage)
+end
+local readdebug = minux.getconfig("debug")
+_G.debugmode = readdebug
+cursorhor, cursorver = term.getCursorPos()
+print("Debug system:")
+if term.isColor() then
+	if _G.debugmode == "disabled" then 
+		term.setTextColor(colors.green)
+	else 
+		term.setTextColor(colors.red) 
+	end
+end
+screenpos(cursorver)
+print("[".._G.debugmode.."]")
+if term.isColor() then term.setTextColor(colors.white) end
+minux.debug("Debug system loaded", "minux")
+cursorhor, cursorver = term.getCursorPos()
+print("login mode:")
+local temp = minux.getconfig("login")
+if term.isColor() then 
+	if temp ~= "disabled" then 
+		term.setTextColor(colors.green)
+	else 
+		term.setTextColor(colors.red) 
+	end 
+end
+screenpos(cursorver)
+print("["..temp.."]")
+if term.isColor() then term.setTextColor(colors.white) end
+cursorhor, cursorver = term.getCursorPos()
+print("UI mode:")
+local temp = minux.getconfig("ui")
+if term.isColor() then term.setTextColor(colors.green) end
+screenpos(cursorver)
+print("["..temp.."]")
+if term.isColor() then term.setTextColor(colors.white) end
+cursorhor, cursorver = term.getCursorPos()
+print("updates:")
+local temp = minux.getconfig("update")
+if term.isColor() then
+	if temp ~= "disabled" then 
+		term.setTextColor(colors.green)
+	else 
+		term.setTextColor(colors.red) 
+	end
+end
+screenpos(cursorver)
+print("["..temp.."]")
+if term.isColor() then term.setTextColor(colors.white) end
+local firstupdate = false
+if fs.exists("/usr/minux-main/data/firstrun.db") == false then
+	firstupdate = true
+	local tempfile = fs.open("/usr/minux-main/data/firstrun.db","w")
+	tempfile.writeLine("done")
+	tempfile.close()
+end
+_G.shell = shell
+shell.run("/boot/network/update.sys")
+if fs.exists("/etc/server.sys") then
+	minux.debug("Starting server.sys", "minux")
+	if term.isColor() then
+		shell.openTab("/etc/server.sys")
+	else 
+		shell.run("/etc/server.sys") 
+	end
+end
+if fs.exists("/boot/addon.d") then
+	minux.debug("running addons", "minux")
+	shell.run("/boot/addon.d")
+end
+setcrashhandler("2","0")
+crashstage = getcrashhandler("3")
+if crashstage == "2" or crashstage == 2 then
+	setcrashhandler("3","0")
+	repairshell("3")
+else
+	crashstage = crashstage + 1
+	setcrashhandler("3",crashstage)
+end
+minux.debug("running override.d", "minux")
+if fs.exists("/boot/override.d") then shell.run("/boot/override.d") end
+minux.debug("resetting crash handler stage 3","minux")
+setcrashhandler("3","0")
+if minux.getconfig("crashhandler") == "enabled" then
+	crashstage = getcrashhandler("4")
+	if crashstage == "2" or crashstage == 2 then
+		setcrashhandler("4","0")
+		repairshell("4")
+	else
+		crashstage = crashstage + 1
+		setcrashhandler("4",crashstage)
+	end
+end
+local runoncefile = "/boot/runonce.sh"
+if fs.exists(runoncefile) ~= true then
+	local tmprunoncefile = fs.open("/boot/runonce.sh","w")
+	minux.debug("init:clearing runonce","minux")
+	tmprunoncefile.close()
+end
+local runoncetable = minux.readtable(runoncefile)
+local runoncecount = 1
+minux.debug("init:executing runonce","minux")
+while runoncetable[runoncecount] ~= nil do
+	minux.debug("init:"..runoncetable[runoncecount],"minux")
+	shell.run(runoncetable[runoncecount])
+	runoncecount = runoncecount + 1
+end
+runoncefile = fs.open("/boot/runonce.sh","w")
+minux.debug("init:clearing runonce","minux")
+runoncefile.close()
+minux.debug("reading menu settings", "minux")
+if pocket or turtle then
+	print("--------------------------")
+else
+	print("---------------------------------------------------")
+end
+minux.debug("checking login settings", "minux")
+local temp = minux.getconfig("login")
+if temp ~= "disabled" then
+	if fs.exists("/etc/minux-main/sys/menulogin.sys") then
+		if term.isColor() then
+			if turtle then
+				minux.debug("no gui login for turtle")
+			else
+				minux.debug("running gui login for pc")
+				while _G.validlogin ~= true do
+					term.setBackgroundColor(colors.black)
+					term.setTextColor(colors.white)
+					minux.debug("running menulogin.sys", "minux")
+					shell.run("/etc/minux-main/sys/menulogin.sys")
+				end
+			end
+		end
+	end
+    minux.debug("running login.sh", "minux")
+	if _G.validlogin ~= true then shell.run("/bin/login.sh") end
+	while _G.validlogin ~= true do
+		minux.debug("login failed.", "minux")
+		print("Login failed, try again.")
+		sleep(2)
+		shell.run("/bin/login.sh")
+	end
+else
+	minux.debug("login disabled", "minux")
+	_G.validlogin = true
+	_G.admin = true
+	_G.login = "foo"
+	_G.masterpass = "bar"
+	if fs.exists("/boot/autorun.ls") == true then
+		shell.run("/boot/autorun.ls")
+	end
+end
+minux.testcolor()
+if firstupdate == true then
+	term.clear()
+	term.setCursorPos(1,1)
+	print("First run detected, verifying installation.")
+	print("This process may take a while, the system will reboot when done.")
+	apt.update("-f")
+	apt.aliasbuild()
+	apt.bootbuild()
+	apt.autorunbuild()
+	os.reboot()
+end
+if pocket or turtle then
+	print("hit enter to start")
+else
+	print("Welcome to Minux, Hit enter to start")
+end
+local initput = read()
+while initput ~= nil do
+	if initput == "bash" then
+		minux.debug("launching prompt", "minux")
+		shell.run(bash)
+	elseif initput == "update" then
+		apt.update("-f")
+		initput = read()
+	elseif initput == "reboot" or initput == "restart" then
+		minux.restart()
+	elseif initput == "halt" or initput == "shutdown" then
+		minux.halt()
+	else
+		initput = nil
+	end
+end
+local menuchoice = minux.getconfig("ui")
+if menuchoice == "menu" then
+	minux.debug("launching menu", "minux")
+	if fs.exists("/bin/minux.sh") then shell.run("/bin/minux.sh")
+	else shell.run(bash) end
+elseif menuchoice == "prompt" then
+	minux.debug("launching prompt", "minux")
+	shell.run(bash)
+elseif menuchoice == "craftos" then
+	minux.debug("launching craftos", "minux")
+	shell.run(oldshell)
+elseif menuchoice == "workspace" then
+	minux.debug("launching workspace", "minux")
+	shell.run("/bin/workspace.sh")
+else
+	shell.run(bash)
+end
+minux.debug("system crash restart", "minux")
+os.reboot()

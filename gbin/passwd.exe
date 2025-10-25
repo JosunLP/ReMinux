@@ -1,0 +1,16 @@
+-- just a way to launch passwd from GUI
+term.clear()
+term.setCursorPos(1,1)
+print("Change user password:")
+write("Username:")
+local username = read()
+write("Password:")
+local newpassword = read("*")
+write("Confirm password:")
+local newpass2 = read("*")
+if newpass2 ~= newpassword then print("passwords missmatch") return false end
+shell.run("/bin/passwd.sh "..username.." "..password)
+print("")
+print("hit enter to continue")
+read()
+return false

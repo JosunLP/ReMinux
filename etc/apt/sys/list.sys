@@ -1,0 +1,3 @@
+-- list apt installed files function
+minux.debug("listing installed files", "apt")
+os.run({},"/bin/less.sh", "/etc/apt/list/installed.db")

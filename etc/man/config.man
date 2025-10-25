@@ -1,0 +1,56 @@
+config - configuration 
+editor tool
+executable location: 
+'/bin/config.sh'   
+alias: 'config'
+config is part of the 
+'minux-main' app config
+is used to change minux
+configuration
+
+syntax: 
+'config type setting' 
+
+eg: 
+'config login network'
+
+options:
+-login setting| 
+setting can be:
+"network", "local", 
+"disabled"
+changes AUTH settings.
+
+-update setting| 
+setting can be:
+"always", "enabled", 
+"disabled".
+changes update on boot 
+
+-ui setting | setting 
+can be:
+"menu" , "prompt", 
+"workspace" shows the 
+menu screen on boot, a 
+basic prompt or 
+"workspace".
+
+-network setting | can
+"enabled"
+"disabled"
+turns dhcp search on
+boot on or off
+
+-debug setting | setting
+ can be: "disabled" , 
+ "enabled" , "logging", 
+ "full"
+sets debug mode, 
+settings can be: 
+"enabled" - increases 
+user feedback
+"logging" - enables log
+ files. 
+ "full" - does both 
+ print and log.
+"disabled" - turns it all off

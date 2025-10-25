@@ -1,0 +1,2 @@
+-- just a way for a gui to identify working apps it can use.
+shell.run("/bin/config.sh")

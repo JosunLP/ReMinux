@@ -1,0 +1,14 @@
+-- gbin userdel, made to be run without input
+term.clear()
+term.setCursorPos(1,1)
+print("removing user")
+
+write("username:")
+local username = read()
+
+
+if username == nil then print("invalid input")
+else shell.run("/bin/userdel.sh "..username) end
+print("")
+print("hit enter to continue")
+read()
