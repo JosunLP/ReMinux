@@ -134,6 +134,7 @@ php=false
 /bin/speak.sh
 /bin/ping.sh
 /bin/chat.sh
+/bin/curl.sh
 /etc/man/basename.man
 /etc/man/dirname.man
 /etc/man/realpath.man
@@ -165,3 +166,4 @@ php=false
 /etc/man/speak.man
 /etc/man/ping.man
 /etc/man/chat.man
+/etc/man/curl.man

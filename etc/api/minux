@@ -1193,26 +1193,44 @@ end
 function download(address, filepath)
 expect(1, address,  "string")
 expect(2, filepath, "string")
+if filepath == "" then
+minux.debug("http-get:empty target path", "minux")
+return false
+end
+if fs.isDir(filepath) == true then
+minux.debug("http-get:target is a directory: " .. filepath, "minux")
+return false
+end
 if minux.hasHttpSupport() ~= true then
 minux.debug("http-get:http api unavailable", "minux")
 return false
 end
-if http.checkURL(address) ~= true then
+local ok, checkErr = http.checkURL(address)
+if ok ~= true then
+minux.debug("http-get:url rejected: " .. tostring(checkErr or address), "minux")
 return false
 end
+ensureParentDirectory(filepath)
 for attempt = 1, 3 do
 minux.debug("minux:http-request:" .. address, "minux")
-local response = http.get(address)
+local response, requestErr = http.get(address)
 if response ~= nil then
 local content = response.readAll()
 response.close()
 local tempfile = fs.open(filepath, "w")
+if tempfile == nil then
+minux.debug("http-get:cannot write " .. filepath, "minux")
+return false
+end
 tempfile.write(content)
 tempfile.close()
 minux.debug("http-get:file retrieved", "minux")
 return true
 end
-minux.debug("http-get:failed attempt " .. attempt .. "/3", "minux")
+minux.debug(
+"http-get:failed attempt " .. attempt .. "/3: " .. tostring(requestErr or "unknown"),
+"minux"
+)
 os.sleep(3)
 end
 minux.debug("http-get:attempt failed", "minux")

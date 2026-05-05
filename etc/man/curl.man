@@ -1,0 +1,58 @@
+curl - HTTP client
+Executable: /bin/curl.sh
+Alias: curl
+
+DESCRIPTION
+  Performs an HTTP request via
+  the CC: Tweaked http API.
+  Prints the response body to
+  stdout or to a file.
+
+USAGE
+  curl <url>
+  curl -X POST -d body url
+  curl -H 'Accept: text/plain' url
+  curl -o out.txt url
+
+OPTIONS
+  -X method
+    HTTP method
+    (GET, POST, PUT, DELETE,
+    PATCH, HEAD, OPTIONS,
+    TRACE).
+  -H 'Name: Value'
+    Add a request header.
+    May be repeated.
+  -d body
+    Send a request body. The
+    method becomes POST when
+    not set explicitly.
+  -o file
+    Write the response body
+    to the given file instead
+    of stdout.
+  -i
+    Print the HTTP status
+    code and response headers
+    before the body.
+  -s
+    Silent mode. Suppresses
+    summary output when
+    saving to a file.
+  --timeout seconds
+    Request timeout passed to
+    http.get when running on
+    CC: Tweaked 1.105 or
+    newer.
+
+NOTES
+  The HTTP API must be
+  enabled in the CC: Tweaked
+  server config. curl checks
+  via minux.hasHttpSupport()
+  and exits with an error if
+  HTTP is disabled.
+
+SEE ALSO
+  apt
+  ping
