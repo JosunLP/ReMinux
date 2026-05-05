@@ -116,14 +116,15 @@ if term.isColor() then term.setTextColor(colors.white) end
 
 shell.run("/boot/alias.ls")
 
--- Sanity check
+-- Sanity check (update the same status line once complete)
 printBootItem("Sanitycheck", "Running", true)
+local _, sanityRow = term.getCursorPos()
 minux.sanitycheck()
+screenpos(sanityRow - 1)
 if term.isColor() then term.setTextColor(colors.green) end
-local _, row = term.getCursorPos()
--- overwrite "Running" with "Cleared" on the same line
-term.setCursorPos(1, row - 1)
+io.write("[Cleared]")
 if term.isColor() then term.setTextColor(colors.white) end
+print("")
 
 -- Peripheral detection
 

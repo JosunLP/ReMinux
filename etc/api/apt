@@ -451,48 +451,48 @@ end
 return updateResult
 end
 
-	minux.debug("reading installed.db", "apt")
-	manager:ensureDirectory(manager.manifestCacheDirectory)
-	local installedPackages = manager:readLines(manager.installedListPath)
-	for index = 1, #installedPackages do
-		local nextpack = installedPackages[index]
-		minux.debug("finding source", "apt")
-		local sourceList, sourceError = apt.findsource(nextpack)
-		if type(sourceList) ~= "table" then
-			minux.debug("update:source lookup failed:"..nextpack..":"..tostring(sourceError), "apt")
-		else
-			local serverFound = false
-			local manifestCache = manager.manifestCacheDirectory..nextpack..".db"
-			for sourceIndex = 1, #sourceList do
-				local source = sourceList[sourceIndex]
-				minux.debug("trying:"..source.."/"..nextpack, "apt")
-				minux.download(source.."/manifest/"..nextpack..".db", manifestCache)
-				local line = minux.findline(manifestCache, "AIF=true")
-				if line ~= nil and line ~= false then
-					serverFound = true
-					break
-				end
+minux.debug("reading installed.db", "apt")
+manager:ensureDirectory(manager.manifestCacheDirectory)
+local installedPackages = manager:readLines(manager.installedListPath)
+for index = 1, #installedPackages do
+	local nextpack = installedPackages[index]
+	minux.debug("finding source", "apt")
+	local sourceList, sourceError = apt.findsource(nextpack)
+	if type(sourceList) ~= "table" then
+		minux.debug("update:source lookup failed:"..nextpack..":"..tostring(sourceError), "apt")
+	else
+		local serverFound = false
+		local manifestCache = manager.manifestCacheDirectory..nextpack..".db"
+		for sourceIndex = 1, #sourceList do
+			local source = sourceList[sourceIndex]
+			minux.debug("trying:"..source.."/"..nextpack, "apt")
+			minux.download(source.."/manifest/"..nextpack..".db", manifestCache)
+			local line = minux.findline(manifestCache, "AIF=true")
+			if line ~= nil and line ~= false then
+				serverFound = true
+				break
 			end
+		end
 
-			if serverFound == true then
-				local installedVersion = "unknown"
-				local newVersion = apt.version(manifestCache)
-				if fs.exists(manager.manifestDirectory..nextpack..".db") then
-					installedVersion = apt.version(manager.manifestDirectory..nextpack..".db")
-				end
-				local packageUpToDate = newVersion == installedVersion
-				if packageUpToDate == true then
-					minux.debug("version number matches", "apt")
-				else
-					minux.debug("version number mismatch", "apt")
-				end
-				if forcedupdate == true or packageUpToDate ~= true then
-					minux.debug("updating pack:", "apt")
-					apt.getpack(nextpack)
-				end
+		if serverFound == true then
+			local installedVersion = "unknown"
+			local newVersion = apt.version(manifestCache)
+			if fs.exists(manager.manifestDirectory..nextpack..".db") then
+				installedVersion = apt.version(manager.manifestDirectory..nextpack..".db")
+			end
+			local packageUpToDate = newVersion == installedVersion
+			if packageUpToDate == true then
+				minux.debug("version number matches", "apt")
+			else
+				minux.debug("version number mismatch", "apt")
+			end
+			if forcedupdate == true or packageUpToDate ~= true then
+				minux.debug("updating pack:", "apt")
+				apt.getpack(nextpack)
 			end
 		end
 	end
+end
 
 minux.debug("updating configuration", "apt")
 apt.rebuildgenerated()
