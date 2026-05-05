@@ -238,7 +238,7 @@ local function fetchFileList(source)
         if #files == 0 then
                 return nil, "manifest contained no [filelist]"
         end
-        return files
+        return files, body
 end
 
 ------------------------------------------------------------
@@ -247,9 +247,9 @@ end
 
 local function installFromGit(source, profile)
         print("Fetching file manifest from " .. source:describe())
-        local files, err = fetchFileList(source)
+        local files, manifestBodyOrErr = fetchFileList(source)
         if files == nil then
-                printError("Cannot read manifest: " .. tostring(err))
+                printError("Cannot read manifest: " .. tostring(manifestBodyOrErr))
                 printError("Aborting installation.")
                 return false
         end
@@ -294,8 +294,8 @@ local function installFromGit(source, profile)
         installed.writeLine("minux-main")
         if profile == "desktop" then
                 installed.writeLine("menu")
+                installed.writeLine("minex")
                 installed.writeLine("auth-client")
-                installed.writeLine("netlib")
         elseif profile == "default" then
                 installed.writeLine("menu")
                 installed.writeLine("auth-client")
@@ -303,10 +303,13 @@ local function installFromGit(source, profile)
         end
         installed.close()
 
+        -- Store the installed manifest locally so boot/version logic and later
+        -- APT operations can read the installed version and compare updates.
+        writeFile("/etc/apt/list/minux-main.db", manifestBodyOrErr)
+
         ensureParent("/usr/apt/source.ls")
         local sourceFile = fs.open("/usr/apt/source.ls", "w")
-        sourceFile.writeLine(LEGACY_APT_OS)
-        sourceFile.writeLine(LEGACY_APT_SOFT)
+        sourceFile.writeLine(source:urlFor("/etc/apt/"))
         sourceFile.close()
 
         return #failed == 0

@@ -542,8 +542,23 @@ function Editor:paste(pasteAfter)
                 local line = self:line(row)
                 local col  = pasteAfter and self.cursor.col + 1 or self.cursor.col
                 col = clamp(col, 1, #line + 1)
-                self:setLine(row, line:sub(1, col - 1) .. self.yankBuffer .. line:sub(col))
-                self.cursor.col = col + #self.yankBuffer - 1
+                if self.yankBuffer:find("\n", 1, true) ~= nil then
+                        local pieces = {}
+                        for piece in (self.yankBuffer .. "\n"):gmatch("([^\n]*)\n") do
+                                pieces[#pieces + 1] = piece
+                        end
+                        self:setLine(row, line:sub(1, col - 1) .. pieces[1])
+                        for index = 2, #pieces - 1 do
+                                table.insert(self.lines, row + index - 1, pieces[index])
+                        end
+                        local lastIndex = row + #pieces - 1
+                        table.insert(self.lines, lastIndex, pieces[#pieces] .. line:sub(col))
+                        self.cursor.row = lastIndex
+                        self.cursor.col = math.max(1, #pieces[#pieces])
+                else
+                        self:setLine(row, line:sub(1, col - 1) .. self.yankBuffer .. line:sub(col))
+                        self.cursor.col = col + #self.yankBuffer - 1
+                end
         end
         self.dirty = true
 end
@@ -570,6 +585,7 @@ end
 ------------------------------------------------------------
 
 function Editor:insertChar(char)
+        self:snapshot()
         local row = self.cursor.row
         local col = self.cursor.col
         local line = self:line(row)
@@ -596,6 +612,7 @@ function Editor:backspace()
         local row = self.cursor.row
         local col = self.cursor.col
         if col > 1 then
+                self:snapshot()
                 local line = self:line(row)
                 self:setLine(row, line:sub(1, col - 2) .. line:sub(col))
                 self.cursor.col = col - 1
