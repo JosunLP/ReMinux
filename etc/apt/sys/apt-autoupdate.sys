@@ -18,7 +18,9 @@ print("setting autoupdate to enabled")
 writeUpdateCfg("enabled")
 elseif command == "disabled" then
 print("setting autoupdate to disabled")
+if fs.exists(UPDATE_CFG) then
 fs.delete(UPDATE_CFG)
+end
 else
 print("invalid input, try 'man apt'")
 end

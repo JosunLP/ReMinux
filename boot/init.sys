@@ -25,6 +25,7 @@ tempfile.close()
 end
 
 local function repairShell(stage)
+stage = tonumber(stage) or stage
 term.clear()
 term.setCursorPos(1, 1)
 if stage == 1 then
@@ -74,6 +75,7 @@ end
 -- Check and advance a crash-handler stage; call the repair shell if the
 -- machine is stuck at a failing stage.
 local function checkCrashStage(stage)
+	stage = tonumber(stage) or stage
 	crashstage = getCrashHandler(stage)
 	if crashstage >= 2 then
 		setCrashHandler(stage, "0")

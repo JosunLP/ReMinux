@@ -62,6 +62,12 @@ self:ensureDirectory(parent)
 end
 end
 
+function AptManager:deleteIfExists(path)
+if fs.exists(path) then
+fs.delete(path)
+end
+end
+
 function AptManager:readLines(path)
 local lines = {}
 if fs.exists(path) == false then
@@ -81,7 +87,7 @@ end
 
 function AptManager:writeLines(path, lines)
 self:ensureParentDirectory(path)
-fs.delete(path)
+self:deleteIfExists(path)
 
 local file = fs.open(path, "w")
 for index = 1, #lines do
@@ -91,7 +97,7 @@ file.close()
 end
 
 function AptManager:isPackageAccessAllowed(packname)
-return _G.admin == true or _G.owner == true or packname == "auth-client"
+return _G.admin == true or _G.owner == true or _G.owner == _G.login or packname == "auth-client"
 end
 
 function AptManager:isSourceAccessAllowed()
@@ -121,7 +127,7 @@ self:ensureParentDirectory(job.tempPath)
 self:ensureParentDirectory(job.targetPath)
 
 minux.debug("clearing "..job.label.." build cache", "apt")
-fs.delete(job.tempPath)
+self:deleteIfExists(job.tempPath)
 
 local buildFile = fs.open(job.tempPath, "w")
 local entries = fs.list(job.sourceDir)
@@ -135,7 +141,7 @@ end
 buildFile.close()
 
 minux.debug("file built, installing", "apt")
-fs.delete(job.targetPath)
+self:deleteIfExists(job.targetPath)
 fs.move(job.tempPath, job.targetPath)
 minux.debug("done", "apt")
 return true

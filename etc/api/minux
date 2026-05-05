@@ -105,8 +105,10 @@ function lsr(ptn)
 expect(1, ptn, "string")
 if fs.exists(ptn) == false then return false end
 if fs.isDir(ptn) == false then return false end
+if fs.exists("/temp/ls") == false then fs.makeDir("/temp/ls") end
 if fs.exists("/temp/ls/files.ls") then fs.delete("/temp/ls/files.ls") end
 if fs.exists("/temp/ls/todo") then fs.delete("/temp/ls/todo") end
+fs.makeDir("/temp/ls/todo")
 local lsfc = 0
 minux.list(ptn, lsfc)
 local tdff = "start"
