@@ -207,7 +207,7 @@ if entry ~= "" and entry ~= "AIF" then
 packages[entry] = true
 end
 end
-elseif fs.exists(self.manifestDirectory.."minux-main.db") then
+else
 packages["minux-main"] = true
 end
 
@@ -544,12 +544,13 @@ if source == self:normalizeSource(self.legacySources[index]) then
 return true
 end
 end
-return self:parseOfficialSourceRef(source) ~= nil
+local ref = self:parseOfficialSourceRef(source)
+return ref == self.githubDefaultRef or self:isStableVersionTag(ref)
 end
 
-function AptManager:shouldPreferOfficialReleaseSource(sources)
+function AptManager:shouldPreferOfficialReleaseSource(sources, packageSource)
 if #sources == 0 then
-return true
+return packageSource == nil or self:isStableOfficialSource(packageSource)
 end
 
 local sawStableSource = false
@@ -563,6 +564,12 @@ return false
 end
 end
 end
+if packageSource ~= nil then
+if self:isStableOfficialSource(packageSource) ~= true then
+return false
+end
+sawStableSource = true
+end
 return sawStableSource
 end
 
@@ -570,7 +577,7 @@ function AptManager:getPreferredSources(packname, configuredSources, packageSour
 local preferred = {}
 local useOfficialSource = false
 if self:isRepositoryPackage(packname) == true then
-useOfficialSource = self:shouldPreferOfficialReleaseSource(configuredSources)
+useOfficialSource = self:shouldPreferOfficialReleaseSource(configuredSources, packageSource)
 end
 if useOfficialSource == true then
 local officialSource = self:getDefaultReMinuxSource()
@@ -687,6 +694,7 @@ end
 
 self:ensureDirectory(self.manifestCacheDirectory)
 local manifestCache = self.manifestCacheDirectory..packname.."."..(cacheSuffix or "info")..".db"
+local sourceUnavailable = false
 for index = 1, #sources do
 local source = sources[index]
 local manifestUrl = self:joinSourcePath(source, "manifest/"..packname..".db")
@@ -699,11 +707,20 @@ local version = apt.version(manifestCache)
 fs.delete(manifestCache)
 return source, version, nil
 end
+local repositoryManifest, repositoryError = self:readRepositoryManifest(source)
+if repositoryManifest == nil or repositoryError ~= nil then
+sourceUnavailable = true
+end
+else
+sourceUnavailable = true
 end
 end
 
 if fs.exists(manifestCache) then
 fs.delete(manifestCache)
+end
+if sourceUnavailable == true then
+return nil, nil, "server unreachable"
 end
 return nil, nil, nil
 end
@@ -1060,6 +1077,8 @@ if fs.exists(installedManifest) then
 info.installedVersion = apt.version(installedManifest)
 end
 
+local configuredSources = manager:readLines(manager.sourceListPath)
+local packageSource = manager:getPackageSource(packname)
 local source, availableVersion, sourceError = manager:getAvailablePackage(packname, "info")
 if sourceError ~= nil then
 info.error = sourceError
@@ -1071,7 +1090,7 @@ return info
 end
 info.source = source
 info.availableVersion = availableVersion
-if info.repositoryPackage == true and manager:shouldPreferOfficialReleaseSource(manager:readLines(manager.sourceListPath)) == true and manager:isStableOfficialSource(source) == true then
+if info.repositoryPackage == true and manager:shouldPreferOfficialReleaseSource(configuredSources, packageSource) == true and manager:isStableOfficialSource(source) == true then
 local latestTag = manager:getLatestReleaseTag()
 info.releaseTag = latestTag
 end
