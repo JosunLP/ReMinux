@@ -1,0 +1,41 @@
+name: CI
+
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+    branches: ["**"]
+
+jobs:
+  syntax-check:
+    name: Lua syntax check
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Lua 5.1
+        run: sudo apt-get install -y lua5.1
+
+      - name: Syntax-check all Lua / shell scripts
+        run: |
+          set -e
+          FAILED=0
+          # Minux scripts use .lua, .sh, .sys, .ls extensions.
+          # The usr/ tree contains plain-text data files that share the .ls
+          # extension; exclude it from the syntax check.
+          while IFS= read -r -d '' file; do
+            if luac5.1 -p "$file" 2>/tmp/lua_err; then
+              echo "OK  $file"
+            else
+              echo "FAIL $file: $(cat /tmp/lua_err)"
+              FAILED=1
+            fi
+          done < <(find . \
+            -not -path './.git/*' \
+            -not -path './tmp/*' \
+            -not -path './usr/*' \
+            \( -name '*.lua' -o -name '*.sh' -o -name '*.sys' -o -name '*.ls' \) \
+            -print0)
+          exit $FAILED

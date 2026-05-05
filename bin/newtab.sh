@@ -1,4 +1,7 @@
---newtab script
+-- newtab: open a new workspace tab (advanced computers only).
+if term.isColor() then
 print("Opening new tab")
-if term.isColor then shell.openTab("/etc/minux-main/workspace/workspace.lua")
-else print("Advanced computers only") end
+shell.openTab("/etc/minux-main/workspace/workspace.lua")
+else
+print("Advanced computers only")
+end

@@ -1,50 +1,43 @@
--- this app reads and prints a file plain and simple.
-args = {...}
-local userinput = args[1]
-local etc1 = args[2]
-local filename = shell.resolve( userinput )
--- catch invalid inputs
-if filename == nil or filename == "" then
-	print("invalid filename")
-	print("use 'man cat' for the manual")
-	return 0
-elseif fs.exists(filename) == false then
-	print("file not found")
-	return 0
-end
-
--- we process the help command
+-- cat: read and print a text file, with optional paging.
+local args     = { ... }
+local filename = args[1]
+local option   = args[2]
 
 if filename == "?" or filename == "help" then
-	print("cat, /bin/cat.sh")
-	print("prints a text file to the screen")
-	print("usage: 'cat filename'")
-	print("extra options: 'p'")
-	print("p - pauses every 15 lines")
-	
--- otherwise we open the file	
-else
-	local fileread = true
-	local file = fs.open(filename, "r")
-	local linecounter = 0
--- we read and print the lines	
-	while fileread  ~= false do
-		local temp = file.readLine()
-		linecounter = linecounter + 1
--- if we hit nil we stop		
-		if temp == nil then fileread = false 
-		else print(temp) end
--- we halt if p was given		
-		if etc1 == "p" and linecounter == 15 and temp ~= nil then
-			print("Hit ENTER for next page or q to stop")
-			local input = read()
-			if input == "q" or input == "Q" then
-				input = nil
-				file.close()
-				return 0
-			end
-			linecounter = 0
-		end
-	end
-	file.close()
+print("cat, /bin/cat.sh")
+print("Print a text file to the screen")
+print("Usage: cat <filename> [p]")
+print("  p  - pause every 15 lines")
+return 0
 end
+
+if filename == nil or filename == "" then
+print("Invalid filename")
+print("Use 'man cat' for the manual")
+return 0
+end
+
+local resolved = shell.resolve(filename)
+if fs.exists(resolved) == false then
+print("File not found: " .. resolved)
+return 0
+end
+
+local file = fs.open(resolved, "r")
+local lineCount = 0
+local line = file.readLine()
+while line ~= nil do
+print(line)
+lineCount = lineCount + 1
+if option == "p" and lineCount == 15 then
+print("Hit Enter for next page, or 'q' to stop")
+local input = read()
+if input == "q" or input == "Q" then
+file.close()
+return 0
+end
+lineCount = 0
+end
+line = file.readLine()
+end
+file.close()

@@ -1,62 +1,51 @@
--- replaces CC programs and allows a full list of allows
--- ls the folders and build the list
--- list bin
-newprogramfile = fs.open("/temp/ls/programs.ls" , "w")
-listdata = fs.list("/bin/")
-filelist = fs.open("/temp/ls/files.ls" , "w")
-count = 1
-while listdata[count] ~= nil do
-	if fs.isDir(listdata[count]) == false then
-		filelist.writeLine(listdata[count])
-	end
-	count = count +1
-end
-filelist.close()
-filelist = fs.open("/temp/ls/files.ls" , "r")
-listdata = filelist.readAll()
-newprogramfile.write(listdata)
-filelist.close()
+-- programs: list all available programs from /bin and ROM directories.
+local OUTPUT_FILE = "/temp/ls/programs.ls"
+local TEMP_FILE   = "/temp/ls/files.ls"
 
--- list programs
-listdata = fs.list("/rom/programs/")
-filelist = fs.open("/temp/ls/files.ls" , "w")
-count = 1
-while listdata[count] ~= nil do
-	if fs.isDir(listdata[count]) == false then
-		filelist.writeLine(listdata[count])
-	end
-	count = count +1
-end
-filelist.close()
-filelist = fs.open("/temp/ls/files.ls" , "r")
-listdata = filelist.readAll()
-newprogramfile.write(listdata)
-filelist.close()
+local PROGRAM_DIRS = {
+"/bin/",
+"/rom/programs/",
+"/rom/programs/fun/",
+}
 
--- list CC games
-listdata = fs.list("/rom/programs/fun/")
-filelist = fs.open("/temp/ls/files.ls" , "w")
-count = 1
-while listdata[count] ~= nil do
-	if fs.isDir(listdata[count]) == false then
-		filelist.writeLine(listdata[count])
-	end
-	count = count +1
+local function ensureDir(path)
+local parent = fs.getDir(path)
+if parent ~= nil and parent ~= "" and fs.exists(parent) == false then
+fs.makeDir(parent)
 end
-filelist.close()
-filelist = fs.open("/temp/ls/files.ls" , "r")
-listdata = filelist.readAll()
-newprogramfile.write(listdata)
-filelist.close()
-
-newprogramfile.close()
-
---now we print to the screen
-local readline = "start"
-local filelist = fs.open("/temp/ls/programs.ls" , "r")
-while readline ~= nil do 
-	readline = filelist.readLine()
-	if readline ~= nil then write(readline) write(" ")end
 end
--- old backup method using less
--- shell.run("less /temp/ls/programs.ls")
+
+-- Collect all non-directory filenames from a directory into a table.
+local function listFiles(dir)
+local out = {}
+if fs.exists(dir) == false then return out end
+local entries = fs.list(dir)
+for i = 1, #entries do
+if fs.isDir(dir .. entries[i]) == false then
+table.insert(out, entries[i])
+end
+end
+return out
+end
+
+ensureDir(OUTPUT_FILE)
+ensureDir(TEMP_FILE)
+
+local outputFile = fs.open(OUTPUT_FILE, "w")
+for _, dir in ipairs(PROGRAM_DIRS) do
+local names = listFiles(dir)
+for _, name in ipairs(names) do
+outputFile.writeLine(name)
+end
+end
+outputFile.close()
+
+-- Print all collected program names.
+local readFile = fs.open(OUTPUT_FILE, "r")
+local line = readFile.readLine()
+while line ~= nil do
+write(line .. " ")
+line = readFile.readLine()
+end
+readFile.close()
+write("\n")
