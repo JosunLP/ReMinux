@@ -21,6 +21,7 @@ local SETTINGS_FILE = "/usr/minux-main/settings.cfg"
 local ENCRYPT_KEY_FILE = "/usr/minux-main/config/encr.conf"
 local AUTH_DIR = "/usr/local/auth/"
 local TEMP_EDIT_FILE = "/temp/dev/removeline.tmp"
+local USERNAME_PATTERN = "^[%w][%w_-]*$"
 local DEFAULT_SETTINGS = {
 { key = "network",      value = "disabled" },
 { key = "login",        value = "disabled" },
@@ -604,7 +605,7 @@ end
 if #username > 32 then
 return false, "username is too long"
 end
-if string.match(username, "^[%w][%w_-]*$") == nil then
+if string.match(username, USERNAME_PATTERN) == nil then
 return false, "username must start with a letter or digit, then may use letters, digits, '_' and '-'"
 end
 return true
