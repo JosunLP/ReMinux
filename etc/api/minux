@@ -31,6 +31,7 @@ local TEMP_EDIT_FILE = "/temp/dev/removeline.tmp"
 local USERNAME_PATTERN = "^[%w][%w_-]*$"
 local USERNAME_RULE_TEXT = "username must start with a letter or digit, then may use letters, digits, '_' and '-'"
 local ioContextStack = {}
+local permissionStoreCache
 local DEFAULT_PERMISSION_RULES = {
 { prefix = "/boot", owner = ROOT_USER, group = ROOT_GROUP, dirMode = 755, fileMode = 755 },
 { prefix = "/bin", owner = ROOT_USER, group = ROOT_GROUP, dirMode = 755, fileMode = 755 },
@@ -198,12 +199,17 @@ string.format("%03d", entry.mode),
 end
 
 local function readPermissionStore()
+if permissionStoreCache ~= nil then
+return permissionStoreCache
+end
 local store = {}
 if fs.exists(PERMISSIONS_FILE) ~= true then
+permissionStoreCache = store
 return store
 end
 local handle = fs.open(PERMISSIONS_FILE, "r")
 if handle == nil then
+permissionStoreCache = store
 return store
 end
 local line = handle.readLine()
@@ -219,6 +225,7 @@ end
 line = handle.readLine()
 end
 handle.close()
+permissionStoreCache = store
 return store
 end
 
@@ -234,6 +241,7 @@ for _, path in ipairs(paths) do
 handle.writeLine(encodePermissionEntry(path, store[path]))
 end
 handle.close()
+permissionStoreCache = store
 end
 
 local function getPermissionRule(path)
@@ -278,8 +286,8 @@ mode = isDir == true and 755 or 644,
 }
 end
 
-local function permissionEntryForPath(path, isDir)
-local store = readPermissionStore()
+local function permissionEntryForPath(path, isDir, store)
+store = store or readPermissionStore()
 local entry = store[normalisePath(path)]
 if entry ~= nil then
 return {
@@ -291,25 +299,27 @@ end
 return defaultPermissionEntry(path, isDir)
 end
 
-local function setPermissionEntry(path, entry)
-local store = readPermissionStore()
+local function setPermissionEntry(path, entry, store, skipWrite)
+store = store or readPermissionStore()
 store[normalisePath(path)] = {
 owner = entry.owner,
 group = entry.group,
 mode = parseModeValue(entry.mode) or 644,
 }
+if skipWrite ~= true then
 writePermissionStore(store)
+end
 return store[normalisePath(path)]
 end
 
-local function registerPathMetadata(path, isDir, entry)
+local function registerPathMetadata(path, isDir, entry, store, skipWrite)
 if fs.exists(path) ~= true and entry == nil then
 return false
 end
 local resolved = normalisePath(path)
-local metadata = entry or permissionEntryForPath(resolved, isDir == true)
+local metadata = entry or permissionEntryForPath(resolved, isDir == true, store)
 metadata.mode = parseModeValue(metadata.mode) or ((isDir == true) and 755 or 644)
-setPermissionEntry(resolved, metadata)
+setPermissionEntry(resolved, metadata, store, skipWrite)
 return metadata
 end
 
@@ -534,25 +544,30 @@ message = message,
 })
 end
 
-local function seedPermissionTree(path)
+local function seedPermissionTree(path, recursive, store)
 if fs.exists(path) ~= true then
 return
 end
-registerPathMetadata(path, fs.isDir(path))
-if fs.isDir(path) == true and minux ~= nil and type(minux.findEntries) == "function" then
+registerPathMetadata(path, fs.isDir(path), nil, store, true)
+if recursive == true and fs.isDir(path) == true and minux ~= nil and type(minux.findEntries) == "function" then
 local entries = minux.findEntries(path, {
 recursive = true,
 includeRoot = false,
 includeHidden = true,
 })
 for _, entry in ipairs(entries or {}) do
-registerPathMetadata(entry.path, entry.isDir)
+registerPathMetadata(entry.path, entry.isDir, nil, store, true)
 end
 end
 end
 
 local function ensurePermissionDefaults()
-ensureFile(PERMISSIONS_FILE, {})
+local created = ensureFile(PERMISSIONS_FILE, {})
+if created == true then
+permissionStoreCache = nil
+end
+local store = readPermissionStore()
+local recursiveSeed = next(store) == nil
 local paths = {
 "/boot",
 "/boot/autorun.ls",
@@ -576,8 +591,9 @@ local paths = {
 	SERVICE_DEFINITIONS_DIR,
 	}
 for _, path in ipairs(paths) do
-seedPermissionTree(path)
+	seedPermissionTree(path, recursiveSeed, store)
 end
+writePermissionStore(store)
 end
 
 local function ensureCoreLayout()
@@ -690,6 +706,8 @@ local function collectLegacyServices()
 	register({
 		name = "addons",
 		trigger = "boot",
+		phase = "early",
+		order = 20,
 		kind = "oneshot",
 		path = "/boot/addon.d",
 		command = "/boot/addon.d",
@@ -698,6 +716,8 @@ local function collectLegacyServices()
 	register({
 		name = "server",
 		trigger = "boot",
+		phase = "early",
+		order = 10,
 		kind = "daemon",
 		path = "/etc/server.sys",
 		command = "/etc/server.sys",
@@ -707,6 +727,8 @@ local function collectLegacyServices()
 	register({
 		name = "overrides",
 		trigger = "boot",
+		phase = "override",
+		order = 30,
 		kind = "oneshot",
 		path = "/boot/override.d",
 		command = "/boot/override.d",
@@ -715,6 +737,8 @@ local function collectLegacyServices()
 	register({
 		name = "runonce",
 		trigger = "boot",
+		phase = "runonce",
+		order = 40,
 		kind = "runonce",
 		path = "/boot/runonce.sh",
 		command = "/boot/runonce.sh",
@@ -723,6 +747,7 @@ local function collectLegacyServices()
 	register({
 		name = "autorun",
 		trigger = "login",
+		order = 10,
 		kind = "oneshot",
 		path = "/boot/autorun.ls",
 		command = "/boot/autorun.ls",
@@ -764,6 +789,7 @@ local function buildServiceRecord(name, definition)
 	record.detail = state.detail
 	record.updatedAt = state.updatedAt
 	record.trigger = record.trigger or "manual"
+	record.order = tonumber(record.order) or 1000
 	record.kind = record.kind or "oneshot"
 	return record
 end
@@ -842,17 +868,18 @@ end
 function listServices(trigger)
 	expect(1, trigger, "string", "nil")
 	local definitions = mergeServiceDefinitions()
-	local names = {}
+	local services = {}
 	for name, definition in pairs(definitions) do
 		if trigger == nil or definition.trigger == trigger then
-			names[#names + 1] = name
+			services[#services + 1] = buildServiceRecord(name, definition)
 		end
 	end
-	table.sort(names)
-	local services = {}
-	for _, name in ipairs(names) do
-		services[#services + 1] = buildServiceRecord(name, definitions[name])
-	end
+	table.sort(services, function(left, right)
+		if left.order == right.order then
+			return left.name < right.name
+		end
+		return left.order < right.order
+	end)
 	return services
 end
 
@@ -972,10 +999,12 @@ function restartService(name)
 	})
 end
 
-function runServiceTrigger(trigger)
+function runServiceTrigger(trigger, phase)
 	expect(1, trigger, "string")
+	expect(2, phase, "string", "nil")
 	local services = minux.listServices(trigger)
 	for _, service in ipairs(services) do
+		if phase == nil or service.phase == phase then
 		if service.enabled == true then
 			local ok, err = minux.startService(service.name, {
 				ignoreDisabled = true,
@@ -986,6 +1015,7 @@ function runServiceTrigger(trigger)
 			end
 		else
 			minux.setServiceState(service.name, "disabled", "disabled")
+		end
 		end
 	end
 	return true

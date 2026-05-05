@@ -16,10 +16,16 @@ USAGE
 
 OPTIONS
   -X method
-    HTTP method
-    (GET, POST, PUT, DELETE,
-    PATCH, HEAD, OPTIONS,
-    TRACE).
+    HTTP method passed through
+    to CC: Tweaked's table-based
+    request API. GET is used for
+    body-less requests; POST is
+    used automatically with -d.
+    Other methods only work if
+    the active CC: Tweaked
+    version accepts them via
+    http.get/http.post table
+    requests.
   -H 'Name: Value'
     Add a request header.
     May be repeated.

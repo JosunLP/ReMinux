@@ -212,18 +212,23 @@ end
 
 _G.shell = shell
 shell.run("/boot/network/update.sys")
-minux.debug("running boot services", "minux")
-minux.runServiceTrigger("boot")
+minux.debug("running early boot services", "minux")
+minux.runServiceTrigger("boot", "early")
 
 setCrashHandler("2", "0")
 checkCrashStage("3")
 
+minux.debug("running override services", "minux")
+minux.runServiceTrigger("boot", "override")
 minux.debug("resetting crash handler stage 3", "minux")
 setCrashHandler("3", "0")
 
 if minux.getconfig("crashhandler") == "enabled" then
 checkCrashStage("4")
 end
+
+minux.debug("running runonce services", "minux")
+minux.runServiceTrigger("boot", "runonce")
 
 -- Login
 

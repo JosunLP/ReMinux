@@ -54,8 +54,7 @@ end
 
 local function tokenise(...)
     local sLine = table.concat({ ... }, " ")
-    local words = parser.tokeniseWords(sLine)
-    return words or {}
+    return parser.tokeniseWords(sLine)
 end
 
 -- Execute a program using os.run, unless a shebang is present.
@@ -79,8 +78,16 @@ local function executeProgram(remainingRecursion, path, args, ioContext)
         end
 
         -- Load the specified hashbang program instead
-        local hashbangArgs = tokenise(contents:sub(3))
+        local hashbangArgs, tokeniseErr = tokenise(contents:sub(3))
+        if hashbangArgs == nil then
+            printError("Invalid hashbang in " .. path .. ": " .. tostring(tokeniseErr or "parse error"))
+            return false
+        end
         local originalHashbangPath = table.remove(hashbangArgs, 1)
+        if originalHashbangPath == nil or originalHashbangPath == "" then
+            printError("Invalid hashbang in " .. path .. ": missing interpreter")
+            return false
+        end
         local resolvedHashbangProgram = shell.resolveProgram(originalHashbangPath)
         if not resolvedHashbangProgram then
             printError("Hashbang program not found: " .. originalHashbangPath)
@@ -465,6 +472,9 @@ function shell.complete(sLine)
     expect(1, sLine, "string")
     if #sLine > 0 then
         local tWords = tokenise(sLine)
+        if tWords == nil then
+            return nil
+        end
         local nIndex = #tWords
         if string.sub(sLine, #sLine, #sLine) == " " then
             nIndex = nIndex + 1
@@ -553,7 +563,11 @@ end
 if multishell then
     --- Open a new [`multishell`] tab running a command.
     function shell.openTab(...)
-        local tWords = tokenise(...)
+        local tWords, err = tokenise(...)
+        if tWords == nil then
+            printError(err)
+            return nil
+        end
         local sCommand = tWords[1]
         if sCommand then
             local sPath = shell.resolveProgram(sCommand)
