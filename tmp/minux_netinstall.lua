@@ -507,8 +507,8 @@ local function chooseSource()
                         local resolvedSource, err = resolveRecommendedGitSource(DEFAULT_REPO, DEFAULT_BRANCH)
                         if resolvedSource == nil then
                                 printError("GitHub Releases unavailable: " .. tostring(err))
-                                printError("Falling back to legacy stable APT.")
-                                source = Source.apt(LEGACY_APT_OS, LEGACY_APT_SOFT)
+                                printError("Falling back to the repository's main branch.")
+                                source = Source.git(DEFAULT_REPO, DEFAULT_BRANCH)
                         else
                                 source = resolvedSource
                         end

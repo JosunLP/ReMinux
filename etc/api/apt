@@ -431,14 +431,14 @@ self.latestReleaseTag = cachedTag
 return cachedTag, cachedStatus
 end
 
-self.latestReleaseResolved = true
-self.latestReleaseStatus = "none"
+self.latestReleaseStatus = nil
 self.latestReleaseTag = nil
 local bestTag = nil
 for page = 1, self.releaseApiMaxPages do
 local releases, pageError = self:fetchReleasePage(page)
 if pageError ~= nil then
 self.latestReleaseStatus = "error"
+self.latestReleaseTag = nil
 return nil, "error"
 end
 local pageBestTag = self:selectHighestReleaseTag(releases)
@@ -451,12 +451,15 @@ end
 end
 
 if bestTag ~= nil then
+self.latestReleaseResolved = true
 self.latestReleaseStatus = "ok"
 self.latestReleaseTag = bestTag
 self:writeLatestReleaseCache("ok", bestTag)
 return bestTag, "ok"
 end
 
+self.latestReleaseResolved = true
+self.latestReleaseStatus = "none"
 self.latestReleaseTag = nil
 self:writeLatestReleaseCache("none", "")
 return nil, "none"
@@ -531,22 +534,46 @@ end
 return self:parseOfficialSourceRef(source) ~= nil
 end
 
+function AptManager:isStableReMinuxSource(source)
+source = self:normalizeSource(source)
+if type(source) ~= "string" or source == "" then
+return false
+end
+for index = 1, #self.legacySources do
+if source == self:normalizeSource(self.legacySources[index]) then
+return true
+end
+end
+return self:parseOfficialSourceRef(source) ~= nil
+end
+
+function AptManager:shouldPreferOfficialReleaseSource(packageSource, sources)
+if packageSource ~= nil then
+return self:isStableReMinuxSource(packageSource)
+end
+if #sources == 0 then
+return true
+end
+
+local sawStableSource = false
+for index = 1, #sources do
+local source = self:normalizeSource(sources[index])
+if type(source) == "string" and source ~= "" then
+if self:isStableReMinuxSource(source) == true then
+sawStableSource = true
+else
+return false
+end
+end
+end
+return sawStableSource
+end
+
 function AptManager:getPreferredSources(packname, sources, packageSource)
 local preferred = {}
 local useOfficialSource = false
 if self:isRepositoryPackage(packname) == true then
-if packageSource ~= nil then
-useOfficialSource = self:isOfficialReMinuxSource(packageSource)
-elseif #sources == 0 then
-useOfficialSource = true
-else
-for index = 1, #sources do
-if self:isOfficialReMinuxSource(sources[index]) then
-useOfficialSource = true
-break
-end
-end
-end
+useOfficialSource = self:shouldPreferOfficialReleaseSource(packageSource, sources)
 end
 if useOfficialSource == true then
 local officialSource = self:getDefaultReMinuxSource()
@@ -966,6 +993,9 @@ local _, availableVersion, sourceError = manager:getAvailablePackage(packname, "
 if sourceError ~= nil then
 return sourceError
 end
+if availableVersion == nil then
+return 105
+end
 if manager:shouldUpdatePackage(installedVersion, availableVersion, false) ~= true then
 return true
 end
@@ -990,6 +1020,8 @@ end
 local _, availableVersion, sourceError = manager:getAvailablePackage(nextpack, "update")
 if sourceError ~= nil then
 minux.debug("update:source lookup failed:"..nextpack..":"..tostring(sourceError), "apt")
+elseif availableVersion == nil then
+minux.debug("update:package manifest unavailable:"..nextpack, "apt")
 else
 local packageNeedsUpdate = manager:shouldUpdatePackage(installedVersion, availableVersion, forcedupdate)
 if packageNeedsUpdate == true then

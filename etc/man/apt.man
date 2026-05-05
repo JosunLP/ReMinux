@@ -115,5 +115,8 @@ you don't want
 release tags for
 repository packages
 should
-follow 'vX.Y.Z' or
-'X.Y.Z-suffix'.
+follow 'vX.Y.Z'.
+suffixed tags are
+treated as
+prereleases and
+ignored by updates.

@@ -34,7 +34,6 @@ jobs:
             fi
           done < <(find . \
             -not -path './.git/*' \
-            -not -path './tmp/*' \
             -not -path './usr/*' \
             \( -name '*.lua' -o -name '*.sh' -o -name '*.sys' -o -name '*.ls' \) \
             -print0)

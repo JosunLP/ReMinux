@@ -217,8 +217,8 @@ apt -la               # List packages available from sources
 apt -ls               # List active sources
 ```
 
-For packages shipped by this repository (as listed in `/etc/apt/manifest/APT.db`), ReMinux now prefers the repository's latest GitHub Release as the update source and only falls back to the `main` branch when no release is available.
-Official release tags are expected to follow `vX.Y.Z` or `X.Y.Z-suffix` style versioning.
+For packages shipped by this repository (as listed in `/etc/apt/manifest/APT.db`), ReMinux now prefers the repository's latest stable GitHub Release as the update source and only falls back to the `main` branch when no stable release is available.
+Stable release tags used by the updater should follow `vX.Y.Z`. Suffixed tags such as `X.Y.Z-suffix` are treated as prereleases and are not selected by automatic updates.
 
 ---
 
