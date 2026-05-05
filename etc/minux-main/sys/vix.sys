@@ -56,6 +56,12 @@ local function readEntireFile(path)
         return lines
 end
 
+local function copyLines(lines)
+        local copy = {}
+        for index = 1, #lines do copy[index] = lines[index] end
+        return copy
+end
+
 local function writeEntireFile(path, lines)
         local parent = fs.getDir(path)
         if parent ~= nil and parent ~= "" and fs.exists(parent) == false then
@@ -115,10 +121,11 @@ local function isEscapeKey(code)
 end
 
 function Editor.new(filename)
+        local initialLines = filename and readEntireFile(filename) or { "" }
         local termW, termH = term.getSize()
         local self = setmetatable({
                 filename     = filename,
-                lines        = filename and readEntireFile(filename) or { "" },
+                lines        = initialLines,
                 cursor       = { row = 1, col = 1 },
                 view         = { row = 1, col = 1 }, -- top-left visible cell
                 screen       = { width = termW, height = termH },
@@ -139,6 +146,7 @@ function Editor.new(filename)
                 cmdPrefix    = "",
                 visualAnchor = nil,
                 pendingOp    = nil,
+                savedLines   = copyLines(initialLines),
         }, Editor)
         return self
 end
@@ -157,10 +165,8 @@ end
 ------------------------------------------------------------
 
 function Editor:snapshot()
-        local copy = {}
-        for index = 1, #self.lines do copy[index] = self.lines[index] end
         local entry = {
-                lines = copy,
+                lines = copyLines(self.lines),
                 row   = self.cursor.row,
                 col   = self.cursor.col,
         }
@@ -170,6 +176,18 @@ function Editor:snapshot()
         if #self.undoStack > 100 then
                 table.remove(self.undoStack, 1)
         end
+end
+
+function Editor:isSavedState()
+        if #self.lines ~= #self.savedLines then return false end
+        for index = 1, #self.lines do
+                if self.lines[index] ~= self.savedLines[index] then return false end
+        end
+        return true
+end
+
+function Editor:refreshDirty()
+        self.dirty = not self:isSavedState()
 end
 
 function Editor:applySnapshot(entry)
@@ -187,14 +205,13 @@ function Editor:undo()
                 return
         end
         local current = {
-                lines = {},
+                lines = copyLines(self.lines),
                 row   = self.cursor.row,
                 col   = self.cursor.col,
         }
-        for index = 1, #self.lines do current.lines[index] = self.lines[index] end
         table.insert(self.redoStack, current)
         self:applySnapshot(entry)
-        self.dirty = true
+        self:refreshDirty()
         self:setMessage("Undo.", colors.lightBlue)
 end
 
@@ -205,14 +222,13 @@ function Editor:redo()
                 return
         end
         local current = {
-                lines = {},
+                lines = copyLines(self.lines),
                 row   = self.cursor.row,
                 col   = self.cursor.col,
         }
-        for index = 1, #self.lines do current.lines[index] = self.lines[index] end
         table.insert(self.undoStack, current)
         self:applySnapshot(entry)
-        self.dirty = true
+        self:refreshDirty()
         self:setMessage("Redo.", colors.lightBlue)
 end
 
@@ -787,6 +803,7 @@ function Editor:save(targetPath)
                 return false
         end
         self.filename = path
+        self.savedLines = copyLines(self.lines)
         self.dirty = false
         self:setMessage('Wrote "' .. path .. '"', colors.lime)
         return true

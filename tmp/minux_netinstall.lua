@@ -310,6 +310,8 @@ local function installFromGit(source, profile)
         ensureParent("/usr/apt/source.ls")
         local sourceFile = fs.open("/usr/apt/source.ls", "w")
         sourceFile.writeLine(source:urlFor("/etc/apt/"))
+        sourceFile.writeLine(LEGACY_APT_SOFT)
+        sourceFile.writeLine(LEGACY_APT_OS)
         sourceFile.close()
 
         return #failed == 0
@@ -334,8 +336,12 @@ local function installFromApt(source, profile)
 
         printOk("Manifest verified, downloading package map.")
         local previousTerm = disableOutput()
-        shell.run("wget run " .. source.base .. "repository/minux-main.map /")
+        local mapOk = shell.run("wget run " .. source.base .. "repository/minux-main.map /")
         enableOutput(previousTerm)
+        if mapOk ~= true then
+                printError("Failed to download or unpack the package map.")
+                return false
+        end
 
         ensureParent("/etc/apt/list/installed.db")
         local installed = fs.open("/etc/apt/list/installed.db", "w")
@@ -476,10 +482,10 @@ local action = chooseAction()
 if action == "shell" then
         return 0
 elseif action == "start" then
-        if fs.exists("/startup.lua") then
-                shell.run("/startup.lua")
-        elseif fs.exists("/startup") then
+        if fs.exists("/startup") then
                 shell.run("/startup")
+        elseif fs.exists("/startup.lua") then
+                shell.run("/startup.lua")
         else
                 printError("No installation detected, dropping into shell.")
         end
