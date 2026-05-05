@@ -210,7 +210,7 @@ local function decodeJson(body)
 end
 
 local function isReleaseTag(tag)
-        return type(tag) == "string" and tag:match("^v?%d+%.%d+%.%d+[%w%._%-]*$") ~= nil
+        return type(tag) == "string" and (tag:match("^v?%d+%.%d+%.%d+$") ~= nil or tag:match("^v?%d+%.%d+%.%d+[-+][%w%._%-]+$") ~= nil)
 end
 
 local function isStableReleaseTag(tag)

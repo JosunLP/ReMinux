@@ -172,7 +172,10 @@ return math.floor(os.epoch("utc") / 1000)
 end
 
 function AptManager:isReleaseTag(tag)
-return type(tag) == "string" and string.match(tag, "^v?%d+%.%d+%.%d+[%w%._%-]*$") ~= nil
+return type(tag) == "string" and (
+string.match(tag, "^v?%d+%.%d+%.%d+$") ~= nil or
+string.match(tag, "^v?%d+%.%d+%.%d+[-+][%w%._%-]+$") ~= nil
+) 
 end
 
 function AptManager:isStableReleaseTag(tag)
@@ -228,6 +231,7 @@ end
 if now - cachedAt > self.releaseCacheTtl then
 return false, nil, nil
 end
+-- Older cache files stored only two lines: [timestamp, tag-or-NONE].
 if cachedTag == nil then
 cachedTag = cachedStatus
 if cachedTag == "NONE" then
@@ -269,7 +273,7 @@ return nil
 end
 if suffix == "" then
 suffix = nil
-elseif string.sub(suffix, 1, 1) == "-" or string.sub(suffix, 1, 1) == "." then
+elseif string.sub(suffix, 1, 1) == "-" or string.sub(suffix, 1, 1) == "+" or string.sub(suffix, 1, 1) == "." then
 suffix = string.sub(suffix, 2)
 end
 return {
@@ -278,6 +282,35 @@ minor = tonumber(minor),
 patch = tonumber(patch),
 suffix = suffix,
 }
+end
+
+function AptManager:splitVersionSuffix(suffix)
+local tokens = {}
+local current = ""
+local currentIsDigit = nil
+for index = 1, string.len(suffix or "") do
+local char = string.sub(suffix, index, index)
+if char == "." or char == "-" or char == "_" then
+if current ~= "" then
+table.insert(tokens, current)
+current = ""
+currentIsDigit = nil
+end
+else
+local isDigit = string.match(char, "%d") ~= nil
+if current ~= "" and currentIsDigit ~= isDigit then
+table.insert(tokens, current)
+current = char
+else
+current = current..char
+end
+currentIsDigit = isDigit
+end
+end
+if current ~= "" then
+table.insert(tokens, current)
+end
+return tokens
 end
 
 function AptManager:compareVersions(left, right)
@@ -304,10 +337,35 @@ elseif leftVersion.suffix == nil then
 return 1
 elseif rightVersion.suffix == nil then
 return -1
-elseif leftVersion.suffix > rightVersion.suffix then
+else
+local leftTokens = self:splitVersionSuffix(leftVersion.suffix)
+local rightTokens = self:splitVersionSuffix(rightVersion.suffix)
+local maxTokens = math.max(#leftTokens, #rightTokens)
+for index = 1, maxTokens do
+local leftToken = leftTokens[index]
+local rightToken = rightTokens[index]
+if leftToken ~= rightToken then
+if leftToken == nil then
+return -1
+elseif rightToken == nil then
+return 1
+end
+local leftNumber = tonumber(leftToken)
+local rightNumber = tonumber(rightToken)
+if leftNumber ~= nil and rightNumber ~= nil then
+return leftNumber > rightNumber and 1 or -1
+elseif leftNumber ~= nil then
+return -1
+elseif rightNumber ~= nil then
+return 1
+elseif leftToken > rightToken then
 return 1
 else
 return -1
+end
+end
+end
+return 0
 end
 end
 
@@ -875,52 +933,52 @@ verifyconfig()
 
 local forcedupdate = packname == "-f"
 if packname ~= nil and forcedupdate ~= true then
-	if apt.checkinstall(packname) ~= true then
-	return false
-	end
-	minux.debug("update:updating:"..packname, "apt")
-	local installedVersion = nil
-	local manifestPath = manager.manifestDirectory..packname..".db"
-	if fs.exists(manifestPath) then
-	installedVersion = apt.version(manifestPath)
-	end
-	local _, availableVersion, sourceError = manager:getAvailablePackage(packname, "single")
-	if sourceError ~= nil then
-	return sourceError
-	end
-	if manager:shouldUpdatePackage(installedVersion, availableVersion, false) ~= true then
-	return true
-	end
-	local updateResult = apt.getpack(packname)
-	if updateResult == true then
-	apt.rebuildgenerated()
-	return true
-	end
-	return updateResult
+if apt.checkinstall(packname) ~= true then
+return false
+end
+minux.debug("update:updating:"..packname, "apt")
+local installedVersion = nil
+local manifestPath = manager.manifestDirectory..packname..".db"
+if fs.exists(manifestPath) then
+installedVersion = apt.version(manifestPath)
+end
+local _, availableVersion, sourceError = manager:getAvailablePackage(packname, "single")
+if sourceError ~= nil then
+return sourceError
+end
+if manager:shouldUpdatePackage(installedVersion, availableVersion, false) ~= true then
+return true
+end
+local updateResult = apt.getpack(packname)
+if updateResult == true then
+apt.rebuildgenerated()
+return true
+end
+return updateResult
 end
 
 minux.debug("reading installed.db", "apt")
 local installedPackages = manager:readLines(manager.installedListPath)
 for index = 1, #installedPackages do
-	local nextpack = installedPackages[index]
-	minux.debug("finding source", "apt")
-	local installedVersion = nil
-	local manifestPath = manager.manifestDirectory..nextpack..".db"
-	if fs.exists(manifestPath) then
-	installedVersion = apt.version(manifestPath)
-	end
-	local _, availableVersion, sourceError = manager:getAvailablePackage(nextpack, "update")
-	if sourceError ~= nil then
-		minux.debug("update:source lookup failed:"..nextpack..":"..tostring(sourceError), "apt")
-	else
-		local packageNeedsUpdate = manager:shouldUpdatePackage(installedVersion, availableVersion, forcedupdate)
-		if packageNeedsUpdate == true then
-			minux.debug("updating pack:", "apt")
-			apt.getpack(nextpack)
-		else
-			minux.debug("update:package already current or newer:"..nextpack, "apt")
-		end
-	end
+local nextpack = installedPackages[index]
+minux.debug("finding source", "apt")
+local installedVersion = nil
+local manifestPath = manager.manifestDirectory..nextpack..".db"
+if fs.exists(manifestPath) then
+installedVersion = apt.version(manifestPath)
+end
+local _, availableVersion, sourceError = manager:getAvailablePackage(nextpack, "update")
+if sourceError ~= nil then
+minux.debug("update:source lookup failed:"..nextpack..":"..tostring(sourceError), "apt")
+else
+local packageNeedsUpdate = manager:shouldUpdatePackage(installedVersion, availableVersion, forcedupdate)
+if packageNeedsUpdate == true then
+minux.debug("updating pack:", "apt")
+apt.getpack(nextpack)
+else
+minux.debug("update:package already current or newer:"..nextpack, "apt")
+end
+end
 end
 
 minux.debug("updating configuration", "apt")
