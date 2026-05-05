@@ -9,6 +9,7 @@ php=false
 /boot/network/dhcp.sys
 /boot/network/update.sys
 /boot/alias.ls
+/etc/apt/manifest/APT.db
 /etc/apt/boot/minux-main.d
 /etc/minux-main/sys/menu.lua
 /etc/minux-main/sys/ecpw.sys

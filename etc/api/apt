@@ -15,10 +15,12 @@ mapCacheDirectory = "/temp/apt/map/",
 githubRepo = "JosunLP/ReMinux",
 githubDefaultRef = "main",
 githubApiBase = "https://api.github.com/repos/JosunLP/ReMinux/",
+repositoryManifestPath = "/etc/apt/manifest/APT.db",
 releaseCachePath = "/temp/apt/github-release.db",
 releaseCacheTtl = 3600,
 latestReleaseResolved = false,
 latestReleaseTag = nil,
+repositoryPackages = nil,
 legacySources = {
 "https://minux.cc/apt/2.0/soft/",
 "https://minux.cc/apt/2.0/os/",
@@ -45,11 +47,15 @@ label = "autorun",
 },
 presetSources = {
 stable = {
+"https://minux.cc/apt/2.0/soft/",
+"https://minux.cc/apt/2.0/os/",
 },
 beta = {
 "https://minux.cc/beta/",
 },
 goldcube = {
+"https://minux.cc/apt/2.0/soft/",
+"https://minux.cc/apt/2.0/os/",
 "https://goldcube.minux.cc/stable/",
 },
 },
@@ -165,6 +171,32 @@ end
 
 function AptManager:isOfficialRef(ref)
 return ref == self.githubDefaultRef or self:isReleaseTag(ref)
+end
+
+function AptManager:getRepositoryPackages()
+if self.repositoryPackages ~= nil then
+return self.repositoryPackages
+end
+
+local packages = {}
+if fs.exists(self.repositoryManifestPath) then
+local lines = self:readLines(self.repositoryManifestPath)
+for index = 1, #lines do
+local entry = lines[index]
+if entry ~= "" and entry ~= "AIF" then
+packages[entry] = true
+end
+end
+elseif fs.exists(self.manifestDirectory.."minux-main.db") then
+packages["minux-main"] = true
+end
+
+self.repositoryPackages = packages
+return packages
+end
+
+function AptManager:isRepositoryPackage(packname)
+return self:getRepositoryPackages()[packname] == true
 end
 
 function AptManager:readLatestReleaseCache()
@@ -306,7 +338,7 @@ end
 function AptManager:getPreferredSources(packname, sources)
 local preferred = {}
 local useOfficialSource = false
-if packname == "minux-main" then
+if self:isRepositoryPackage(packname) == true then
 if #sources == 0 then
 useOfficialSource = true
 else
@@ -334,17 +366,10 @@ end
 
 local copy = {}
 if source == "stable" then
-table.insert(copy, self:getDefaultReMinuxSource())
 for index = 1, #self.legacySources do
 table.insert(copy, self.legacySources[index])
 end
 return self:dedupeSources(copy)
-end
-
-if source == "goldcube" then
-for index = 1, #self.legacySources do
-table.insert(copy, self.legacySources[index])
-end
 end
 
 local preset = self.presetSources[source]
@@ -735,6 +760,61 @@ end
 minux.debug("updating configuration", "apt")
 apt.rebuildgenerated()
 return true
+end
+
+function packageinfo(packname)
+expect(1, packname, "string", "nil")
+verifyconfig()
+
+if packname == nil then
+packname = "minux-main"
+end
+
+local info = {
+package = packname,
+installed = apt.checkinstall(packname),
+installedVersion = nil,
+availableVersion = nil,
+source = nil,
+releaseTag = nil,
+repositoryPackage = manager:isRepositoryPackage(packname),
+}
+
+local installedManifest = manager.manifestDirectory..packname..".db"
+if fs.exists(installedManifest) then
+info.installedVersion = apt.version(installedManifest)
+end
+if info.repositoryPackage == true then
+info.releaseTag = manager:getLatestReleaseTag()
+end
+
+local sources, sourceError = apt.findsource(packname)
+if type(sources) ~= "table" then
+info.error = sourceError
+return info
+end
+
+manager:ensureDirectory(manager.manifestCacheDirectory)
+local manifestCache = manager.manifestCacheDirectory..packname..".info.db"
+for index = 1, #sources do
+local source = sources[index]
+local manifestUrl = manager:joinSourcePath(source, "manifest/"..packname..".db")
+fs.delete(manifestCache)
+local downloaded = minux.download(manifestUrl, manifestCache)
+if downloaded == true then
+local line = minux.findline(manifestCache, "AIF=true")
+if line ~= nil and line ~= false then
+info.source = source
+info.availableVersion = apt.version(manifestCache)
+break
+end
+end
+end
+if fs.exists(manifestCache) then
+fs.delete(manifestCache)
+end
+
+return info
 end
 
 function version(dbfile)
