@@ -432,7 +432,7 @@ self.latestReleaseTag = cachedTag
 return cachedTag, cachedStatus
 end
 
-self.latestReleaseStatus = nil
+self.latestReleaseStatus = "pending"
 self.latestReleaseTag = nil
 local bestTag = nil
 for page = 1, self.releaseApiMaxPages do
@@ -559,7 +559,7 @@ local sawStableSource = false
 for index = 1, #sources do
 local source = self:normalizeSource(sources[index])
 if type(source) == "string" and source ~= "" then
-if self:isStableOfficialSource(source) == true then
+if self:isStableOfficialSource(source) then
 sawStableSource = true
 else
 return false
