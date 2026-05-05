@@ -66,6 +66,17 @@ local result = apt.update(targetPackage)
 return printResult(result == true, "Update complete", "Update failed")
 end
 
+local function describeLookupError(errorCode)
+if errorCode == 102 then
+return "no package sources configured"
+elseif errorCode == 105 then
+return "package not found"
+elseif errorCode == 111 then
+return "source unavailable"
+end
+return tostring(errorCode)
+end
+
 local function runVersion(targetPackage)
 local info = apt.packageinfo(targetPackage)
 if type(info) ~= "table" then
@@ -77,14 +88,20 @@ print("Package: " .. info.package)
 print("Installed: " .. tostring(info.installed))
 print("Installed version: " .. tostring(info.installedVersion or "unknown"))
 print("Available version: " .. tostring(info.availableVersion or "unknown"))
-if info.repositoryPackage == true then
-print("Latest GitHub release: " .. tostring(info.releaseTag or "none"))
+if info.releaseTracking == true then
+if info.releaseStatus == "ok" then
+print("Latest GitHub release: " .. tostring(info.releaseTag))
+elseif info.releaseStatus == "none" then
+print("Latest GitHub release: none")
+elseif info.releaseStatus == "error" then
+print("Latest GitHub release: unavailable")
+end
 end
 if info.source ~= nil then
 print("Source: " .. info.source)
 end
 if info.error ~= nil then
-print("Lookup error: " .. tostring(info.error))
+print("Lookup error: " .. describeLookupError(info.error))
 end
 return true
 end

@@ -287,12 +287,19 @@ end
 
 local function resolveRecommendedGitSource(repo, fallbackRef)
         local latestTag, status, err = fetchHighestReleaseTag(repo)
+        local source
         if status == "ok" and latestTag ~= nil then
-                return Source.git(repo, latestTag)
+                source = Source.git(repo, latestTag)
         elseif status == "none" then
-                return Source.git(repo, fallbackRef)
+                source = Source.git(repo, fallbackRef)
+        else
+                return nil, err or "unable to read GitHub releases"
         end
-        return nil, err or "unable to read GitHub releases"
+        source.configuredSources = {
+                LEGACY_APT_SOFT,
+                LEGACY_APT_OS,
+        }
+        return source
 end
 
 local function downloadFile(source, repoPath, destPath)
@@ -405,9 +412,15 @@ local function installFromGit(source, profile)
 
         ensureParent("/usr/apt/source.ls")
         local sourceFile = fs.open("/usr/apt/source.ls", "w")
-        sourceFile.writeLine(source:urlFor("/etc/apt/"))
-        sourceFile.writeLine(LEGACY_APT_SOFT)
-        sourceFile.writeLine(LEGACY_APT_OS)
+        if type(source.configuredSources) == "table" and #source.configuredSources > 0 then
+                for index = 1, #source.configuredSources do
+                        sourceFile.writeLine(source.configuredSources[index])
+                end
+        else
+                sourceFile.writeLine(source:urlFor("/etc/apt/"))
+                sourceFile.writeLine(LEGACY_APT_SOFT)
+                sourceFile.writeLine(LEGACY_APT_OS)
+        end
         sourceFile.close()
 
         return #failed == 0
@@ -507,8 +520,7 @@ local function chooseSource()
                         local resolvedSource, err = resolveRecommendedGitSource(DEFAULT_REPO, DEFAULT_BRANCH)
                         if resolvedSource == nil then
                                 printError("GitHub Releases unavailable: " .. tostring(err))
-                                printError("Falling back to the repository's main branch.")
-                                source = Source.git(DEFAULT_REPO, DEFAULT_BRANCH)
+                                printError("Choose another installation source and try again.")
                         else
                                 source = resolvedSource
                         end
