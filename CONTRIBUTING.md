@@ -1,4 +1,4 @@
-# Contributing to Minux
+# Contributing to ReMinux
 
 Thank you for taking the time to contribute! The guidelines below keep the codebase consistent and the review process smooth.
 
@@ -63,7 +63,7 @@ Thank you for taking the time to contribute! The guidelines below keep the codeb
 
 Use the [Bug Report](.github/ISSUE_TEMPLATE/bug_report.md) template. Please include:
 - CC: Tweaked version
-- Minux version (`cat /etc/apt/list/minux-main.db | grep version`)
+- ReMinux version (`cat /etc/apt/list/minux-main.db | grep version`)
 - Steps to reproduce
 - Expected vs actual behaviour
 - Any log output from `/var/log/minux.txt` (enable with `config debug logging`)

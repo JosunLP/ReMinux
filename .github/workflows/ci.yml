@@ -22,7 +22,7 @@ jobs:
         run: |
           set -e
           FAILED=0
-          # Minux scripts use .lua, .sh, .sys, .ls extensions.
+          # ReMinux scripts use .lua, .sh, .sys, .ls extensions.
           # The usr/ tree contains plain-text data files that share the .ls
           # extension; exclude it from the syntax check.
           while IFS= read -r -d '' file; do

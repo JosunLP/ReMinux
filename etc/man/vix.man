@@ -1,7 +1,7 @@
 vix, /bin/vix.sh
 alias: 'vix', 'vim', 'vi'
 
-A Vim-like modal editor for Minux,
+A Vim-like modal editor for ReMinux,
 designed to be friendly to first-
 time users.
 

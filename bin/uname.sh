@@ -1,4 +1,4 @@
--- uname: print system information (Minux version, kernel, host).
+-- uname: print system information (ReMinux version, kernel, host).
 local args = { ... }
 local flag = args[1]
 
@@ -14,7 +14,7 @@ if pocket ~= nil then kind = "pocket" end
 if commands ~= nil then kind = "command-computer" end
 
 local function printAll()
-	print("Minux " .. version .. " (" .. kind .. ")")
+	print("ReMinux " .. version .. " (" .. kind .. ")")
 	print("Kernel : " .. kernel)
 	print("Host   : " .. label .. " (id " .. cid .. ")")
 	print("Arch   : " .. arch)
@@ -24,7 +24,7 @@ if flag == "?" or flag == "help" then
 	print("Usage: uname [-a|-s|-r|-n|-m]")
 	print("  -a  all (default)")
 	print("  -s  kernel/system name")
-	print("  -r  Minux release/version")
+	print("  -r  ReMinux release/version")
 	print("  -n  computer label")
 	print("  -m  Lua/architecture")
 elseif flag == "-s" then print(kernel)

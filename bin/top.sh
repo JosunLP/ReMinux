@@ -16,7 +16,7 @@ local secs  = up % 60
 term.clear()
 term.setCursorPos(1, 1)
 if term.isColor() then term.setTextColor(colors.yellow) end
-print("Minux top - " .. os.date("%H:%M:%S"))
+print("ReMinux top - " .. os.date("%H:%M:%S"))
 if term.isColor() then term.setTextColor(colors.white) end
 print(string.rep("-", math.min(40, term.getSize())))
 print(string.format("computer  : %s (id %d)", label, id))

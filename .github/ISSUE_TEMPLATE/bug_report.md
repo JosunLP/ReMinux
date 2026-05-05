@@ -1,6 +1,6 @@
 ---
 name: Bug report
-about: Report a problem with Minux
+about: Report a problem with ReMinux
 title: '[BUG] '
 labels: bug
 assignees: ''
@@ -12,7 +12,7 @@ assignees: ''
 ## CC: Tweaked version
 <!-- e.g. 1.109.0 -->
 
-## Minux version
+## ReMinux version
 <!-- Run: cat /etc/apt/list/minux-main.db | grep version -->
 
 ## Steps to reproduce

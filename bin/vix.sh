@@ -1,9 +1,9 @@
--- vix: launcher for the Vim-like Minux editor.
+-- vix: launcher for the Vim-like ReMinux editor.
 local args = { ... }
 local filename = args[1]
 
 if filename == "?" or filename == "help" then
-	print("vix - Vim-like Minux editor")
+	print("vix - Vim-like ReMinux editor")
 	print("Usage: vix [file]")
 	print("Inside the editor press F1 (or :help) for the cheatsheet.")
 	return 0

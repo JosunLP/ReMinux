@@ -1,7 +1,7 @@
 uname, /bin/uname.sh
 alias: 'uname'
 
-Print system identification: Minux
+Print system identification: ReMinux
 version, kernel host string, the
 computer label and id, and Lua
 runtime.
@@ -11,6 +11,6 @@ Usage:
 
   -a  all (default)
   -s  kernel/system name
-  -r  Minux release/version
+  -r  ReMinux release/version
   -n  computer label
   -m  Lua/architecture

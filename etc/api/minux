@@ -388,7 +388,7 @@ function lock()
 if logintype() ~= "disabled" then
 term.clear()
 term.setCursorPos(1, 1)
-print("Minux V:" .. _G.version)
+print("ReMinux V:" .. _G.version)
 print(" ")
 print("This system is currently locked by user:" .. _G.login)
 print("Type the password to unlock this system")

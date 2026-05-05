@@ -30,7 +30,7 @@ function buildMenu()
 		local termX, termY = term.getSize()
 		term.setBackgroundColor(colortable[2])
 		term.setTextColor(colortable[3])
-		local title = "Minux V:".._G.version.." U-".._G.login
+		local title = "ReMinux V:".._G.version.." U-".._G.login
 		print(title..string.rep(" ", termX - #title))
 		print(string.rep(" ", termX))
 		term.redirect(baseTerm)

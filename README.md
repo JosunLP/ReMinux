@@ -1,8 +1,8 @@
-# Minux
+# ReMinux
 
-**Minux** is a Unix-inspired operating system for [CC: Tweaked](https://tweaked.cc/), the popular ComputerCraft fork for Minecraft. It provides a multi-user environment with a package manager, configurable shell, user authentication, and a modular boot system — all running on top of the ComputerCraft Lua API.
+**ReMinux** is a Unix-inspired operating system for [CC: Tweaked](https://tweaked.cc/), the popular ComputerCraft fork for Minecraft. It provides a multi-user environment with a package manager, configurable shell, user authentication, and a modular boot system — all running on top of the ComputerCraft Lua API.
 
-[![CI](https://github.com/JosunLP/Minux/actions/workflows/ci.yml/badge.svg)](https://github.com/JosunLP/Minux/actions/workflows/ci.yml)
+[![CI](https://github.com/JosunLP/ReMinux/actions/workflows/ci.yml/badge.svg)](https://github.com/JosunLP/ReMinux/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
 ---
@@ -34,9 +34,9 @@
 
 1. Place the file `tmp/minux_netinstall.lua` onto a ComputerCraft computer's startup slot, **or** run:
    ```
-   wget https://raw.githubusercontent.com/JosunLP/Minux/main/tmp/minux_netinstall.lua /startup.lua
+   wget https://raw.githubusercontent.com/JosunLP/ReMinux/main/tmp/minux_netinstall.lua /startup.lua
    ```
-2. Reboot the computer. The graphical installer will guide you through installation type and source selection. By default the installer fetches Minux directly from this Git repository (`raw.githubusercontent.com/JosunLP/Minux`); you can also point it at a different fork, branch, or any custom raw URL, and the legacy `minux.cc` APT installer is still available as a fallback.
+2. Reboot the computer. The graphical installer will guide you through installation type and source selection. By default the installer fetches ReMinux directly from this Git repository (`raw.githubusercontent.com/JosunLP/ReMinux`); you can also point it at a different fork, branch, or any custom raw URL, and the legacy `minux.cc` APT installer is still available as a fallback.
 
 ### Manual installation
 
@@ -83,7 +83,7 @@
 │   └── workspace.sh       — Launch the workspace UI
 ├── etc/
 │   ├── api/
-│   │   ├── minux          — Core Minux API (loaded as OS API on boot)
+│   │   ├── minux          — Core ReMinux API (loaded as OS API on boot)
 │   │   └── apt            — APT package manager API
 │   ├── apt/               — APT package data (manifests, aliases, boot addons)
 │   ├── man/               — Manual pages (read with `man <topic>`)
@@ -106,7 +106,7 @@
 | Command      | Description                                      |
 |--------------|--------------------------------------------------|
 | `apt`        | Manage packages (`-i`, `-r`, `-u`, `-U`, …)      |
-| `bash`       | Open the Minux shell; `bash setcolor …` for theme|
+| `bash`       | Open the ReMinux shell; `bash setcolor …` for theme|
 | `cat`        | Print a file; `cat file p` to page               |
 | `config`     | Change system settings (login, ui, debug, …)     |
 | `edit`       | Open the text editor                             |
@@ -159,7 +159,7 @@
 | `touch`  | Create empty files / ensure they exist            |
 | `tr`     | Translate or delete characters                    |
 | `tree`   | Print a directory tree                            |
-| `uname`  | Print Minux/system identification                 |
+| `uname`  | Print ReMinux/system identification               |
 | `uniq`   | Collapse runs of equal lines (`-c`, `-d`)         |
 | `uptime` | Time since the computer booted                    |
 | `wc`     | Count lines, words and bytes (`-l`, `-w`, `-c`)   |
@@ -220,7 +220,7 @@ apt -ls               # List active sources
 
 ## CC: Tweaked compatibility
 
-Minux is designed for **CC: Tweaked** and uses only APIs that are present and supported:
+ReMinux is designed for **CC: Tweaked** and uses only APIs that are present and supported:
 
 | API used              | CC:Tweaked status |
 |-----------------------|-------------------|
@@ -231,7 +231,7 @@ Minux is designed for **CC: Tweaked** and uses only APIs that are present and su
 | `shell.openTab()`     | ✅ Advanced computers only |
 | `window.create()`     | ✅ Stable          |
 
-> **Note:** `os.loadAPI()` is deprecated in CC: Tweaked in favour of `require()`. Minux retains it for backwards compatibility with older package scripts but new internal code uses explicit table returns where possible.
+> **Note:** `os.loadAPI()` is deprecated in CC: Tweaked in favour of `require()`. ReMinux retains it for backwards compatibility with older package scripts but new internal code uses explicit table returns where possible.
 
 ---
 

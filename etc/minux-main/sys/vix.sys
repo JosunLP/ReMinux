@@ -1,5 +1,5 @@
 --[[
-        vix — A Vim-like editor for Minux / CC: Tweaked.
+        vix — A Vim-like editor for ReMinux / CC: Tweaked.
 
         Designed to be approachable for users who have never touched a modal
         editor before, while still feeling familiar to Vim regulars.

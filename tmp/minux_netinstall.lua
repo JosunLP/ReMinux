@@ -1,21 +1,21 @@
--- Minux net-installer
+-- ReMinux net-installer
 --
--- Bootstraps a Minux installation directly from this Git repository,
+-- Bootstraps a ReMinux installation directly from this Git repository,
 -- using the raw GitHub content URLs.  The list of files to install is
 -- read from /etc/apt/manifest/minux-main.db, which is also the manifest
--- consumed by the APT package manager once Minux is installed.  This
+-- consumed by the APT package manager once ReMinux is installed.  This
 -- removes the need for a separate "packaged" build artefact and lets
--- anyone fork the repository and host their own install of Minux.
+-- anyone fork the repository and host their own install of ReMinux.
 --
 -- Original installer (c) Minux team
 -- Menu API by ComputerCrafter, double-buffer by Missooni
--- Refactored to use Git in 2026 for the JosunLP/Minux fork.
+-- Refactored to use Git in 2026 for the JosunLP/ReMinux fork.
 
 ------------------------------------------------------------
 -- Configuration
 ------------------------------------------------------------
 
-local DEFAULT_REPO     = "JosunLP/Minux"
+local DEFAULT_REPO     = "JosunLP/ReMinux"
 local DEFAULT_BRANCH   = "main"
 local LEGACY_APT_OS    = "https://minux.cc/apt/2.0/os/"
 local LEGACY_APT_SOFT  = "https://minux.cc/apt/2.0/soft/"
@@ -281,7 +281,7 @@ local function installFromGit(source, profile)
                 printError("Installation may be incomplete.")
         end
 
-        -- Also fetch /startup.lua so the computer boots Minux on next start.
+        -- Also fetch /startup.lua so the computer boots ReMinux on next start.
         local startupOk = downloadFile(source, "startup.lua", "/startup.lua")
         if startupOk == false then
                 -- Older repos used /startup; try once more.
@@ -373,10 +373,10 @@ end
 
 local function chooseAction()
         local choice
-        showMenu("Minux Installer", {
-                "Install Minux (recommended)",
+        showMenu("ReMinux Installer", {
+                "Install ReMinux (recommended)",
                 "Reset existing installation",
-                "Repair Minux (keep settings)",
+                "Repair ReMinux (keep settings)",
                 "Start an empty CraftOS shell",
                 "Start computer normally",
         }, {
@@ -486,7 +486,7 @@ elseif action == "start" then
         return 0
 elseif action == "repair" then
         if fs.exists("/etc/api/minux") and fs.exists("/etc/api/apt") then
-                print("Loading Minux API")
+                print("Loading ReMinux API")
                 os.loadAPI("/etc/api/minux")
                 os.loadAPI("/etc/api/apt")
                 print("Forcing APT update")
@@ -494,7 +494,7 @@ elseif action == "repair" then
                 printOk("Repair complete. Reboot or run /boot/init.sys.")
                 shell.run("/rom/programs/shell.lua")
         else
-                printError("Cannot find Minux API; aborting repair.")
+                printError("Cannot find ReMinux API; aborting repair.")
                 shell.run("/rom/programs/shell.lua")
         end
         return 0
@@ -527,9 +527,9 @@ local ok = runInstall(source, profile)
 
 clearScreen()
 if ok then
-        printOk("Minux base installed.")
+        printOk("ReMinux base installed.")
 else
-        printError("Minux installation finished with errors.")
+        printError("ReMinux installation finished with errors.")
         printError("Inspect the messages above; you can re-run the installer to retry.")
 end
 print("")

@@ -2,7 +2,7 @@
 local args = { ... }
 if args[1] == "?" or args[1] == "help" then
 	print("Usage: env")
-	print("Print Minux/CC environment information and shell aliases.")
+	print("Print ReMinux/CC environment information and shell aliases.")
 	return 0
 end
 

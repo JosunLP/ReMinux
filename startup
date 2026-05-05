@@ -1,4 +1,4 @@
--- Minux Bootloader
+-- ReMinux Bootloader
 shell.run("clear")
 shell.run("/boot/init.sys")
 

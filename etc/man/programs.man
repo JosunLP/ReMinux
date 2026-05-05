@@ -17,7 +17,7 @@ NOTES
   then printed. This replaces
   the default CraftOS 'programs'
   command with one that includes
-  Minux's own /bin directory.
+  ReMinux's own /bin directory.
 
 SEE ALSO
   ls - list directory contents

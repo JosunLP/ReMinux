@@ -32,7 +32,7 @@ term.setCursorPos(1, 1)
 if stageNumber == 1 then
 print("Kernel panic")
 else
-print("Minux-V:" .. _G.version .. " Init fail")
+print("ReMinux-V:" .. _G.version .. " Init fail")
 end
 print("Init stage:" .. displayStage)
 if stageNumber == 4 then
@@ -90,9 +90,9 @@ end
 -- Boot header
 
 if pocket or turtle then
-print("-----------Minux----------")
+print("-----------ReMinux----------")
 else
-print("--------------------Minux--------------------------")
+print("-------------------ReMinux-------------------------")
 end
 
 checkCrashStage("1")
@@ -311,7 +311,7 @@ end
 if pocket or turtle then
 print("Hit Enter to start")
 else
-print("Welcome to Minux. Hit Enter to start.")
+print("Welcome to ReMinux. Hit Enter to start.")
 end
 local initput = read()
 while initput ~= nil do
