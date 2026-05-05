@@ -3,6 +3,10 @@
 local AptManager = {}
 AptManager.__index = AptManager
 
+local VERSION_LESS = -1
+local VERSION_EQUAL = 0
+local VERSION_GREATER = 1
+
 function AptManager.new()
 return setmetatable({
 installedListPath = "/etc/apt/list/installed.db",
@@ -180,7 +184,7 @@ string.match(tag, "^v?%d+%.%d+%.%d+[-+][%w%._%-]+$") ~= nil
 ) 
 end
 
-function AptManager:isStableReleaseTag(tag)
+function AptManager:isStableVersionTag(tag)
 return type(tag) == "string" and string.match(tag, "^v?%d+%.%d+%.%d+$") ~= nil
 end
 
@@ -245,7 +249,7 @@ end
 if cachedStatus == "none" then
 return true, "none", nil
 end
-if cachedStatus == "ok" and self:isStableReleaseTag(cachedTag) then
+if cachedStatus == "ok" and self:isStableVersionTag(cachedTag) then
 return true, "ok", cachedTag
 end
 return false, nil, nil
@@ -293,8 +297,10 @@ function AptManager:splitVersionSuffix(suffix)
 local tokens = {}
 local current = ""
 local currentIsDigit = nil
-for index = 1, string.len(suffix or "") do
-local char = string.sub(suffix, index, index)
+local suffixValue = suffix or ""
+local suffixLength = string.len(suffixValue)
+for index = 1, suffixLength do
+local char = string.sub(suffixValue, index, index)
 if char == "." or char == "-" or char == "_" then
 if current ~= "" then
 table.insert(tokens, current)
@@ -320,7 +326,7 @@ end
 
 function AptManager:compareVersions(left, right)
 if left == right then
-return 0
+return VERSION_EQUAL
 end
 local leftVersion = self:parseVersion(left)
 local rightVersion = self:parseVersion(right)
@@ -328,20 +334,20 @@ if leftVersion == nil or rightVersion == nil then
 return nil
 end
 if leftVersion.major ~= rightVersion.major then
-return leftVersion.major > rightVersion.major and 1 or -1
+return leftVersion.major > rightVersion.major and VERSION_GREATER or VERSION_LESS
 end
 if leftVersion.minor ~= rightVersion.minor then
-return leftVersion.minor > rightVersion.minor and 1 or -1
+return leftVersion.minor > rightVersion.minor and VERSION_GREATER or VERSION_LESS
 end
 if leftVersion.patch ~= rightVersion.patch then
-return leftVersion.patch > rightVersion.patch and 1 or -1
+return leftVersion.patch > rightVersion.patch and VERSION_GREATER or VERSION_LESS
 end
 if leftVersion.suffix == rightVersion.suffix then
-return 0
+return VERSION_EQUAL
 elseif leftVersion.suffix == nil then
-return 1
+return VERSION_GREATER
 elseif rightVersion.suffix == nil then
-return -1
+return VERSION_LESS
 else
 local leftTokens = self:splitVersionSuffix(leftVersion.suffix)
 local rightTokens = self:splitVersionSuffix(rightVersion.suffix)
@@ -351,26 +357,26 @@ local leftToken = leftTokens[index]
 local rightToken = rightTokens[index]
 if leftToken ~= rightToken then
 if leftToken == nil then
-return -1
+return VERSION_LESS
 elseif rightToken == nil then
-return 1
+return VERSION_GREATER
 end
 local leftNumber = tonumber(leftToken)
 local rightNumber = tonumber(rightToken)
 if leftNumber ~= nil and rightNumber ~= nil then
-return leftNumber > rightNumber and 1 or -1
+return leftNumber > rightNumber and VERSION_GREATER or VERSION_LESS
 elseif leftNumber ~= nil then
-return -1
+return VERSION_LESS
 elseif rightNumber ~= nil then
-return 1
+return VERSION_GREATER
 elseif leftToken > rightToken then
-return 1
+return VERSION_GREATER
 else
-return -1
+return VERSION_LESS
 end
 end
 end
-return 0
+return VERSION_EQUAL
 end
 end
 
@@ -382,8 +388,8 @@ local bestTag = nil
 for index = 1, #releases do
 local release = releases[index]
 local tag = release.tag_name
-if type(release) == "table" and release.draft ~= true and release.prerelease ~= true and self:isStableReleaseTag(tag) then
-if bestTag == nil or self:compareVersions(tag, bestTag) == 1 then
+if type(release) == "table" and release.draft ~= true and release.prerelease ~= true and self:isStableVersionTag(tag) then
+if bestTag == nil or self:compareVersions(tag, bestTag) == VERSION_GREATER then
 bestTag = tag
 end
 end
@@ -436,7 +442,7 @@ self.latestReleaseStatus = "error"
 return nil, "error"
 end
 local pageBestTag = self:selectHighestReleaseTag(releases)
-if pageBestTag ~= nil and (bestTag == nil or self:compareVersions(pageBestTag, bestTag) == 1) then
+if pageBestTag ~= nil and (bestTag == nil or self:compareVersions(pageBestTag, bestTag) == VERSION_GREATER) then
 bestTag = pageBestTag
 end
 if #releases < self.releaseApiPerPage then
@@ -936,7 +942,7 @@ return true
 end
 local comparison = self:compareVersions(availableVersion, installedVersion)
 if comparison ~= nil then
-return comparison == 1
+return comparison == VERSION_GREATER
 end
 return availableVersion ~= installedVersion
 end

@@ -76,7 +76,7 @@ jobs:
               continue
             fi
             grep -qx 'AIF=true' "$manifest"
-            grep -qx "version=$VERSION" "$manifest"
+            grep -Eq "^[[:space:]]*version=$VERSION[[:space:]]*$" "$manifest"
           done
 
           grep -qx '/etc/apt/manifest/APT.db' etc/apt/manifest/minux-main.db
@@ -96,6 +96,8 @@ jobs:
           fi
           if gh release view "$TAG_NAME" >/dev/null 2>&1; then
             echo "Release already exists for $TAG_NAME"
+          elif [[ -n "$prerelease_flag" ]]; then
+            gh release create "$TAG_NAME" --title "$TAG_NAME" --generate-notes "$prerelease_flag"
           else
-            gh release create "$TAG_NAME" --title "$TAG_NAME" --generate-notes $prerelease_flag
+            gh release create "$TAG_NAME" --title "$TAG_NAME" --generate-notes
           fi
