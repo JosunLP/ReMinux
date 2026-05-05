@@ -86,6 +86,8 @@ php=false
 /bin/cp.sh
 /bin/mv.sh
 /bin/rm.sh
+/bin/chmod.sh
+/bin/chown.sh
 /bin/wc.sh
 /bin/head.sh
 /bin/tail.sh
@@ -105,6 +107,8 @@ php=false
 /etc/man/cp.man
 /etc/man/mv.man
 /etc/man/rm.man
+/etc/man/chmod.man
+/etc/man/chown.man
 /etc/man/wc.man
 /etc/man/head.man
 /etc/man/tail.man

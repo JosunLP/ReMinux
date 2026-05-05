@@ -77,6 +77,8 @@
 │   ├── newtab.sh          — Open a new workspace tab
 │   ├── passwd.sh          — Change a user's password
 │   ├── find.sh            — Walk directory trees
+│   ├── chmod.sh           — Change permission metadata
+│   ├── chown.sh           — Change ownership metadata
 │   ├── programs.sh        — List available programs
 │   ├── restart.sh         — Reboot
 │   ├── search.sh          — Compatibility file search wrapper
@@ -139,6 +141,8 @@
 | `cal`    | Print a monthly calendar                          |
 | `clear`  | Clear the terminal                                |
 | `cp`     | Copy files or directories                         |
+| `chmod`  | Change permission metadata (`chmod 755 file`)     |
+| `chown`  | Change owner/group metadata (`user[:group]`)      |
 | `cut`    | Extract characters or fields from each line       |
 | `date`   | Print the in-game day and time                    |
 | `df`     | Report free / used disk space                     |
@@ -162,7 +166,7 @@
 | `rm`     | Remove files; `-r` also removes directories       |
 | `seq`    | Generate a sequence of integers                   |
 | `sort`   | Sort lines (`-r`, `-n`, `-u`)                     |
-| `stat`   | Print file metadata (size, type, drive, times)    |
+| `stat`   | Print file metadata (owner, group, mode, times)   |
 | `tac`    | Print a file in reverse order                     |
 | `tail`   | Print the last N lines of a file                  |
 | `touch`  | Create empty files / ensure they exist            |

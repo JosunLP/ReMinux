@@ -1,0 +1,13 @@
+chmod, /bin/chmod.sh
+alias: 'chmod'
+
+Change stored permission metadata
+for one or more paths.
+
+Usage:
+  chmod <mode> <path> [path...]
+
+Modes use three octal digits, for
+example:
+  chmod 644 file
+  chmod 755 /boot/runonce.sh

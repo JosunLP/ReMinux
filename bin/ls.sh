@@ -44,7 +44,12 @@ end
 
 local function emitEntry(entry, displayName)
 	if longFormat == true then
-		minux.writeOutputLine(string.format("%-10s %8s %s", entry.mode or "----------", formatSize(entry.size), displayName))
+		minux.writeOutputLine(string.format("%-10s %-8s %-8s %8s %s",
+			entry.mode or "----------",
+			entry.owner or "-",
+			entry.group or "-",
+			formatSize(entry.size),
+			displayName))
 	else
 		minux.writeOutputLine(displayName)
 	end

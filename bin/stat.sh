@@ -2,7 +2,7 @@
 local args = { ... }
 if args[1] == nil or args[1] == "?" or args[1] == "help" then
 	print("Usage: stat <path>")
-	print("Print size, type, attributes and (when supported) timestamps.")
+	print("Print type, owner, group, mode and timestamps.")
 	return 0
 end
 
@@ -22,7 +22,9 @@ end
 
 print("File   : " .. info.path)
 print("Type   : " .. (info.isDir and "directory" or "regular file"))
-print("Mode   : " .. (info.mode or "----------"))
+print("Owner  : " .. (info.owner or "-"))
+print("Group  : " .. (info.group or "-"))
+print("Mode   : " .. (info.mode or "----------") .. " (" .. (info.modeOctalString or "---") .. ")")
 if info.isDir == false then
 	print("Size   : " .. fmt(info.size))
 end

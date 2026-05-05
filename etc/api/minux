@@ -17,6 +17,9 @@ red       = colors.red,       black     = colors.black,
 }
 
 local NO_USER = "foo"
+local ROOT_USER = "root"
+local ROOT_GROUP = "root"
+local PERMISSIONS_FILE = "/usr/minux-main/data/permissions.db"
 local SETTINGS_FILE = "/usr/minux-main/settings.cfg"
 local INSTALLED_DB_FILE = "/etc/apt/list/installed.db"
 local ENCRYPT_KEY_FILE = "/usr/minux-main/config/encr.conf"
@@ -25,6 +28,20 @@ local TEMP_EDIT_FILE = "/temp/dev/removeline.tmp"
 local USERNAME_PATTERN = "^[%w][%w_-]*$"
 local USERNAME_RULE_TEXT = "username must start with a letter or digit, then may use letters, digits, '_' and '-'"
 local ioContextStack = {}
+local DEFAULT_PERMISSION_RULES = {
+{ prefix = "/boot", owner = ROOT_USER, group = ROOT_GROUP, dirMode = 755, fileMode = 755 },
+{ prefix = "/bin", owner = ROOT_USER, group = ROOT_GROUP, dirMode = 755, fileMode = 755 },
+{ prefix = "/gbin", owner = ROOT_USER, group = ROOT_GROUP, dirMode = 755, fileMode = 755 },
+{ prefix = "/etc/apt", owner = ROOT_USER, group = ROOT_GROUP, dirMode = 755, fileMode = 644 },
+{ prefix = "/etc/api", owner = ROOT_USER, group = ROOT_GROUP, dirMode = 755, fileMode = 644 },
+{ prefix = "/etc/minux-main", owner = ROOT_USER, group = ROOT_GROUP, dirMode = 755, fileMode = 644 },
+{ prefix = "/usr/minux-main/config", owner = ROOT_USER, group = ROOT_GROUP, dirMode = 700, fileMode = 600 },
+{ prefix = "/usr/minux-main/settings.cfg", owner = ROOT_USER, group = ROOT_GROUP, fileMode = 600 },
+{ prefix = "/usr/minux-main/data", owner = ROOT_USER, group = ROOT_GROUP, dirMode = 755, fileMode = 644 },
+{ prefix = "/usr/local/auth", owner = ROOT_USER, group = ROOT_GROUP, dirMode = 700, fileMode = 600 },
+{ prefix = "/usr/auth-client", owner = ROOT_USER, group = ROOT_GROUP, dirMode = 700, fileMode = 600 },
+{ prefix = "/etc/server.sys", owner = ROOT_USER, group = ROOT_GROUP, fileMode = 700 },
+}
 local DEFAULT_SETTINGS = {
 { key = "network",      value = "disabled" },
 { key = "login",        value = "disabled" },
@@ -42,6 +59,31 @@ end
 
 local function requireAdminOrOwner()
 return _G.admin == true or _G.owner == _G.login
+end
+
+local function isSystemOwner()
+if _G.admin == true then
+return true
+end
+if _G.owner == true then
+return true
+end
+return _G.owner ~= nil and _G.owner ~= false and _G.owner == _G.login
+end
+
+local function currentUser()
+local user = _G.login
+if user == nil or user == false or user == "" or user == NO_USER then
+return ROOT_USER
+end
+return user
+end
+
+local function defaultGroupForUser(user)
+if user == nil or user == "" or user == ROOT_USER then
+return ROOT_GROUP
+end
+return user
 end
 
 -- Read the encryption key from disk. Returns the numeric key, or nil if
@@ -76,17 +118,255 @@ end
 return fs.combine("", path)
 end
 
+local function pathMatchesPrefix(path, prefix)
+path = normalisePath(path)
+prefix = normalisePath(prefix)
+if path == prefix then
+return true
+end
+return string.sub(path, 1, #prefix + 1) == prefix .. "/"
+end
+
 local function isHiddenName(name)
 return string.sub(name, 1, 1) == "."
 end
 
-local function toModeString(isDir, readOnly)
-if isDir == true then
-if readOnly == true then return "dr-xr-xr-x" end
-return "drwxrwxrwx"
+local function parseModeValue(mode)
+if type(mode) == "number" then
+if mode < 0 or mode > 777 then
+return nil
 end
-if readOnly == true then return "-r--r--r--" end
-return "-rw-rw-rw-"
+local digits = string.format("%03d", mode)
+if string.match(digits, "^[0-7][0-7][0-7]$") == nil then
+return nil
+end
+return tonumber(digits)
+elseif type(mode) == "string" then
+local digits = string.match(mode, "^0?([0-7][0-7][0-7])$")
+if digits == nil then
+return nil
+end
+return tonumber(digits)
+end
+return nil
+end
+
+local function permissionsFromDigit(digit)
+return {
+read = math.floor(digit / 4) % 2 == 1,
+write = math.floor(digit / 2) % 2 == 1,
+execute = digit % 2 == 1,
+}
+end
+
+local function permissionsFromMode(mode)
+mode = parseModeValue(mode) or 644
+local ownerDigit = math.floor(mode / 100)
+local groupDigit = math.floor(mode / 10) % 10
+local otherDigit = mode % 10
+return {
+owner = permissionsFromDigit(ownerDigit),
+group = permissionsFromDigit(groupDigit),
+other = permissionsFromDigit(otherDigit),
+}
+end
+
+local function permissionTriplet(bits)
+return (bits.read and "r" or "-")
+.. (bits.write and "w" or "-")
+.. (bits.execute and "x" or "-")
+end
+
+local function toModeString(isDir, mode)
+local permissions = permissionsFromMode(mode)
+return (isDir == true and "d" or "-")
+.. permissionTriplet(permissions.owner)
+.. permissionTriplet(permissions.group)
+.. permissionTriplet(permissions.other)
+end
+
+local function encodePermissionEntry(path, entry)
+return table.concat({
+normalisePath(path),
+entry.owner,
+entry.group,
+string.format("%03d", entry.mode),
+}, "\t")
+end
+
+local function readPermissionStore()
+local store = {}
+if fs.exists(PERMISSIONS_FILE) ~= true then
+return store
+end
+local handle = fs.open(PERMISSIONS_FILE, "r")
+if handle == nil then
+return store
+end
+local line = handle.readLine()
+while line ~= nil do
+local path, owner, group, mode = string.match(line, "^(.-)\t([^\t]+)\t([^\t]+)\t([0-7][0-7][0-7])$")
+if path ~= nil then
+store[normalisePath(path)] = {
+owner = owner,
+group = group,
+mode = tonumber(mode),
+}
+end
+line = handle.readLine()
+end
+handle.close()
+return store
+end
+
+local function writePermissionStore(store)
+ensureParentDirectory(PERMISSIONS_FILE)
+local paths = {}
+for path in pairs(store) do
+paths[#paths + 1] = path
+end
+table.sort(paths)
+local handle = fs.open(PERMISSIONS_FILE, "w")
+for _, path in ipairs(paths) do
+handle.writeLine(encodePermissionEntry(path, store[path]))
+end
+handle.close()
+end
+
+local function getPermissionRule(path)
+path = normalisePath(path)
+for _, rule in ipairs(DEFAULT_PERMISSION_RULES) do
+if pathMatchesPrefix(path, rule.prefix) then
+return rule
+end
+end
+return nil
+end
+
+local function defaultPermissionEntry(path, isDir)
+path = normalisePath(path)
+local rule = getPermissionRule(path)
+if rule ~= nil then
+return {
+owner = rule.owner or ROOT_USER,
+group = rule.group or ROOT_GROUP,
+mode = parseModeValue(isDir == true and rule.dirMode or rule.fileMode)
+or parseModeValue(isDir == true and rule.fileMode or rule.dirMode)
+or (isDir == true and 755 or 644),
+}
+end
+if pathMatchesPrefix(path, "/home/") then
+local segments = {}
+for segment in string.gmatch(path, "[^/]+") do
+segments[#segments + 1] = segment
+end
+local owner = segments[2] or currentUser()
+return {
+owner = owner,
+group = defaultGroupForUser(owner),
+mode = isDir == true and 755 or 644,
+}
+end
+local owner = currentUser()
+return {
+owner = owner,
+group = defaultGroupForUser(owner),
+mode = isDir == true and 755 or 644,
+}
+end
+
+local function permissionEntryForPath(path, isDir)
+local store = readPermissionStore()
+local entry = store[normalisePath(path)]
+if entry ~= nil then
+return {
+owner = entry.owner,
+group = entry.group,
+mode = parseModeValue(entry.mode) or (isDir == true and 755 or 644),
+}
+end
+return defaultPermissionEntry(path, isDir)
+end
+
+local function setPermissionEntry(path, entry)
+local store = readPermissionStore()
+store[normalisePath(path)] = {
+owner = entry.owner,
+group = entry.group,
+mode = parseModeValue(entry.mode) or 644,
+}
+writePermissionStore(store)
+return store[normalisePath(path)]
+end
+
+local function registerPathMetadata(path, isDir, entry)
+if fs.exists(path) ~= true and entry == nil then
+return false
+end
+local resolved = normalisePath(path)
+local metadata = entry or permissionEntryForPath(resolved, isDir == true)
+metadata.mode = parseModeValue(metadata.mode) or ((isDir == true) and 755 or 644)
+setPermissionEntry(resolved, metadata)
+return metadata
+end
+
+local function removePathMetadata(path)
+local store = readPermissionStore()
+local changed = false
+path = normalisePath(path)
+for key in pairs(store) do
+if pathMatchesPrefix(key, path) then
+store[key] = nil
+changed = true
+end
+end
+if changed == true then
+writePermissionStore(store)
+end
+return changed
+end
+
+local function renamePathMetadata(source, destination)
+local store = readPermissionStore()
+local updated = {}
+local removed = false
+source = normalisePath(source)
+destination = normalisePath(destination)
+for key, entry in pairs(store) do
+if pathMatchesPrefix(key, source) then
+local suffix = string.sub(key, #source + 1)
+updated[destination .. suffix] = {
+owner = entry.owner,
+group = entry.group,
+mode = entry.mode,
+}
+store[key] = nil
+removed = true
+end
+end
+for key, entry in pairs(updated) do
+store[key] = entry
+end
+if removed == true then
+writePermissionStore(store)
+end
+return removed
+end
+
+local function principalPermissions(entry)
+local permissions = permissionsFromMode(entry.mode)
+local user = currentUser()
+local group = defaultGroupForUser(user)
+if isSystemOwner() == true then
+return { read = true, write = true, execute = true }
+end
+if entry.owner == user then
+return permissions.owner
+end
+if entry.group == group then
+return permissions.group
+end
+return permissions.other
 end
 
 local function buildPathInfo(path, depth)
@@ -96,6 +376,11 @@ return nil
 end
 local isDir = fs.isDir(resolved)
 local readOnly = fs.isReadOnly ~= nil and fs.isReadOnly(resolved) or false
+local metadata = permissionEntryForPath(resolved, isDir)
+local mode = parseModeValue(metadata.mode) or (isDir == true and 755 or 644)
+if readOnly == true then
+mode = isDir == true and 555 or 444
+end
 local info = {
 path = resolved,
 name = fs.getName(resolved),
@@ -103,7 +388,14 @@ depth = depth or 0,
 isDir = isDir,
 type = isDir and "directory" or "file",
 readOnly = readOnly,
-mode = toModeString(isDir, readOnly),
+owner = metadata.owner,
+group = metadata.group,
+uid = metadata.owner == ROOT_USER and 0 or nil,
+gid = metadata.group == ROOT_GROUP and 0 or nil,
+modeOctal = mode,
+modeOctalString = string.format("%03d", mode),
+permissions = permissionsFromMode(mode),
+mode = toModeString(isDir, mode),
 }
 if isDir ~= true then
 info.size = fs.getSize(resolved)
@@ -239,13 +531,58 @@ message = message,
 })
 end
 
+local function seedPermissionTree(path)
+if fs.exists(path) ~= true then
+return
+end
+registerPathMetadata(path, fs.isDir(path))
+if fs.isDir(path) == true and minux ~= nil and type(minux.findEntries) == "function" then
+local entries = minux.findEntries(path, {
+recursive = true,
+includeRoot = false,
+includeHidden = true,
+})
+for _, entry in ipairs(entries or {}) do
+registerPathMetadata(entry.path, entry.isDir)
+end
+end
+end
+
+local function ensurePermissionDefaults()
+ensureFile(PERMISSIONS_FILE, {})
+local paths = {
+"/boot",
+"/boot/autorun.ls",
+"/boot/runonce.sh",
+"/bin",
+"/gbin",
+"/etc",
+"/etc/apt",
+"/etc/api",
+"/etc/minux-main",
+"/usr/minux-main",
+"/usr/minux-main/config",
+"/usr/minux-main/data",
+SETTINGS_FILE,
+ENCRYPT_KEY_FILE,
+AUTH_DIR,
+"/usr/auth-client",
+"/etc/server.sys",
+}
+for _, path in ipairs(paths) do
+seedPermissionTree(path)
+end
+end
+
 local function ensureCoreLayout()
 ensureDirectory("/var/log")
 ensureDirectory("/usr/minux-main/config")
 ensureDirectory("/usr/minux-main/data")
 ensureDirectory(AUTH_DIR)
+ensureDirectory("/usr/auth-client")
 ensureFile("/boot/autorun.ls", {})
 ensureFile("/boot/runonce.sh", {})
+ensurePermissionDefaults()
 end
 
 -- Write a single key=value line in a config file, replacing any existing entry.
@@ -375,6 +712,154 @@ end
 function pathInfo(path)
 expect(1, path, "string")
 return buildPathInfo(path, 0)
+end
+
+function permissionInfo(path)
+expect(1, path, "string")
+local resolved = normalisePath(path)
+local exists = fs.exists(resolved) == true
+local isDir = exists == true and fs.isDir(resolved) or false
+local entry = permissionEntryForPath(resolved, isDir)
+local mode = parseModeValue(entry.mode) or (isDir == true and 755 or 644)
+return {
+path = resolved,
+owner = entry.owner,
+group = entry.group,
+modeOctal = mode,
+modeOctalString = string.format("%03d", mode),
+permissions = permissionsFromMode(mode),
+mode = toModeString(isDir, mode),
+}
+end
+
+function requirePermission(path, operation)
+expect(1, path, "string")
+expect(2, operation, "string")
+local resolved = normalisePath(path)
+local info
+if operation == "create" and fs.exists(resolved) ~= true then
+local parent = fs.getDir(resolved)
+if parent == nil or parent == "" then
+parent = "/"
+end
+if fs.exists(parent) ~= true then
+return false, "parent directory does not exist: " .. parent
+end
+info = buildPathInfo(parent, 0)
+else
+info = buildPathInfo(resolved, 0)
+if info == nil then
+return false, "path does not exist: " .. resolved
+end
+end
+if isSystemOwner() == true then
+return true
+end
+if info.readOnly == true and (operation == "write" or operation == "create" or operation == "delete" or operation == "own") then
+return false, "access denied: " .. resolved
+end
+if operation == "own" then
+return false, "permission denied: " .. resolved
+end
+local permissions = principalPermissions({
+owner = info.owner,
+group = info.group,
+mode = info.modeOctal,
+})
+if operation == "read" and permissions.read ~= true then
+return false, "permission denied: " .. resolved
+elseif (operation == "write" or operation == "create" or operation == "delete") and permissions.write ~= true then
+return false, "permission denied: " .. resolved
+elseif operation == "execute" and permissions.execute ~= true then
+return false, "permission denied: " .. resolved
+end
+return true
+end
+
+function chmod(path, mode)
+expect(1, path, "string")
+expect(2, mode, "string", "number")
+local resolved = normalisePath(path)
+local info = buildPathInfo(resolved, 0)
+if info == nil then
+return false, "path does not exist: " .. resolved
+end
+local parsedMode = parseModeValue(mode)
+if parsedMode == nil then
+return false, "invalid mode: " .. tostring(mode)
+end
+if isSystemOwner() ~= true and info.owner ~= currentUser() then
+return false, "permission denied: " .. resolved
+end
+if info.readOnly == true then
+return false, "access denied: " .. resolved
+end
+registerPathMetadata(resolved, info.isDir, {
+owner = info.owner,
+group = info.group,
+mode = parsedMode,
+})
+return true
+end
+
+function chown(path, owner, group)
+expect(1, path, "string")
+expect(2, owner, "string")
+expect(3, group, "string", "nil")
+local resolved = normalisePath(path)
+local info = buildPathInfo(resolved, 0)
+if info == nil then
+return false, "path does not exist: " .. resolved
+end
+local ok, reason = minux.validateUsername(owner)
+if ok ~= true then
+return false, reason
+end
+local targetGroup = group
+if targetGroup == nil or targetGroup == "" then
+targetGroup = defaultGroupForUser(owner)
+end
+if isSystemOwner() ~= true then
+return false, "permission denied: " .. resolved
+end
+if info.readOnly == true then
+return false, "access denied: " .. resolved
+end
+registerPathMetadata(resolved, info.isDir, {
+owner = owner,
+group = targetGroup,
+mode = info.modeOctal,
+})
+return true
+end
+
+function touchPath(path)
+expect(1, path, "string")
+local resolved = normalisePath(path)
+if fs.isDir(resolved) == true then
+return false, "is a directory: " .. resolved
+end
+if fs.exists(resolved) == true then
+return true
+end
+local parent = fs.getDir(resolved)
+if parent ~= nil and parent ~= "" and fs.exists(parent) ~= true then
+local ok, err = minux.makeDirectory(parent, true)
+if ok ~= true then
+return false, err
+end
+end
+local ok, err = minux.requirePermission(resolved, "create")
+if ok ~= true then
+return false, err
+end
+local handle = fs.open(resolved, "w")
+if handle == nil then
+return false, "cannot create file: " .. resolved
+end
+handle.close()
+registerPathMetadata(resolved, false)
+return true
 end
 
 function listEntries(path, options)
@@ -884,6 +1369,38 @@ end
 return string.sub(path, 1, #root + 1) == root .. "/"
 end
 
+local function nearestExistingAncestor(path)
+local candidate = normalisePath(path)
+while candidate ~= nil and candidate ~= "" and fs.exists(candidate) ~= true do
+local parent = fs.getDir(candidate)
+if parent == candidate then
+break
+end
+candidate = parent
+end
+if candidate == nil or candidate == "" then
+candidate = "/"
+end
+return candidate
+end
+
+local function copyMetadataTree(source, destination)
+local entries = minux.findEntries(source, {
+recursive = true,
+includeRoot = true,
+includeHidden = true,
+})
+for _, entry in ipairs(entries or {}) do
+local suffix = string.sub(entry.path, #source + 1)
+local targetPath = destination .. suffix
+registerPathMetadata(targetPath, entry.isDir, {
+owner = entry.owner,
+group = entry.group,
+mode = entry.modeOctal,
+})
+end
+end
+
 function expandPathPattern(pathPattern)
 expect(1, pathPattern, "string")
 local matches = fs.find(pathPattern)
@@ -897,6 +1414,7 @@ end
 function makeDirectory(path, allowExisting)
 expect(1, path, "string")
 expect(2, allowExisting, "boolean", "nil")
+path = normalisePath(path)
 if path == "" then
 return false, "path is required"
 end
@@ -912,16 +1430,24 @@ end
 if fs.isReadOnly(path) == true then
 return false, "access denied: " .. path
 end
+local anchor = nearestExistingAncestor(path)
+local permitted, permissionErr = minux.requirePermission(anchor, "write")
+if permitted ~= true then
+return false, permissionErr
+end
 local ok, err = pcall(fs.makeDir, path)
 if ok ~= true then
 return false, tostring(err):gsub("^pcall: ", "")
 end
+registerPathMetadata(path, true)
 return true
 end
 
 function copyPath(source, destination)
 expect(1, source, "string")
 expect(2, destination, "string")
+source = normalisePath(source)
+destination = normalisePath(destination)
 if fs.exists(source) ~= true then
 return false, "source does not exist: " .. source
 end
@@ -934,10 +1460,17 @@ end
 if fs.isDir(source) == true and isPathWithin(destination, source) == true then
 return false, "cannot copy a directory into itself: " .. destination
 end
+local canRead, readErr = minux.requirePermission(source, "read")
+if canRead ~= true then
+return false, readErr
+end
 local parent = fs.getDir(destination)
-ensureParentDirectory(destination)
 if parent ~= nil and parent ~= "" and fs.exists(parent) ~= true then
 return false, "parent directory does not exist: " .. parent
+end
+local canWrite, writeErr = minux.requirePermission(destination, "create")
+if canWrite ~= true then
+return false, writeErr
 end
 local freeSpace = fs.getFreeSpace(destination)
 local size = fs.getSize(source)
@@ -948,12 +1481,15 @@ local ok, err = pcall(fs.copy, source, destination)
 if ok ~= true then
 return false, tostring(err):gsub("^pcall: ", "")
 end
+copyMetadataTree(source, destination)
 return true
 end
 
 function movePath(source, destination)
 expect(1, source, "string")
 expect(2, destination, "string")
+source = normalisePath(source)
+destination = normalisePath(destination)
 if fs.exists(source) ~= true then
 return false, "source does not exist: " .. source
 end
@@ -972,21 +1508,34 @@ end
 if fs.isDir(source) == true and isPathWithin(destination, source) == true then
 return false, "cannot move a directory into itself: " .. destination
 end
+local canRead, readErr = minux.requirePermission(source, "read")
+if canRead ~= true then
+return false, readErr
+end
+local canDelete, deleteErr = minux.requirePermission(source, "delete")
+if canDelete ~= true then
+return false, deleteErr
+end
 local parent = fs.getDir(destination)
-ensureParentDirectory(destination)
 if parent ~= nil and parent ~= "" and fs.exists(parent) ~= true then
 return false, "parent directory does not exist: " .. parent
+end
+local canCreate, createErr = minux.requirePermission(destination, "create")
+if canCreate ~= true then
+return false, createErr
 end
 local ok, err = pcall(fs.move, source, destination)
 if ok ~= true then
 return false, tostring(err):gsub("^pcall: ", "")
 end
+renamePathMetadata(source, destination)
 return true
 end
 
 function deletePath(path, recursive)
 expect(1, path, "string")
 expect(2, recursive, "boolean", "nil")
+path = normalisePath(path)
 if fs.exists(path) ~= true then
 return false, "path does not exist: " .. path
 end
@@ -999,10 +1548,15 @@ end
 if fs.isReadOnly(path) == true then
 return false, "cannot delete read-only path: " .. path
 end
+local canDelete, deleteErr = minux.requirePermission(path, "delete")
+if canDelete ~= true then
+return false, deleteErr
+end
 local ok, err = pcall(fs.delete, path)
 if ok ~= true then
 return false, tostring(err):gsub("^pcall: ", "")
 end
+removePathMetadata(path)
 return true
 end
 
