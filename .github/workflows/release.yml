@@ -76,7 +76,7 @@ jobs:
               continue
             fi
             grep -qx 'AIF=true' "$manifest"
-            grep -Eq "^[[:space:]]*version=$VERSION[[:space:]]*$" "$manifest"
+            grep -qx "version=$VERSION" "$manifest"
           done
 
           grep -qx '/etc/apt/manifest/APT.db' etc/apt/manifest/minux-main.db
