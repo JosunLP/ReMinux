@@ -1,561 +1,649 @@
 -- apt api's
+
+local AptManager = {}
+AptManager.__index = AptManager
+
+function AptManager.new()
+return setmetatable({
+installedListPath = "/etc/apt/list/installed.db",
+sourceListPath = "/usr/apt/source.ls",
+sourceCachePath = "/temp/apt/source.ls",
+programListPath = "/temp/apt/programs.ls",
+manifestDirectory = "/etc/apt/list/",
+manifestCacheDirectory = "/temp/apt/manifest/",
+mapCacheDirectory = "/temp/apt/map/",
+buildJobs = {
+boot = {
+sourceDir = "/etc/apt/boot/",
+tempPath = "/temp/apt/addon.d",
+targetPath = "/boot/addon.d",
+label = "boot addon",
+},
+alias = {
+sourceDir = "/etc/apt/alias/",
+tempPath = "/etc/apt/build/build.tmp",
+targetPath = "/boot/alias.ls",
+label = "alias",
+},
+autorun = {
+sourceDir = "/etc/apt/autorun/",
+tempPath = "/etc/apt/build/autorun.tmp",
+targetPath = "/boot/autorun.ls",
+label = "autorun",
+},
+},
+presetSources = {
+stable = {
+"https://minux.cc/apt/2.0/soft/",
+"https://minux.cc/apt/2.0/os/",
+},
+beta = {
+"https://minux.cc/beta/",
+},
+goldcube = {
+"https://minux.cc/apt/2.0/soft/",
+"https://minux.cc/apt/2.0/os/",
+"https://goldcube.minux.cc/stable/",
+},
+},
+}, AptManager)
+end
+
+function AptManager:ensureDirectory(path)
+if path ~= nil and path ~= "" and fs.exists(path) == false then
+fs.makeDir(path)
+end
+end
+
+function AptManager:ensureParentDirectory(path)
+local parent = fs.getDir(path)
+if parent ~= nil and parent ~= "" then
+self:ensureDirectory(parent)
+end
+end
+
+function AptManager:readLines(path)
+local lines = {}
+if fs.exists(path) == false then
+return lines
+end
+
+local file = fs.open(path, "r")
+local line = file.readLine()
+while line ~= nil do
+table.insert(lines, line)
+line = file.readLine()
+end
+file.close()
+
+return lines
+end
+
+function AptManager:writeLines(path, lines)
+self:ensureParentDirectory(path)
+fs.delete(path)
+
+local file = fs.open(path, "w")
+for index = 1, #lines do
+file.writeLine(lines[index])
+end
+file.close()
+end
+
+function AptManager:isPackageAccessAllowed(packname)
+return _G.admin == true or _G.owner == true or packname == "auth-client"
+end
+
+function AptManager:isSourceAccessAllowed()
+return _G.admin == true or _G.owner == _G.login
+end
+
+function AptManager:getPresetSources(source)
+if source == "default" then
+source = "stable"
+end
+
+local preset = self.presetSources[source]
+if preset == nil then
+return nil
+end
+
+local copy = {}
+for index = 1, #preset do
+copy[index] = preset[index]
+end
+return copy
+end
+
+function AptManager:buildFromDirectory(job)
+self:ensureDirectory(job.sourceDir)
+self:ensureParentDirectory(job.tempPath)
+self:ensureParentDirectory(job.targetPath)
+
+minux.debug("clearing "..job.label.." build cache", "apt")
+fs.delete(job.tempPath)
+
+local buildFile = fs.open(job.tempPath, "w")
+local entries = fs.list(job.sourceDir)
+for index = 1, #entries do
+local filename = entries[index]
+minux.debug("reading:"..filename, "apt")
+local sourceFile = fs.open(fs.combine(job.sourceDir, filename), "r")
+buildFile.writeLine(sourceFile.readAll())
+sourceFile.close()
+end
+buildFile.close()
+
+minux.debug("file built, installing", "apt")
+fs.delete(job.targetPath)
+fs.move(job.tempPath, job.targetPath)
+minux.debug("done", "apt")
+return true
+end
+
+function AptManager:rebuildGeneratedFiles()
+self:buildFromDirectory(self.buildJobs.boot)
+self:buildFromDirectory(self.buildJobs.alias)
+self:buildFromDirectory(self.buildJobs.autorun)
+return true
+end
+
+function AptManager:findSources(packname)
+local sources = self:readLines(self.sourceListPath)
+for index = 1, #sources do
+minux.debug("apt-source:"..sources[index], "apt")
+end
+
+local packdb = self.manifestDirectory..packname..".db"
+if fs.exists(packdb) then
+minux.debug("package.db file found", "apt")
+local lineNumber = minux.findline(packdb, "https://")
+if lineNumber ~= false and lineNumber ~= nil then
+local packageSource = minux.printline(packdb, lineNumber)
+minux.debug("apt-source:"..packageSource, "apt")
+table.insert(sources, packageSource)
+end
+end
+
+if #sources == 0 then
+minux.debug("Error:102:", "apt")
+return nil, 102
+end
+
+minux.debug("getpack:source:", "apt")
+return sources
+end
+
+function AptManager:readRepositoryManifest(source)
+local manifestUrl = source.."manifest/APT.db"
+if http.checkURL(manifestUrl) ~= true then
+return nil, "server unreachable"
+end
+
+local response = http.get(manifestUrl)
+if response == nil then
+return nil, "server unreachable"
+end
+
+local contents = response.readAll()
+response.close()
+if contents == nil or contents == "" then
+return nil, "server unreachable"
+end
+
+return contents
+end
+
+function AptManager:appendSource(source)
+local sources = self:readLines(self.sourceListPath)
+table.insert(sources, source)
+self:writeLines(self.sourceListPath, sources)
+end
+
+function AptManager:removeSource(source)
+local sources = self:readLines(self.sourceListPath)
+local updated = {}
+local removed = false
+
+for index = 1, #sources do
+if removed == false and sources[index] == source then
+removed = true
+else
+table.insert(updated, sources[index])
+end
+end
+
+if removed == true then
+self:writeLines(self.sourceListPath, updated)
+end
+
+return removed
+end
+
+local manager = AptManager.new()
+
 function verifyconfig()
-	if fs.exists("/etc/apt/list/installed.db") == false then
-		minux.debug("ERROR:104:Installed.db missing or corrupt", "apt")
-		tempfile = fs.open("/etc/apt/list/installed.db","w")
-		tempfile.writeLine("minux-main")
-		tempfile.close()
-		return true
-	end
-	if fs.exists("/usr/apt/source.ls") ~= true then
-		minux.debug("ERROR:104:source missing or corrupt", "apt")
-		apt.addsource("stable")
-		return true
-	end
-	return false
+if fs.exists(manager.installedListPath) == false then
+minux.debug("ERROR:104:Installed.db missing or corrupt", "apt")
+manager:writeLines(manager.installedListPath, { "minux-main" })
+return true
+end
+
+if fs.exists(manager.sourceListPath) ~= true then
+minux.debug("ERROR:104:source missing or corrupt", "apt")
+manager:writeLines(manager.sourceListPath, manager:getPresetSources("stable"))
+return true
+end
+
+return false
+end
+
+function rebuildgenerated()
+return manager:rebuildGeneratedFiles()
 end
 
 function install(packname)
-	expect(1, packname, "string")
-	if isadmin == false and packname ~= "auth-client" and _G.owner ~= true then minux.debug("APT:Access denied") return 100 end
-	if verifyconfig() == true then	minux.debug("apt:install file was rebuilt!","apt") end
-	minux.debug("apt:checking:"..packname, "apt")
-	if apt.checkinstall(packname) == true then
-		minux.debug("apt:pack already installed", "apt")
-		return true
-	end
-	minux.debug("install:running getpack","apt")
-	local temp = apt.getpack(packname)
-	if temp == true then
-		if fs.exists("/etc/apt/list/"..packname..".db") == true then
-			minux.insertline("/etc/apt/list/installed.db",packname)
-			apt.aliasbuild()
-			apt.bootbuild()
-			apt.autorunbuild()
-			minux.debug("install:updated installed.db")
-			return true
-		else
-			minux.debug("getpack:E:105:pack:"..packname, "apt")
-			return 105
-		end
-	-- passon the error code
-	elseif temp == 105 then return 105
-	elseif temp == 110 then return 110
-	end
-	return false
+expect(1, packname, "string")
+if manager:isPackageAccessAllowed(packname) ~= true then
+minux.debug("APT:Access denied", "apt")
+return 100
 end
+if verifyconfig() == true then
+minux.debug("apt:install file was rebuilt!", "apt")
+end
+minux.debug("apt:checking:"..packname, "apt")
+if apt.checkinstall(packname) == true then
+minux.debug("apt:pack already installed", "apt")
+return true
+end
+
+minux.debug("install:running getpack", "apt")
+local result = apt.getpack(packname)
+if result == true then
+if fs.exists(manager.manifestDirectory..packname..".db") == true then
+minux.insertline(manager.installedListPath, packname)
+apt.rebuildgenerated()
+minux.debug("install:updated installed.db", "apt")
+return true
+end
+
+minux.debug("getpack:E:105:pack:"..packname, "apt")
+return 105
+elseif result == 105 or result == 110 then
+return result
+end
+
+return false
+end
+
 function findsource(packname)
-	expect(1,packname,"string")
-	local apso = "/usr/apt/source.ls"
-	aptsource = {}
-	aptsource[1] = "none"
-	local aptcount = 1
-	local packdb = ("/etc/apt/list/"..packname..".db")
-	if fs.exists(apso) then
-		minux.debug("source file found", "apt")
-		local sourcefile = fs.open(apso,"r")
-		local runloop = true
-		local altserver = true
-		while runloop == true do
-			aptsource[aptcount] = sourcefile.readLine()
-			if aptsource[aptcount] == nil then
-				runloop = false
-			else
-				minux.debug("apt-source:"..aptsource[aptcount], "apt")
-			end
-			aptcount = aptcount + 1
-		end
-		sourcefile.close()
-	end
-	if fs.exists(packdb) then
-		minux.debug("package.db file found", "apt")
-		local linenumber = minux.findline(packdb,"https://")
-		if linenumber ~= false and linenumber ~= nil then
-			aptsource[aptcount] = minux.printline(packdb, linenumber)
-			minux.debug("apt-source:"..aptsource[aptcount], "apt")
-			aptcount = aptcount + 1
-		end
-	end
-	if aptsource[1] == "none" then
-		minux.debug("Error:102:", "apt")
-		return 102
-	end
-	minux.debug("getpack:source:", "apt")
-	return aptsource
+expect(1, packname, "string")
+return manager:findSources(packname)
 end
 
 function getpack(packname)
-	expect(1, packname, "string")
-	local packsource = apt.findsource(packname)
-	if isadmin == false and packname ~= "auth-client" and _G.owner ~= true then minux.debug("APT:Access denied") return 100 end
+expect(1, packname, "string")
+if manager:isPackageAccessAllowed(packname) ~= true then
+minux.debug("APT:Access denied", "apt")
+return 100
+end
 
-	local runloop = true
-	local count = 1
-	local AIF = false
-	packsource = false
-	minux.debug("start search for pack", "apt")
-	while runloop == true do
-		if aptsource[count] == nil then
-			runloop = false
-		else
-			minux.debug("trying "..aptsource[count].."manifest/"..packname..".db", "apt")
-			if fs.exists("/etc/apt/list/"..packname..".db") then fs.delete("/etc/apt/list/"..packname..".db") end
-			local dlfile = minux.download(aptsource[count].."manifest/"..packname..".db", "/etc/apt/list/"..packname..".db")
-			if dlfile == true then
-				local temp = fs.open("/etc/apt/list/"..packname..".db" ,"r")
-				local tempfile = temp.readLine()
-				if tempfile == "AIF=true" then
-					AIF = true
-					runloop = false
-					packsource = aptsource[count]
-					aptsource[count] = nil
-					minux.debug("getpack:Pack found:"..packname, "apt")
-					minux.debug("getpack:source:"..packsource , "apt")
-				else
-					minux.debug("getpack:pack not found","apt")
-					minux.debug("not on this server", "apt")
-					count = count + 1
-				end
-				temp.close()
-			else
-				minux.debug("packfile not found on server", "apt")
-			end
-		end
-	end
-	if AIF ~= true then
-		minux.debug("E:105:Notfound","apt")
-		return 105
-	end
-	local depdone = true
-	minux.debug("checking for dependencies", "apt")
-	local manifest = minux.readtable("/etc/apt/list/"..packname..".db")
-	local mfcount = 1
-	local deplist = false
-	local depsucc = false
-	local filelist = false
-	local keyfile = false
-	while manifest[mfcount] ~= nil do
-		if manifest[mfcount] == "[depstart]" then deplist = true
-		elseif manifest[mfcount] == "[depstop]" then deplist = false
-		elseif deplist == true then
-			minux.debug("dep:installing:"..manifest[mfcount],"apt")
-			depsucc = apt.install(manifest[mfcount])
-			if depsucc ~= true then
-				minux.debug("dep:E:103:failed:"..manifestcount[mfcount],"apt")
-				depdone = false
-			end
-		elseif manifest[mfcount] == "[filelist]" then filelist = true
-		elseif filelist == true and keyfile == false then keyfile = manifest[mfcount] minux.debug("apt:keyfile:"..keyfile,"apt")
-		end
-		mfcount = mfcount + 1
-	end
-	if depdone ~= true then
-		minux.debug("getpack:E:103:depenency's not met", "apt")
-		return 103
-	end
-	if keyfile ~= false then fs.delete(keyfile) end
-	local dlsource = packsource.."repository/"..packname..".map"
-	local isphp = minux.findline("/etc/apt/list/"..packname..".db", "php=true")
-	if isphp ~= false and isphp ~= nil then
-		dlsource = packsource.."repository/".."map.php?id="..packname.."&type=map".."&type=clean"
-	end
-	local mpfol = "/temp/apt/map/"
-	if fs.exists(mpfol..packname..".map") then fs.delete(mpfol..packname..".map") end
-	minux.download(dlsource,mpfol..packname..".map")
-	if fs.exists(mpfol..packname..".map") then
-		local ogterm = minux.disableoutput()
-		shell.run(mpfol..packname..".map /")
-		fs.delete(mpfol..packname..".map")
-		minux.enableoutput(ogterm)
-		minux.debug("getpack:package executed.","apt")
-		if minux.getconfig("mapcleanup") == "enabled" then
-			if fs.exists(mpfol..packname..".map") then fs.delete(mpfol..packname..".map") end
-		end
-	else
-		minux.debug("getpack:nopack-dlfail:109","apt")
-		return 109
-	end
-	if keyfile ~= false and fs.exists(keyfile) == false then
-		minux.debug("getpack:E110:keyfile check failed")
-		return 110
-	end
-	minux.debug("getpack:ending", "apt")
-	return true
+local sources, sourceError = manager:findSources(packname)
+if sources == nil then
+return sourceError
 end
+
+local manifestPath = manager.manifestDirectory..packname..".db"
+local packageSource = nil
+minux.debug("start search for pack", "apt")
+for index = 1, #sources do
+local source = sources[index]
+minux.debug("trying "..source.."manifest/"..packname..".db", "apt")
+fs.delete(manifestPath)
+local downloaded = minux.download(source.."manifest/"..packname..".db", manifestPath)
+if downloaded == true then
+local temp = fs.open(manifestPath, "r")
+local manifestState = temp.readLine()
+temp.close()
+if manifestState == "AIF=true" then
+packageSource = source
+minux.debug("getpack:Pack found:"..packname, "apt")
+minux.debug("getpack:source:"..packageSource, "apt")
+break
+end
+minux.debug("getpack:pack not found", "apt")
+minux.debug("not on this server", "apt")
+else
+minux.debug("packfile not found on server", "apt")
+end
+end
+
+if packageSource == nil then
+minux.debug("E:105:Notfound", "apt")
+return 105
+end
+
+local dependenciesComplete = true
+minux.debug("checking for dependencies", "apt")
+local manifest = minux.readtable(manifestPath)
+local manifestIndex = 1
+local dependenciesStarted = false
+local fileListStarted = false
+local keyfile = false
+while manifest[manifestIndex] ~= nil do
+local entry = manifest[manifestIndex]
+if entry == "[depstart]" then
+dependenciesStarted = true
+elseif entry == "[depstop]" then
+dependenciesStarted = false
+elseif dependenciesStarted == true then
+minux.debug("dep:installing:"..entry, "apt")
+local dependencyResult = apt.install(entry)
+if dependencyResult ~= true then
+minux.debug("dep:E:103:failed:"..entry, "apt")
+dependenciesComplete = false
+end
+elseif entry == "[filelist]" then
+fileListStarted = true
+elseif fileListStarted == true and keyfile == false then
+keyfile = entry
+minux.debug("apt:keyfile:"..keyfile, "apt")
+end
+manifestIndex = manifestIndex + 1
+end
+
+if dependenciesComplete ~= true then
+minux.debug("getpack:E:103:dependencies not met", "apt")
+return 103
+end
+
+if keyfile ~= false then
+fs.delete(keyfile)
+end
+
+manager:ensureDirectory(manager.mapCacheDirectory)
+local downloadSource = packageSource.."repository/"..packname..".map"
+local isPhp = minux.findline(manifestPath, "php=true")
+if isPhp ~= false and isPhp ~= nil then
+downloadSource = packageSource.."repository/map.php?id="..packname.."&type=map&type=clean"
+end
+
+local mapPath = manager.mapCacheDirectory..packname..".map"
+fs.delete(mapPath)
+minux.download(downloadSource, mapPath)
+if fs.exists(mapPath) == true then
+local originalTerminal = minux.disableoutput()
+shell.run(mapPath.." /")
+fs.delete(mapPath)
+minux.enableoutput(originalTerminal)
+minux.debug("getpack:package executed.", "apt")
+if minux.getconfig("mapcleanup") == "enabled" and fs.exists(mapPath) then
+fs.delete(mapPath)
+end
+else
+minux.debug("getpack:nopack-dlfail:109", "apt")
+return 109
+end
+
+if keyfile ~= false and fs.exists(keyfile) == false then
+minux.debug("getpack:E110:keyfile check failed", "apt")
+return 110
+end
+
+minux.debug("getpack:ending", "apt")
+return true
+end
+
 function uninstall(packname)
-	expect(1, packname, "string")
-	minux.debug("removing pack:"..packname, "apt")
-	verifyconfig()
-	if isadmin == false and _G.owner ~= true then minux.debug("APT:Access denied") return false
-	elseif packname == "minux-main" then
-		return false
-	elseif apt.checkinstall(packname) == false then
-		minux.debug("ERROR:106", "apt")
-		return true
-	end
-	minux.debug("running cleanup:"..packname, "apt")
-	apt.cleanup(packname)
-	minux.debug("clearing manifest filelist")
-	local mffile="/etc/apt/list/"..packname..".db"
-	local temp = fs.open(mffile,"r")
-	local liststart = false
-	local data = temp.readLine()
-	while data ~= nil do
-		if data == "[filelist]" then
-			liststart = true
-			data = temp.readLine()
-		end
-		if liststart == true then
-			fs.delete(data)
-		end
-		data = temp.readLine()
-	end
-	liststart = nil
-	minux.debug("clearing package manifest", "apt")
-	fs.delete(mffile)
-	minux.debug("updating configuration", "apt")
-	minux.removestring("/etc/apt/list/installed.db",packname)
-	apt.aliasbuild()
-	apt.bootbuild()
-	apt.autorunbuild()
-	minux.debug("Finished", "apt")
-	return true
+expect(1, packname, "string")
+minux.debug("removing pack:"..packname, "apt")
+verifyconfig()
+if manager:isPackageAccessAllowed(packname) ~= true then
+minux.debug("APT:Access denied", "apt")
+return false
+elseif packname == "minux-main" then
+return false
+elseif apt.checkinstall(packname) == false then
+minux.debug("ERROR:106", "apt")
+return true
 end
+
+minux.debug("running cleanup:"..packname, "apt")
+apt.cleanup(packname)
+minux.debug("clearing manifest filelist", "apt")
+local manifestFile = manager.manifestDirectory..packname..".db"
+local temp = fs.open(manifestFile, "r")
+local listStart = false
+local data = temp.readLine()
+while data ~= nil do
+if data == "[filelist]" then
+listStart = true
+data = temp.readLine()
+end
+if listStart == true and data ~= nil then
+fs.delete(data)
+end
+data = temp.readLine()
+end
+temp.close()
+
+minux.debug("clearing package manifest", "apt")
+fs.delete(manifestFile)
+minux.debug("updating configuration", "apt")
+minux.removestring(manager.installedListPath, packname)
+apt.rebuildgenerated()
+minux.debug("Finished", "apt")
+return true
+end
+
 function update(packname)
-	expect(1, packname, "string", "nil")
-	verifyconfig()
-	local forcedupdate = false
-	if packname == "-f" then forcedupdate = true end
-	if packname ~= nil then
-		if apt.checkinstall(packname) == true then
-			minux.debug("update:updating:"..packname)
-			apt.getpack(packname)
-			return true
-		end
-	end
+expect(1, packname, "string", "nil")
+verifyconfig()
+
+local forcedupdate = packname == "-f"
+if packname ~= nil and forcedupdate ~= true and apt.checkinstall(packname) == true then
+minux.debug("update:updating:"..packname, "apt")
+local updateResult = apt.getpack(packname)
+if updateResult == true then
+apt.rebuildgenerated()
+return true
+end
+return updateResult
+end
+
 	minux.debug("reading installed.db", "apt")
-	local installedlist = fs.open("/etc/apt/list/installed.db" ,"r")
-	local nextpack = installedlist.readLine()
-	local packuptodate = false
-	while nextpack ~= nil do
-		sourcecount = 1
+	manager:ensureDirectory(manager.manifestCacheDirectory)
+	local installedPackages = manager:readLines(manager.installedListPath)
+	for index = 1, #installedPackages do
+		local nextpack = installedPackages[index]
 		minux.debug("finding source", "apt")
-		local sourcelist = apt.findsource(nextpack)
-		local count = 1
-		local serverfound = false
-		while sourcelist[count] ~= nil  and serverfound ~= true do
-			minux.debug("trying:"..sourcelist[count].."/"..nextpack, "apt")
-			minux.download(sourcelist[count].."/manifest/"..nextpack..".db", "/temp/apt/manifest/"..nextpack..".db")
-			count = count + 1
-			local line = minux.findline("/temp/apt/manifest/"..nextpack..".db","AIF=true")
-			if line ~= nil and line ~= false then
-				serverfound = true
+		local sourceList = apt.findsource(nextpack)
+		if type(sourceList) ~= "table" then
+			minux.debug("update:source lookup failed:"..nextpack, "apt")
+		else
+			local serverFound = false
+			local manifestCache = manager.manifestCacheDirectory..nextpack..".db"
+			for sourceIndex = 1, #sourceList do
+				local source = sourceList[sourceIndex]
+				minux.debug("trying:"..source.."/"..nextpack, "apt")
+				minux.download(source.."/manifest/"..nextpack..".db", manifestCache)
+				local line = minux.findline(manifestCache, "AIF=true")
+				if line ~= nil and line ~= false then
+					serverFound = true
+					break
+				end
+			end
+
+			if serverFound == true then
+				local installedVersion = "unknown"
+				local newVersion = apt.version(manifestCache)
+				if fs.exists(manager.manifestDirectory..nextpack..".db") then
+					installedVersion = apt.version(manager.manifestDirectory..nextpack..".db")
+				end
+				local packageUpToDate = newVersion == installedVersion
+				if packageUpToDate == true then
+					minux.debug("version number matches", "apt")
+				else
+					minux.debug("version number mismatch", "apt")
+				end
+				if forcedupdate == true or packageUpToDate ~= true then
+					minux.debug("updating pack:", "apt")
+					apt.getpack(nextpack)
+				end
 			end
 		end
-		local instversion = "unknown"
-		local newversion = apt.version("/temp/apt/manifest/"..nextpack..".db")
-		if fs.exists("/etc/apt/list/"..nextpack..".db") then
-			instversion = apt.version("/etc/apt/list/"..nextpack..".db")
-		end
-		if newversion == instversion then
-			packuptodate = true
-			minux.debug("version number matches", "apt")
-		else
-			minux.debug("version number mismatch", "apt")
-			packuptodate = false
-		end
-		if forcedupdate == true or packuptodate ~= true then
-			minux.debug("updating pack:", "apt")
-			apt.getpack(nextpack)
-		end
-		nextpack = installedlist.readLine()
 	end
-	minux.debug("updating configuration", "apt")
-	apt.aliasbuild()
-	apt.bootbuild()
-	apt.autorunbuild()
-	return true
+
+minux.debug("updating configuration", "apt")
+apt.rebuildgenerated()
+return true
 end
+
 function version(dbfile)
-	expect(1,dbfile,"string")
-	if fs.exists(dbfile) then
-		local result = minux.findline(dbfile,"version=")
-		if result ~= nil and result ~= false then
-			local templinedata = minux.printline(dbfile,result)
-			result = string.sub(templinedata, 9)
-		end
-		return result
-	else
-		return false
-	end
+expect(1, dbfile, "string")
+if fs.exists(dbfile) then
+local result = minux.findline(dbfile, "version=")
+if result ~= nil and result ~= false then
+local lineData = minux.printline(dbfile, result)
+result = string.sub(lineData, 9)
 end
+return result
+end
+
+return false
+end
+
 function bootbuild()
-	minux.debug("searching boot files", "apt")
-	if fs.exists("/etc/apt/boot") == false then shell.run("mkdir /etc/apt/boot") end
-	local temp = fs.list("/etc/apt/boot/")
-	local count = 1
-	local keepalive = true
-	minux.debug("clearing old cache", "apt")
-	fs.delete("/temp/apt/addon.d")
-	local newbuild = fs.open("/temp/apt/addon.d" , "w")
-	while keepalive == true do
-		if temp[count] ~= nil then
-			local filename = temp[count]
-			minux.debug("reading:"..filename, "apt")
-			local bootfile = fs.open("/etc/apt/boot/"..filename,"r")
-			local newboot = bootfile.readAll()
-			newbuild.writeLine(newboot)
-			bootfile.close()
-			count = count + 1
-		else
-			keepalive = false
-		end
-	end
-	minux.debug("installing new file.", "apt")
-	newbuild.close()
-	if fs.exists("/boot/addon.d") then fs.delete("/boot/addon.d") end
-	fs.move("/temp/apt/addon.d","/boot/addon.d")
-	return true
+minux.debug("searching boot files", "apt")
+return manager:buildFromDirectory(manager.buildJobs.boot)
 end
+
 function aliasbuild()
-	local temp = fs.list("/etc/apt/alias/")
-	local count = 1
-	local keepalive = true
-	minux.debug("clearing alias build cache", "apt")
-	fs.delete("/etc/apt/build/build.tmp")
-	local newbuild = fs.open("/etc/apt/build/build.tmp" , "a")
-	while keepalive == true do
-		if temp[count] ~= nil then
-			local filename = temp[count]
-			minux.debug("reading:"..filename, "apt")
-			local aliasfile = fs.open("/etc/apt/alias/"..filename,"r")
-			local newalias = aliasfile.readAll()
-			newbuild.writeLine(newalias)
-			aliasfile.close()
-			count = count + 1
-		else
-			keepalive = false
-		end
-	end
-	newbuild.close()
-	minux.debug("file built, installing", "apt")
-	fs.delete("/boot/alias.ls")
-	fs.move("/etc/apt/build/build.tmp","/boot/alias.ls")
-	minux.debug("done", "apt")
-	return true
+return manager:buildFromDirectory(manager.buildJobs.alias)
 end
--- autorun system, runs after login
+
 function autorunbuild()
-	local temp = fs.list("/etc/apt/autorun/")
-	local count = 1
-	local keepalive = true
-	minux.debug("clearing autorun build cache", "apt")
-	fs.delete("/etc/apt/build/autorun.tmp")
-	local newbuild = fs.open("/etc/apt/build/autorun.tmp" , "a")
-	while keepalive == true do
-		if temp[count] ~= nil then
-			local filename = temp[count]
-			minux.debug("reading:"..filename, "apt")
-			local aliasfile = fs.open("/etc/apt/autorun/"..filename,"r")
-			local newalias = aliasfile.readAll()
-			newbuild.writeLine(newalias)
-			aliasfile.close()
-			count = count + 1
-		else
-			keepalive = false
-		end
-	end
-	newbuild.close()
-	minux.debug("file built, installing", "apt")
-	fs.delete("/boot/autorun.ls")
-	fs.move("/etc/apt/build/autorun.tmp","/boot/autorun.ls")
-	minux.debug("done", "apt")
-	return true
+return manager:buildFromDirectory(manager.buildJobs.autorun)
 end
 
 function cleanup(packname)
-	expect(1, packname, "string")
-	minux.debug("cleanup:"..packname, "apt")
-	local count = 1
-	if fs.exists("/etc/apt/cleanup/"..packname..".db") == false then keepalive = false minux.debug("no cleanup instructions found", "apt")
-	else keepalive = true end
-	minux.debug("reading cleanup instructions", "apt")
-	if keepalive == true then tempfile = fs.open("/etc/apt/cleanup/"..packname..".db" , "r") readfile = true end
-	while keepalive == true do
-		local line = tempfile.readLine()
-		if line ~= nil then
-			filename = line
-			fs.delete(filename)
-			minux.debug("removing:"..filename, "apt")
-		else
-			keepalive = false
-		end
-	end
-	minux.debug("end cleanup", "apt")
-	if readfile == true then tempfile.close() readfile = nil end
-	return true
+expect(1, packname, "string")
+minux.debug("cleanup:"..packname, "apt")
+
+local cleanupPath = "/etc/apt/cleanup/"..packname..".db"
+if fs.exists(cleanupPath) == false then
+minux.debug("no cleanup instructions found", "apt")
+return true
 end
+
+minux.debug("reading cleanup instructions", "apt")
+local tempfile = fs.open(cleanupPath, "r")
+local line = tempfile.readLine()
+while line ~= nil do
+fs.delete(line)
+minux.debug("removing:"..line, "apt")
+line = tempfile.readLine()
+end
+tempfile.close()
+
+minux.debug("end cleanup", "apt")
+return true
+end
+
 function checksource(source)
 	expect(1, source, "string")
-	if minux.findline("/usr/apt/source.ls", source) == false then
-		return false
-	else
-		return true
-	end
+	local line = minux.findline(manager.sourceListPath, source)
+	return line ~= false and line ~= nil
 end
+
 function addsource(source)
-	expect(1, source, "string")
-	local apso = "/usr/apt/source.ls"
-	local oss = "https://minux.cc/apt/2.0/os/"
-	local soft = "https://minux.cc/apt/2.0/soft/"
-	minux.debug("checking for admin/owner rights", "apt")
-	if _G.isadmin == false and _G.owner ~= _G.login then
-		print("access denied")
-		minux.debug("ERROR:100", "apt")
-		return false
-	end
-	if apt.checksource(source) then
-		minux.debug("source already added","apt")
-		return true
-	end
-	if source == "default" or source == "stable" then
-		minux.debug("resetting to primary", "apt")
-		fs.delete(apso)
-		local sourcefile = fs.open(apso , "w")
-		sourcefile.writeLine(soft)
-		sourcefile.writeLine(oss)
-		sourcefile.close()
-		return true
-	elseif source == "beta" then
-		minux.debug("resetting to beta", "apt")
-		fs.delete(apso)
-		local sourcefile = fs.open(apso , "w")
-		sourcefile.writeLine("https://minux.cc/beta/")
-		sourcefile.close()
-		return true
-	elseif source == "goldcube" then
-		minux.debug("resetting to goldcube + primary", "apt")
-		fs.delete(apso)
-		local sourcefile = fs.open(apso , "w")
-		sourcefile.writeLine(soft)
-		sourcefile.writeLine(oss)
-		sourcefile.writeLine("https://goldcube.minux.cc/stable/")
-		sourcefile.close()
-		return true
-	elseif source == "" or source == nil then
-		minux.debug("apt:addsourceInvalid input","apt")
-		return false
-	else
-		local sourcecheck = nil
-		if fs.exists("/temp/apt/source.ls") then
-			fs.delete("/temp/apt/source.ls")
-		end
-		minux.debug("touching APT repo:"..source, "apt")
-		local requestcount = 0
-		local requestretry = false
-		if http.checkURL(source.."manifest/APT.db") == true then
-			requestretry = true
-		else
-			print("server unreachable")
-			return false
-		end
-		while requestcount ~= 3 and requestretry == true do
-			getrequest = http.get(source.."manifest/APT.db")
-			local request = getrequest.readAll()
-			getrequest.close()
-			if request ~= nil then
-				requestretry = false
-				local tempfile = fs.open("/temp/apt/source.ls" , "w")
-				tempfile.write(request)
-				tempfile.close()
-				if fs.exists("/temp/apt/source.ls") then
-					local tempfile = fs.open("/temp/apt/source.ls","r")
-					local sourcecheck = tempfile.readLine()
-					tempfile.close()
-					if sourcecheck ~= "AIF" then
-						minux.debug("ERROR:107", "apt")
-						print("Verification fail: This is not a valid repository")
-						return false
-					else
-						minux.debug("Adding source", "apt")
-						print("Verification succeeded, apt source added")
-						minux.insertline(apso, source)
-						return true
-					end
-				else
-					print("invalid source url")
-					minux.debug("ERROR:107", "apt")
-				end
-			end
-		end
-	end
+expect(1, source, "string")
+minux.debug("checking for admin/owner rights", "apt")
+if manager:isSourceAccessAllowed() ~= true then
+print("Access denied")
+minux.debug("ERROR:100", "apt")
+return false
 end
+if source == "" then
+minux.debug("apt:addsource invalid input", "apt")
+return false
+end
+if apt.checksource(source) then
+minux.debug("source already added", "apt")
+return true
+end
+
+local preset = manager:getPresetSources(source)
+if preset ~= nil then
+minux.debug("resetting sources to preset:"..source, "apt")
+manager:writeLines(manager.sourceListPath, preset)
+return true
+end
+
+minux.debug("touching APT repo:"..source, "apt")
+local manifest, errorMessage = manager:readRepositoryManifest(source)
+if manifest == nil then
+print(errorMessage)
+return false
+end
+
+local repositoryState = string.match(manifest, "([^\r\n]+)")
+if repositoryState ~= "AIF" then
+minux.debug("ERROR:107", "apt")
+print("Verification failed: this is not a valid repository")
+return false
+end
+
+	minux.debug("Adding source", "apt")
+print("Verification succeeded, apt source added")
+manager:appendSource(source)
+return true
+end
+
 function clearsource(source)
-	expect(1, source, "string")
-	local apso = "/usr/apt/source.ls"
-	minux.debug("removing source:"..source, "apt")
-	if _G.isadmin == false and _G.owner == _G.login == false then
-		print("access denied")
-		minux.debug("ERROR:100 admin/owner = false")
-		return false
-	end
-	minux.debug("Admin/owner check = true" , "apt")
-	if minux.findline(apso, source) then
-		minux.removestring(apso , source)
-		return true
-	else
-		return false
-	end
+expect(1, source, "string")
+minux.debug("removing source:"..source, "apt")
+if manager:isSourceAccessAllowed() ~= true then
+print("Access denied")
+minux.debug("ERROR:100 admin/owner = false", "apt")
+return false
 end
+
+minux.debug("Admin/owner check = true", "apt")
+return manager:removeSource(source)
+end
+
 function softlist()
-	minux.debug("reading source list", "apt")
-	local sourcefile = fs.open("/usr/apt/source.ls" , "r")
-	local aptsource = sourcefile.readLine()
-	minux.debug("clearing temp cache", "apt")
-	fs.delete("/temp/apt/programs.temp")
-	minux.debug("searching manifest files", "apt")
-	while aptsource ~= nil do
-		minux.debug("touching:"..aptsource, "apt")
-		local requestretry = false
-		if http.checkURL(aptsource.."manifest/APT.db") == true then
-			requestretry = true
-		end
-		getrequest = http.get(aptsource.."manifest/APT.db")
-		request = getrequest.readAll()
-		getrequest.close()
-		if request ~= nil then
-			local tempfile = fs.open("/temp/apt/programs.temp" , "a")
-			tempfile.writeLine(aptsource)
-			tempfile.write(request)
-			tempfile.writeLine("")
-			tempfile.close()
-			aptsource = sourcefile.readLine()
-		end
-	end
-	sourcefile.close()
-	minux.debug("prepairing new file for display", "apt")
-	local newfile = fs.open("/temp/apt/programs.ls" , "w")
-	local tempfile = fs.open("/temp/apt/programs.temp" , "r")
-	local templine = tempfile.readLine()
-	while templine ~= nil do
-		if templine == "AIF" then templine = tempfile.readLine() end
-		if templine ~= nil then newfile.writeLine(templine) end
-		templine = tempfile.readLine()
-	end
-	tempfile.close()
-	newfile.close()
-	minux.debug("finished getprogram", "apt")
+minux.debug("reading source list", "apt")
+local sources = manager:readLines(manager.sourceListPath)
+local lines = {}
+for index = 1, #sources do
+local source = sources[index]
+minux.debug("touching:"..source, "apt")
+local manifest = manager:readRepositoryManifest(source)
+if manifest ~= nil then
+table.insert(lines, source)
+for line in string.gmatch(manifest, "([^\r\n]+)") do
+if line ~= "AIF" then
+table.insert(lines, line)
+end
+end
+table.insert(lines, "")
+end
+end
+
+minux.debug("preparing new file for display", "apt")
+manager:writeLines(manager.programListPath, lines)
+minux.debug("finished getprogram", "apt")
 end
 
 function checkinstall(packname)
-	expect(1, packname, "string")
-	local installed = false
-	tempfile = fs.open("/etc/apt/list/installed.db","r")
-	templine = tempfile.readLine()
-	while templine ~= nil do
-		if templine == packname then installed = true end
-		templine = tempfile.readLine()
-	end
-	tempfile.close()
-	return installed
+expect(1, packname, "string")
+local installedPackages = manager:readLines(manager.installedListPath)
+for index = 1, #installedPackages do
+if installedPackages[index] == packname then
+return true
+end
+end
+return false
 end
