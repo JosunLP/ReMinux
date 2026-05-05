@@ -215,11 +215,7 @@ shell.run("/boot/network/update.sys")
 
 if fs.exists("/etc/server.sys") then
 minux.debug("Starting server.sys", "minux")
-if term.isColor() then
-shell.openTab("/etc/server.sys")
-else
-shell.run("/etc/server.sys")
-end
+minux.safeOpenTab("/etc/server.sys")
 end
 
 if fs.exists("/boot/addon.d") then

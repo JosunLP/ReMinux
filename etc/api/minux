@@ -594,6 +594,24 @@ end
 
 -- Config read/write
 
+function hasHttpSupport()
+return http ~= nil
+and type(http.get) == "function"
+and type(http.checkURL) == "function"
+end
+
+function canOpenTabs()
+return shell ~= nil and type(shell.openTab) == "function"
+end
+
+function safeOpenTab(program, ...)
+expect(1, program, "string")
+if minux.canOpenTabs() == true then
+return shell.openTab(program, ...)
+end
+return shell.run(program, ...)
+end
+
 function validateUsername(username)
 expect(1, username, "string")
 if username == "" then
@@ -640,6 +658,31 @@ missingDir("/var/log", "Log directory /var/log")
 missingDir("/usr/minux-main/config", "System config directory /usr/minux-main/config")
 missingDir("/usr/minux-main/data", "System data directory /usr/minux-main/data")
 missingFile(SETTINGS_FILE, "System settings file " .. SETTINGS_FILE, { "login=disabled" })
+if os ~= nil and type(os.loadAPI) == "function" then
+addAuditFinding(findings, "ok", "CC: Tweaked API os.loadAPI is available")
+else
+addAuditFinding(findings, "error", "CC: Tweaked API os.loadAPI is missing")
+end
+if window ~= nil and type(window.create) == "function" then
+addAuditFinding(findings, "ok", "CC: Tweaked window.create is available")
+else
+addAuditFinding(findings, "error", "CC: Tweaked window.create is missing")
+end
+if paintutils ~= nil then
+addAuditFinding(findings, "ok", "CC: Tweaked paintutils API is available")
+else
+addAuditFinding(findings, "error", "CC: Tweaked paintutils API is missing")
+end
+if minux.hasHttpSupport() == true then
+addAuditFinding(findings, "ok", "CC: Tweaked HTTP API is available")
+else
+addAuditFinding(findings, "warning", "CC: Tweaked HTTP API is disabled or unavailable; APT downloads and online updates will not work")
+end
+if minux.canOpenTabs() == true then
+addAuditFinding(findings, "ok", "shell.openTab is available in this shell")
+else
+addAuditFinding(findings, "warning", "shell.openTab is unavailable here; advanced tab features will fall back to single-shell execution")
+end
 if minux.getconfig("login") == "local" then
 missingDir(AUTH_DIR, "Local auth directory " .. AUTH_DIR)
 if fs.exists(AUTH_DIR .. "root.usr") == true then
@@ -1146,6 +1189,10 @@ end
 function download(address, filepath)
 expect(1, address,  "string")
 expect(2, filepath, "string")
+if minux.hasHttpSupport() ~= true then
+minux.debug("http-get:http api unavailable", "minux")
+return false
+end
 if http.checkURL(address) ~= true then
 return false
 end

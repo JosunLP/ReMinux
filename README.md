@@ -231,13 +231,15 @@ ReMinux is designed for **CC: Tweaked** and uses only APIs that are present and 
 | API used              | CC:Tweaked status |
 |-----------------------|-------------------|
 | `fs`, `term`, `keys`  | ✅ Stable          |
-| `http.get`, `http.checkURL` | ✅ Stable   |
+| `http.get`, `http.checkURL` | ✅ Stable when HTTP is enabled in CC: Tweaked |
 | `peripheral`, `rednet`| ✅ Stable          |
 | `os.loadAPI()`        | ⚠️ Deprecated but retained for compatibility |
-| `shell.openTab()`     | ✅ Advanced computers only |
+| `shell.openTab()`     | ✅ Available in shell environments with multishell/tab support |
 | `window.create()`     | ✅ Stable          |
 
 > **Note:** `os.loadAPI()` is deprecated in CC: Tweaked in favour of `require()`. ReMinux retains it for backwards compatibility with older package scripts but new internal code uses explicit table returns where possible.
+>
+> **Compatibility guards:** ReMinux now checks optional CC: Tweaked capabilities more defensively. If HTTP is disabled, network downloads fail gracefully, and when `shell.openTab()` is unavailable the system falls back to single-shell execution instead of assuming tab support.
 
 ---
 

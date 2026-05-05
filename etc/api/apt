@@ -147,6 +147,9 @@ return self:normalizeSource(source)..suffix
 end
 
 function AptManager:readRemoteText(url, headers)
+if http == nil or http.get == nil or http.checkURL == nil then
+return nil
+end
 if http.checkURL(url) ~= true then
 return nil
 end
