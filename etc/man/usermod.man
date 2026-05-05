@@ -14,6 +14,9 @@ action options:
 add : adds a user, this
 must be followed by the
 username and password.
+usernames may only use
+letters, digits, '-' and
+'_' and may not be 'foo'.
 
 del : Deletes a user, 
 this must be followed by
@@ -55,3 +58,5 @@ important locations:
 files are stored. for 
 now passwords are not 
 hashed.
+empty passwords are
+rejected.

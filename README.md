@@ -14,6 +14,7 @@
 - **Configurable UI** — choose between `workspace`, `menu`, `prompt`, or plain `craftos` as your shell
 - **Peripheral auto-detection** — modems, monitors, printers, and speakers are detected on boot
 - **Crash handler** — a staged watchdog prevents boot loops and offers a repair shell
+- **Self-healing diagnostics** — `doctor` audits core OS state and can recreate missing runtime files
 - **Debug / logging system** — `disabled`, `enabled`, `logging`, or `full` verbosity levels
 - **Network DHCP** — automatic server discovery over Rednet
 - **OOP internals** — the APT manager uses a proper Lua class; all APIs are DRY-refactored
@@ -109,6 +110,7 @@
 | `bash`       | Open the ReMinux shell; `bash setcolor …` for theme|
 | `cat`        | Print a file; `cat file p` to page               |
 | `config`     | Change system settings (login, ui, debug, …)     |
+| `doctor`     | Audit and repair missing core system state       |
 | `edit`       | Open the text editor                             |
 | `halt`       | Shut down the computer                           |
 | `less`       | Scrollable file viewer (Up/Down/W/S, Ctrl to exit)|

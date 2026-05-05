@@ -40,6 +40,9 @@ local key = readEncryptKey()
 if key ~= nil then
 password = minux.encrypt(password, key)
 end
+if fs.exists("/usr/local/auth/") == false then
+fs.makeDir("/usr/local/auth/")
+end
 local file = fs.open(path, "w")
 file.write(password)
 file.close()
@@ -59,6 +62,15 @@ if username == nil or newpass == nil then
 print("Usage: usermod add <username> <password>")
 return 0
 end
+local validUser, userError = minux.validateUsername(username)
+if validUser ~= true then
+print("Invalid username: " .. userError)
+return 0
+end
+if newpass == "" then
+print("Password must not be empty")
+return 0
+end
 if fs.exists(userPath) then
 print("This user already exists")
 return 0
@@ -69,6 +81,11 @@ print("User added!")
 elseif action == "del" then
 if username == nil then
 print("Usage: usermod del <username>")
+return 0
+end
+local validUser, userError = minux.validateUsername(username)
+if validUser ~= true then
+print("Invalid username: " .. userError)
 return 0
 end
 if fs.exists(userPath) == false then
@@ -85,6 +102,15 @@ print("User removed!")
 elseif action == "psw" then
 if username == nil or newpass == nil then
 print("Usage: usermod psw <username> <password>")
+return 0
+end
+local validUser, userError = minux.validateUsername(username)
+if validUser ~= true then
+print("Invalid username: " .. userError)
+return 0
+end
+if newpass == "" then
+print("Password must not be empty")
 return 0
 end
 if fs.exists(userPath) == false then

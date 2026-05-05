@@ -21,6 +21,16 @@ local SETTINGS_FILE = "/usr/minux-main/settings.cfg"
 local ENCRYPT_KEY_FILE = "/usr/minux-main/config/encr.conf"
 local AUTH_DIR = "/usr/local/auth/"
 local TEMP_EDIT_FILE = "/temp/dev/removeline.tmp"
+local DEFAULT_SETTINGS = {
+{ "network=",      "network=disabled" },
+{ "login=",        "login=disabled" },
+{ "debug=",        "debug=disabled" },
+{ "mapcleanup=",   "mapcleanup=enabled" },
+{ "welcome=",      "welcome=enabled" },
+{ "update=",       "update=disabled" },
+{ "crashhandler=", "crashhandler=enabled" },
+{ "clearlogin=",   "clearlogin=enabled" },
+}
 
 local function resolveColor(name, default)
 return COLOR_NAMES[name] or default
@@ -40,6 +50,50 @@ keyfile.close()
 return key
 end
 return nil
+end
+
+local function ensureDirectory(path)
+if path ~= nil and path ~= "" and fs.exists(path) == false then
+fs.makeDir(path)
+end
+end
+
+local function ensureParentDirectory(path)
+local parent = fs.getDir(path)
+if parent ~= nil and parent ~= "" then
+ensureDirectory(parent)
+end
+end
+
+local function ensureFile(path, defaultLines)
+if fs.exists(path) == true then
+return false
+end
+ensureParentDirectory(path)
+local tempfile = fs.open(path, "w")
+if defaultLines ~= nil then
+for _, line in ipairs(defaultLines) do
+tempfile.writeLine(line)
+end
+end
+tempfile.close()
+return true
+end
+
+local function addAuditFinding(findings, level, message)
+table.insert(findings, {
+level = level,
+message = message,
+})
+end
+
+local function ensureCoreLayout()
+ensureDirectory("/var/log")
+ensureDirectory("/usr/minux-main/config")
+ensureDirectory("/usr/minux-main/data")
+ensureDirectory(AUTH_DIR)
+ensureFile("/boot/autorun.ls", {})
+ensureFile("/boot/runonce.sh", {})
 end
 
 -- Write a single key=value line in a config file, replacing any existing entry.
@@ -91,7 +145,9 @@ _G.validlogin = true
 if grantAdmin == true then
 _G.admin = true
 end
+if fs.exists("/boot/autorun.ls") then
 shell.run("/boot/autorun.ls")
+end
 if minux.getconfig("clearlogin") == "enabled" then
 term.setCursorPos(1, 1)
 term.clear()
@@ -179,6 +235,10 @@ end
 function login(username, password)
 expect(1, username, "string")
 expect(2, password, "string")
+if minux.validateUsername(username) ~= true then
+minux.debug("login:invalid username", "login")
+return false
+end
 local authtype = logintype()
 
 -- Preserve existing session so it can be restored on failure.
@@ -419,6 +479,7 @@ end
 
 function sanitycheck()
 apt.verifyconfig()
+ensureCoreLayout()
 local cfl = SETTINGS_FILE
 if fs.exists(cfl) == false then
 minux.debug("generating settings file", "minux")
@@ -427,23 +488,14 @@ tempfile.writeLine("login=disabled")
 tempfile.close()
 end
 -- Ensure all required keys exist.
-local defaults = {
-{ "network=",      "network=disabled" },
-{ "login=",        "login=disabled" },
-{ "debug=",        "debug=disabled" },
-{ "mapcleanup=",   "mapcleanup=enabled" },
-{ "welcome=",      "welcome=enabled" },
-{ "update=",       "update=disabled" },
-{ "crashhandler=", "crashhandler=enabled" },
-}
-for _, entry in ipairs(defaults) do
+for _, entry in ipairs(DEFAULT_SETTINGS) do
 if minux.findline(cfl, entry[1]) == false then
 minux.insertline(cfl, entry[2])
 end
 end
 if minux.findline(cfl, "ui=") == false then
 local uiDefault = "workspace"
-if minux.findline("/etc/apt/list/installed", "menu") ~= false then
+if minux.findline("/etc/apt/list/installed.db", "menu") ~= false then
 uiDefault = "menu"
 end
 minux.insertline(cfl, "ui=" .. uiDefault)
@@ -541,6 +593,109 @@ end
 
 -- Config read/write
 
+function validateUsername(username)
+expect(1, username, "string")
+if username == "" then
+return false, "username is required"
+end
+if username == NO_USER then
+return false, "username is reserved"
+end
+if #username > 32 then
+return false, "username is too long"
+end
+if string.match(username, "^[%w][%w_-]*$") == nil then
+return false, "username may only use letters, digits, '_' and '-'"
+end
+return true
+end
+
+function doctor(repair)
+expect(1, repair, "boolean", "nil")
+repair = repair == true
+local findings = {}
+local function missingDir(path, label)
+if fs.exists(path) == true then
+addAuditFinding(findings, "ok", label .. " is present")
+elseif repair == true then
+ensureDirectory(path)
+addAuditFinding(findings, "fixed", label .. " was created")
+else
+addAuditFinding(findings, "error", label .. " is missing")
+end
+end
+local function missingFile(path, label, defaultLines)
+if fs.exists(path) == true then
+addAuditFinding(findings, "ok", label .. " is present")
+elseif repair == true then
+ensureFile(path, defaultLines)
+addAuditFinding(findings, "fixed", label .. " was created")
+else
+addAuditFinding(findings, "error", label .. " is missing")
+end
+end
+
+missingDir("/var/log", "Log directory /var/log")
+missingDir("/usr/minux-main/config", "System config directory /usr/minux-main/config")
+missingDir("/usr/minux-main/data", "System data directory /usr/minux-main/data")
+missingFile(SETTINGS_FILE, "System settings file " .. SETTINGS_FILE, { "login=disabled" })
+if minux.getconfig("login") == "local" then
+missingDir(AUTH_DIR, "Local auth directory " .. AUTH_DIR)
+if fs.exists(AUTH_DIR .. "root.usr") == true then
+addAuditFinding(findings, "ok", "Local root account file is present")
+else
+addAuditFinding(findings, "error", "Local root account file is missing")
+end
+if minux.getconfig("encrypt") == true then
+addAuditFinding(findings, "ok", "Local auth encryption is enabled")
+else
+addAuditFinding(findings, "warning", "Local auth encryption is disabled")
+end
+end
+missingFile("/boot/autorun.ls", "Boot autorun list /boot/autorun.ls", {})
+missingFile("/boot/runonce.sh", "Boot run-once list /boot/runonce.sh", {})
+
+for _, entry in ipairs(DEFAULT_SETTINGS) do
+if minux.findline(SETTINGS_FILE, entry[1]) == false then
+if repair == true then
+updateConfigLine(SETTINGS_FILE, string.sub(entry[1], 1, -2), string.sub(entry[2], #entry[1] + 1))
+addAuditFinding(findings, "fixed", "Missing setting '" .. string.sub(entry[1], 1, -2) .. "' was restored")
+else
+addAuditFinding(findings, "error", "Missing setting '" .. string.sub(entry[1], 1, -2) .. "'")
+end
+end
+end
+
+if minux.findline(SETTINGS_FILE, "ui=") == false then
+if repair == true then
+updateConfigLine(SETTINGS_FILE, "ui", "workspace")
+addAuditFinding(findings, "fixed", "Missing UI setting was restored")
+else
+addAuditFinding(findings, "error", "Missing UI setting")
+end
+end
+
+if minux.getconfig("login") == "network" and minux.getconfig("network") ~= "enabled" then
+if repair == true then
+minux.setconfig("network", "enabled")
+addAuditFinding(findings, "fixed", "Network login now enables networking automatically")
+else
+addAuditFinding(findings, "error", "Network login is enabled while networking is disabled")
+end
+end
+
+if minux.getconfig("ui") == "menu" and minux.findline("/etc/apt/list/installed.db", "menu") == false then
+if repair == true then
+minux.setconfig("ui", "workspace")
+addAuditFinding(findings, "fixed", "UI fallback changed from missing 'menu' package to 'workspace'")
+else
+addAuditFinding(findings, "warning", "UI is set to 'menu' but the package is not installed")
+end
+end
+
+return findings
+end
+
 function getconfig(value)
 expect(1, value, "string")
 local cfgf = SETTINGS_FILE
@@ -630,6 +785,7 @@ return false
 end
 minux.debug("generating key", "minux")
 local key = os.getComputerID() * 3
+ensureParentDirectory(ENCRYPT_KEY_FILE)
 local keyfile = fs.open(ENCRYPT_KEY_FILE, "w")
 keyfile.writeLine(key)
 keyfile.close()
@@ -820,6 +976,7 @@ if _G.debugmode == "enabled" or _G.debugmode == "full" then
 print(printstring)
 end
 if _G.debugmode == "logging" or _G.debugmode == "full" then
+ensureDirectory("/var/log")
 local logfile = fs.open("/var/log/" .. programname .. ".txt", "a")
 logfile.writeLine(os.date() .. ":" .. printstring)
 logfile.close()
