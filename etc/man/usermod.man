@@ -14,9 +14,12 @@ action options:
 add : adds a user, this
 must be followed by the
 username and password.
-usernames may only use
-letters, digits, '-' and
-'_' and may not be 'foo'.
+usernames must start with
+a letter or digit and may
+then use letters, digits,
+'-' and '_'. the reserved
+guest placeholder 'foo'
+cannot be used.
 
 del : Deletes a user, 
 this must be followed by

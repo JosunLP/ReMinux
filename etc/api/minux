@@ -22,14 +22,14 @@ local ENCRYPT_KEY_FILE = "/usr/minux-main/config/encr.conf"
 local AUTH_DIR = "/usr/local/auth/"
 local TEMP_EDIT_FILE = "/temp/dev/removeline.tmp"
 local DEFAULT_SETTINGS = {
-{ "network=",      "network=disabled" },
-{ "login=",        "login=disabled" },
-{ "debug=",        "debug=disabled" },
-{ "mapcleanup=",   "mapcleanup=enabled" },
-{ "welcome=",      "welcome=enabled" },
-{ "update=",       "update=disabled" },
-{ "crashhandler=", "crashhandler=enabled" },
-{ "clearlogin=",   "clearlogin=enabled" },
+{ key = "network",      value = "disabled" },
+{ key = "login",        value = "disabled" },
+{ key = "debug",        value = "disabled" },
+{ key = "mapcleanup",   value = "enabled" },
+{ key = "welcome",      value = "enabled" },
+{ key = "update",       value = "disabled" },
+{ key = "crashhandler", value = "enabled" },
+{ key = "clearlogin",   value = "enabled" },
 }
 
 local function resolveColor(name, default)
@@ -489,8 +489,8 @@ tempfile.close()
 end
 -- Ensure all required keys exist.
 for _, entry in ipairs(DEFAULT_SETTINGS) do
-if minux.findline(cfl, entry[1]) == false then
-minux.insertline(cfl, entry[2])
+if minux.findline(cfl, entry.key .. "=") == false then
+minux.insertline(cfl, entry.key .. "=" .. entry.value)
 end
 end
 if minux.findline(cfl, "ui=") == false then
@@ -656,12 +656,12 @@ missingFile("/boot/autorun.ls", "Boot autorun list /boot/autorun.ls", {})
 missingFile("/boot/runonce.sh", "Boot run-once list /boot/runonce.sh", {})
 
 for _, entry in ipairs(DEFAULT_SETTINGS) do
-if minux.findline(SETTINGS_FILE, entry[1]) == false then
+if minux.findline(SETTINGS_FILE, entry.key .. "=") == false then
 if repair == true then
-updateConfigLine(SETTINGS_FILE, string.sub(entry[1], 1, -2), string.sub(entry[2], #entry[1] + 1))
-addAuditFinding(findings, "fixed", "Missing setting '" .. string.sub(entry[1], 1, -2) .. "' was restored")
+updateConfigLine(SETTINGS_FILE, entry.key, entry.value)
+addAuditFinding(findings, "fixed", "Missing setting '" .. entry.key .. "' was restored")
 else
-addAuditFinding(findings, "error", "Missing setting '" .. string.sub(entry[1], 1, -2) .. "'")
+addAuditFinding(findings, "error", "Missing setting '" .. entry.key .. "'")
 end
 end
 end
