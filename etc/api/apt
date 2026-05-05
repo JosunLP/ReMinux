@@ -432,14 +432,13 @@ self.latestReleaseTag = cachedTag
 return cachedTag, cachedStatus
 end
 
-self.latestReleaseStatus = "error"
+self.latestReleaseStatus = nil
 self.latestReleaseTag = nil
 local bestTag = nil
 for page = 1, self.releaseApiMaxPages do
 local releases, pageError = self:fetchReleasePage(page)
 if pageError ~= nil then
 self.latestReleaseStatus = "error"
-self.latestReleaseTag = nil
 return nil, "error"
 end
 local pageBestTag = self:selectHighestReleaseTag(releases)
@@ -535,7 +534,7 @@ end
 return self:parseOfficialSourceRef(source) ~= nil
 end
 
-function AptManager:isStableReMinuxSource(source)
+function AptManager:isStableOfficialSource(source)
 source = self:normalizeSource(source)
 if type(source) ~= "string" or source == "" then
 return false
@@ -550,7 +549,7 @@ end
 
 function AptManager:shouldPreferOfficialReleaseSource(packageSource, sources)
 if packageSource ~= nil then
-return self:isStableReMinuxSource(packageSource)
+return self:isStableOfficialSource(packageSource)
 end
 if #sources == 0 then
 return true
@@ -560,7 +559,7 @@ local sawStableSource = false
 for index = 1, #sources do
 local source = self:normalizeSource(sources[index])
 if type(source) == "string" and source ~= "" then
-if self:isStableReMinuxSource(source) == true then
+if self:isStableOfficialSource(source) == true then
 sawStableSource = true
 else
 return false
