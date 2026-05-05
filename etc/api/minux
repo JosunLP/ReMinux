@@ -614,6 +614,8 @@ end
 return shell.run(program, ...)
 end
 
+-- Validate a local username. Returns true when valid, otherwise false and a
+-- user-readable error message describing the first failed rule.
 function validateUsername(username)
 expect(1, username, "string")
 if username == "" then
