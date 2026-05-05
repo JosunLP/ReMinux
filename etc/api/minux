@@ -605,7 +605,7 @@ if #username > 32 then
 return false, "username is too long"
 end
 if string.match(username, "^[%w][%w_-]*$") == nil then
-return false, "username may only use letters, digits, '_' and '-'"
+return false, "username must start with a letter or digit, then may use letters, digits, '_' and '-'"
 end
 return true
 end
