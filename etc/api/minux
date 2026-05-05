@@ -466,8 +466,18 @@ if _G.version == "Cleaninstall" then
 local manifestSource = "https://raw.githubusercontent.com/JosunLP/ReMinux/main/etc/apt/manifest/minux-main.db"
 if apt ~= nil and type(apt.findsource) == "function" then
 local sources = apt.findsource("minux-main")
-if type(sources) == "table" and sources[1] ~= nil then
-manifestSource = sources[1].."manifest/minux-main.db"
+if type(sources) == "table" then
+for index = 1, #sources do
+local candidate = sources[index].."manifest/minux-main.db"
+if http ~= nil and http.checkURL ~= nil and http.checkURL(candidate) == true then
+local response = http.get(candidate)
+if response ~= nil then
+response.close()
+manifestSource = candidate
+break
+end
+end
+end
 end
 end
 minux.download(manifestSource, "/etc/apt/list/minux-main.db")

@@ -20,6 +20,16 @@ jobs:
       - name: Install Lua 5.1
         run: sudo apt-get install -y lua5.1
 
+      - name: Validate release tag
+        env:
+          TAG_NAME: ${{ github.ref_name }}
+        run: |
+          set -euo pipefail
+          if [[ ! "$TAG_NAME" =~ ^v?[0-9]+\.[0-9]+\.[0-9]+([.-][0-9A-Za-z._-]+)?$ ]]; then
+            echo "Release tags must match vX.Y.Z or X.Y.Z-suffix"
+            exit 1
+          fi
+
       - name: Syntax-check all Lua / shell scripts
         run: |
           set -e
@@ -33,15 +43,18 @@ jobs:
             fi
           done < <(find . \
             -not -path './.git/*' \
-            -not -path './tmp/*' \
             -not -path './usr/*' \
             \( -name '*.lua' -o -name '*.sh' -o -name '*.sys' -o -name '*.ls' \) \
             -print0)
+          luac5.1 -p ./tmp/minux_netinstall.lua
           exit $FAILED
 
       - name: Validate APT package index
+        env:
+          TAG_NAME: ${{ github.ref_name }}
         run: |
           set -euo pipefail
+          VERSION="${TAG_NAME#v}"
 
           mapfile -t manifests < <(find etc/apt/manifest \
             -maxdepth 1 \
@@ -62,7 +75,7 @@ jobs:
               continue
             fi
             grep -qx 'AIF=true' "$manifest"
-            grep -q '^version=' "$manifest"
+            grep -qx "version=$VERSION" "$manifest"
           done
 
           grep -qx '/etc/apt/manifest/APT.db' etc/apt/manifest/minux-main.db
@@ -72,8 +85,12 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           TAG_NAME: ${{ github.ref_name }}
         run: |
+          prerelease_flag=""
+          if [[ ! "$TAG_NAME" =~ ^v?[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            prerelease_flag="--prerelease"
+          fi
           if gh release view "$TAG_NAME" >/dev/null 2>&1; then
             echo "Release already exists for $TAG_NAME"
           else
-            gh release create "$TAG_NAME" --title "$TAG_NAME" --generate-notes
+            gh release create "$TAG_NAME" --title "$TAG_NAME" --generate-notes $prerelease_flag
           fi

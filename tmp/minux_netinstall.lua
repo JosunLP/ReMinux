@@ -213,26 +213,68 @@ local function isReleaseTag(tag)
         return type(tag) == "string" and tag:match("^v?%d+%.%d+%.%d+[%w%._%-]*$") ~= nil
 end
 
-local function fetchLatestReleaseTag(repo)
-        local body = httpFetch(GITHUB_API_BASE .. repo .. "/releases/latest", {
+local function isStableReleaseTag(tag)
+        return type(tag) == "string" and tag:match("^v?%d+%.%d+%.%d+$") ~= nil
+end
+
+local function parseVersion(version)
+        if type(version) ~= "string" then return nil end
+        local clean = version:gsub("^v", "")
+        local major, minor, patch = clean:match("^(%d+)%.(%d+)%.(%d+)$")
+        if major == nil then return nil end
+        return { major = tonumber(major), minor = tonumber(minor), patch = tonumber(patch) }
+end
+
+local function compareVersions(left, right)
+        if left == right then return 0 end
+        local leftVersion = parseVersion(left)
+        local rightVersion = parseVersion(right)
+        if leftVersion == nil or rightVersion == nil then return nil end
+        if leftVersion.major ~= rightVersion.major then
+                return leftVersion.major > rightVersion.major and 1 or -1
+        elseif leftVersion.minor ~= rightVersion.minor then
+                return leftVersion.minor > rightVersion.minor and 1 or -1
+        elseif leftVersion.patch ~= rightVersion.patch then
+                return leftVersion.patch > rightVersion.patch and 1 or -1
+        end
+        return 0
+end
+
+local function fetchHighestReleaseTag(repo)
+        local body, err = httpFetch(GITHUB_API_BASE .. repo .. "/releases?per_page=100", {
                 ["User-Agent"] = "ReMinux",
                 Accept = "application/vnd.github+json",
         })
-        if body == nil then return nil end
+        if body == nil then return nil, "error", err end
 
         local data = decodeJson(body)
-        if data ~= nil and isReleaseTag(data.tag_name) then
-                return data.tag_name
+        if type(data) ~= "table" then return nil, "error", "invalid GitHub API response" end
+
+        local bestTag = nil
+        for index = 1, #data do
+                local release = data[index]
+                local tag = release.tag_name
+                if type(release) == "table" and release.draft ~= true and release.prerelease ~= true and isStableReleaseTag(tag) then
+                        if bestTag == nil or compareVersions(tag, bestTag) == 1 then
+                                bestTag = tag
+                        end
+                end
         end
-        return nil
+
+        if bestTag ~= nil then
+                return bestTag, "ok"
+        end
+        return nil, "none"
 end
 
 local function resolveRecommendedGitSource(repo, fallbackRef)
-        local latestTag = fetchLatestReleaseTag(repo)
-        if latestTag ~= nil then
+        local latestTag, status, err = fetchHighestReleaseTag(repo)
+        if status == "ok" and latestTag ~= nil then
                 return Source.git(repo, latestTag)
+        elseif status == "none" then
+                return Source.git(repo, fallbackRef)
         end
-        return Source.git(repo, fallbackRef)
+        return nil, err or "unable to read GitHub releases"
 end
 
 local function downloadFile(source, repoPath, destPath)
@@ -443,7 +485,16 @@ local function chooseSource()
                 "Legacy APT: minux.cc beta",
                 "Legacy APT: custom server",
         }, {
-                function() source = resolveRecommendedGitSource(DEFAULT_REPO, DEFAULT_BRANCH) end,
+                function()
+                        local resolvedSource, err = resolveRecommendedGitSource(DEFAULT_REPO, DEFAULT_BRANCH)
+                        if resolvedSource == nil then
+                                printError("GitHub Releases unavailable: " .. tostring(err))
+                                printError("Falling back to legacy stable APT.")
+                                source = Source.apt(LEGACY_APT_OS, LEGACY_APT_SOFT)
+                        else
+                                source = resolvedSource
+                        end
+                end,
                 function()
                         write("Branch (default 'main'): ")
                         local input = read()
