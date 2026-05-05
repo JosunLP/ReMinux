@@ -118,18 +118,25 @@ end
 return context
 end
 
-local function applyRedirects(command, baseContext, outputSpec)
-local context = mergeContexts(baseContext)
-local inputPath = nil
-local outputRedirect = nil
-for index = 1, #(command.redirects or {}) do
-local redirect = command.redirects[index]
-if redirect.op == "<" then
-inputPath = redirect.target
-elseif redirect.op == ">" or redirect.op == ">>" then
-outputRedirect = redirect
-end
-end
+local function applyRedirects(command, runtime, baseContext, outputSpec)
+	local context = mergeContexts(baseContext)
+	local inputPath = nil
+	local outputRedirect = nil
+	for index = 1, #(command.redirects or {}) do
+		local redirect = command.redirects[index]
+		local targetPath = redirect.target
+		if runtime ~= nil and type(runtime.resolvePath) == "function" then
+			targetPath = runtime.resolvePath(targetPath)
+		end
+		if redirect.op == "<" then
+			inputPath = targetPath
+		elseif redirect.op == ">" or redirect.op == ">>" then
+			outputRedirect = {
+				op = redirect.op,
+				target = targetPath,
+			}
+		end
+	end
 
 if inputPath ~= nil then
 local lines, err = readFileLines(inputPath)
@@ -161,7 +168,7 @@ end
 end
 
 local function executeCommand(command, runtime, baseContext, outputSpec)
-local context, err = applyRedirects(command, baseContext, outputSpec)
+	local context, err = applyRedirects(command, runtime, baseContext, outputSpec)
 if context == nil then
 return false, err
 end

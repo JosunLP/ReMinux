@@ -259,6 +259,9 @@ function shell.run(...)
                 end
                 return shell.executeWithContext(commandNode.argv[1], arguments, ioContext)
             end,
+            resolvePath = function(path)
+                return shell.resolve(path)
+            end,
         }, nil)
         if ok ~= true and err ~= nil and err ~= "" then
             printError(err)
