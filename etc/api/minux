@@ -633,6 +633,135 @@ end
 return true
 end
 
+local function isPathWithin(path, root)
+if path == root then
+return true
+end
+return string.sub(path, 1, #root + 1) == root .. "/"
+end
+
+function expandPathPattern(pathPattern)
+expect(1, pathPattern, "string")
+local matches = fs.find(pathPattern)
+table.sort(matches)
+if #matches == 0 then
+return false, "no matching files: " .. pathPattern
+end
+return matches
+end
+
+function makeDirectory(path, allowExisting)
+expect(1, path, "string")
+expect(2, allowExisting, "boolean", "nil")
+if path == "" then
+return false, "path is required"
+end
+if fs.exists(path) == true then
+if fs.isDir(path) == true and allowExisting == true then
+return true
+end
+if fs.isDir(path) == true then
+return false, "directory already exists: " .. path
+end
+return false, "destination exists: " .. path
+end
+if fs.isReadOnly(path) == true then
+return false, "access denied: " .. path
+end
+local ok, err = pcall(fs.makeDir, path)
+if ok ~= true then
+return false, tostring(err):gsub("^pcall: ", "")
+end
+return true
+end
+
+function copyPath(source, destination)
+expect(1, source, "string")
+expect(2, destination, "string")
+if fs.exists(source) ~= true then
+return false, "source does not exist: " .. source
+end
+if fs.exists(destination) == true then
+return false, "destination exists: " .. destination
+end
+if fs.isReadOnly(destination) == true then
+return false, "destination is read-only: " .. destination
+end
+if fs.isDir(source) == true and isPathWithin(destination, source) == true then
+return false, "cannot copy a directory into itself: " .. destination
+end
+local parent = fs.getDir(destination)
+ensureParentDirectory(destination)
+if parent ~= nil and parent ~= "" and fs.exists(parent) ~= true then
+return false, "parent directory does not exist: " .. parent
+end
+local freeSpace = fs.getFreeSpace(destination)
+local size = fs.getSize(source)
+if type(freeSpace) == "number" and type(size) == "number" and freeSpace < size then
+return false, "not enough space for: " .. destination
+end
+local ok, err = pcall(fs.copy, source, destination)
+if ok ~= true then
+return false, tostring(err):gsub("^pcall: ", "")
+end
+return true
+end
+
+function movePath(source, destination)
+expect(1, source, "string")
+expect(2, destination, "string")
+if fs.exists(source) ~= true then
+return false, "source does not exist: " .. source
+end
+if fs.exists(destination) == true then
+return false, "destination exists: " .. destination
+end
+if fs.isReadOnly(destination) == true then
+return false, "destination is read-only: " .. destination
+end
+if fs.isDriveRoot ~= nil and fs.isDriveRoot(source) == true then
+return false, "cannot move mount: " .. source
+end
+if fs.isReadOnly(source) == true then
+return false, "cannot move read-only path: " .. source
+end
+if fs.isDir(source) == true and isPathWithin(destination, source) == true then
+return false, "cannot move a directory into itself: " .. destination
+end
+local parent = fs.getDir(destination)
+ensureParentDirectory(destination)
+if parent ~= nil and parent ~= "" and fs.exists(parent) ~= true then
+return false, "parent directory does not exist: " .. parent
+end
+local ok, err = pcall(fs.move, source, destination)
+if ok ~= true then
+return false, tostring(err):gsub("^pcall: ", "")
+end
+return true
+end
+
+function deletePath(path, recursive)
+expect(1, path, "string")
+expect(2, recursive, "boolean", "nil")
+if fs.exists(path) ~= true then
+return false, "path does not exist: " .. path
+end
+if fs.isDir(path) == true and recursive ~= true then
+return false, "is a directory: " .. path
+end
+if fs.isDriveRoot ~= nil and fs.isDriveRoot(path) == true then
+return false, "cannot delete mount: " .. path
+end
+if fs.isReadOnly(path) == true then
+return false, "cannot delete read-only path: " .. path
+end
+local ok, err = pcall(fs.delete, path)
+if ok ~= true then
+return false, tostring(err):gsub("^pcall: ", "")
+end
+return true
+end
+
 function doctor(repair)
 expect(1, repair, "boolean", "nil")
 repair = repair == true

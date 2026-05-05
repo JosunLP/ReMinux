@@ -1,0 +1,22 @@
+mkdir - create directories
+Executable: /bin/mkdir.sh
+Alias: mkdir
+
+DESCRIPTION
+  Creates one or more
+  directories.
+
+USAGE
+  mkdir <dir> [dir...]
+  mkdir -p <dir> [dir...]
+
+OPTIONS
+  -p
+    Treat existing
+    directories as success.
+
+NOTES
+  Parent directories are
+  created automatically by
+  the CC: Tweaked filesystem
+  API.

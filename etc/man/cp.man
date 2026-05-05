@@ -1,0 +1,20 @@
+cp - copy files and directories
+Executable: /bin/cp.sh
+Alias: cp
+
+DESCRIPTION
+  Copies files or whole
+  directory trees.
+
+USAGE
+  cp <source> <destination>
+  cp <source> [source...]
+     <directory>
+
+NOTES
+  Wildcards are expanded
+  through fs.find().
+  When copying multiple
+  sources, the destination
+  must already be a
+  directory.

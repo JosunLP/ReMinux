@@ -81,6 +81,10 @@ php=false
 /bin/uname.sh
 /bin/clear.sh
 /bin/touch.sh
+/bin/mkdir.sh
+/bin/cp.sh
+/bin/mv.sh
+/bin/rm.sh
 /bin/wc.sh
 /bin/head.sh
 /bin/tail.sh
@@ -95,6 +99,10 @@ php=false
 /etc/man/uname.man
 /etc/man/clear.man
 /etc/man/touch.man
+/etc/man/mkdir.man
+/etc/man/cp.man
+/etc/man/mv.man
+/etc/man/rm.man
 /etc/man/wc.man
 /etc/man/head.man
 /etc/man/tail.man

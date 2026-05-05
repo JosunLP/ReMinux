@@ -17,6 +17,7 @@
 - **Self-healing diagnostics** — `doctor` audits core OS state and can recreate missing runtime files
 - **Debug / logging system** — `disabled`, `enabled`, `logging`, or `full` verbosity levels
 - **Network DHCP** — automatic server discovery over Rednet
+- **Linux-like file management** — built-in `mkdir`, `cp`, `mv`, and `rm` commands with CC: Tweaked-safe guards
 - **OOP internals** — the APT manager uses a proper Lua class; all APIs are DRY-refactored
 
 ---
@@ -136,6 +137,7 @@
 | `basename` / `dirname` / `realpath` | Path component utilities       |
 | `cal`    | Print a monthly calendar                          |
 | `clear`  | Clear the terminal                                |
+| `cp`     | Copy files or directories                         |
 | `cut`    | Extract characters or fields from each line       |
 | `date`   | Print the in-game day and time                    |
 | `df`     | Report free / used disk space                     |
@@ -149,10 +151,13 @@
 | `head`   | Print the first N lines of a file                 |
 | `id`     | Print user / host / computer-id                   |
 | `mktemp` | Create a unique file under `/tmp`                 |
+| `mkdir`  | Create one or more directories                    |
+| `mv`     | Move or rename files and directories              |
 | `nl`     | Number the lines of a file                        |
 | `printf` | Print formatted output (Lua `string.format`)      |
 | `pwd`    | Print the current working directory               |
 | `rev`    | Reverse the characters of every line              |
+| `rm`     | Remove files; `-r` also removes directories       |
 | `seq`    | Generate a sequence of integers                   |
 | `sort`   | Sort lines (`-r`, `-n`, `-u`)                     |
 | `stat`   | Print file metadata (size, type, drive, times)    |

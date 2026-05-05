@@ -1,0 +1,23 @@
+rm - remove files and directories
+Executable: /bin/rm.sh
+Alias: rm
+
+DESCRIPTION
+  Removes files. Directories
+  require recursive mode.
+
+USAGE
+  rm <path> [path...]
+  rm -r <path> [path...]
+  rm -f <path> [path...]
+
+OPTIONS
+  -r
+    Remove directories
+    recursively.
+  -f
+    Ignore missing paths.
+
+NOTES
+  Drive roots and read-only
+  paths are never deleted.
