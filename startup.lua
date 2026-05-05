@@ -1,4 +1,4 @@
--- Minux bootloader
+-- ReMinux bootloader
 shell.run("clear")
 
 -- Determine the installed version from the package manifest.
@@ -17,5 +17,5 @@ temp.close()
 end
 if _G.version == nil then _G.version = "Unknown" end
 
-print("Starting Minux version: " .. _G.version)
+print("Starting ReMinux version: " .. _G.version)
 shell.run("/boot/init.sys")

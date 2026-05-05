@@ -32,7 +32,7 @@ term.setCursorPos(1, 1)
 if stageNumber == 1 then
 print("Kernel panic")
 else
-print("Minux-V:" .. _G.version .. " Init fail")
+print("ReMinux-V:" .. _G.version .. " Init fail")
 end
 print("Init stage:" .. displayStage)
 if stageNumber == 4 then
@@ -90,9 +90,9 @@ end
 -- Boot header
 
 if pocket or turtle then
-print("-----------Minux----------")
+print("-----------ReMinux----------")
 else
-print("--------------------Minux--------------------------")
+print("-------------------ReMinux-------------------------")
 end
 
 checkCrashStage("1")
@@ -118,7 +118,11 @@ screenpos(cursorver)
 print("[V:" .. _G.version .. "]")
 if term.isColor() then term.setTextColor(colors.white) end
 
+if fs.exists("/boot/alias.ls") then
 shell.run("/boot/alias.ls")
+else
+minux.debug("/boot/alias.ls not found - core aliases unavailable until APT regenerates it; boot continues with shell-builtin commands only", "minux")
+end
 
 -- Sanity check (update the same status line once complete)
 printBootItem("Sanitycheck", "Running", true)
@@ -307,7 +311,7 @@ end
 if pocket or turtle then
 print("Hit Enter to start")
 else
-print("Welcome to Minux. Hit Enter to start.")
+print("Welcome to ReMinux. Hit Enter to start.")
 end
 local initput = read()
 while initput ~= nil do

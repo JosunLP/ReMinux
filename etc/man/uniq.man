@@ -1,0 +1,9 @@
+uniq, /bin/uniq.sh
+alias: 'uniq'
+
+Collapse runs of equal lines in an
+already-sorted file.
+
+Usage:
+  uniq [-c] [-d] <file>
+  -c show counts, -d only duplicates

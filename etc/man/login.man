@@ -1,4 +1,4 @@
-login, Minux login
+login, ReMinux login
 executable location: 
 '/bin/login.sh'  
 alias:'login'

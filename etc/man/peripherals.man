@@ -1,0 +1,9 @@
+peripherals, /bin/peripherals.sh
+alias: 'peripherals', 'lsperiph'
+
+List every attached peripheral, or
+describe a single side in detail.
+
+Usage:
+  peripherals          list all
+  peripherals <side>   show methods

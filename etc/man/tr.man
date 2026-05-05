@@ -1,0 +1,9 @@
+tr, /bin/tr.sh
+alias: 'tr'
+
+Translate or delete characters
+from each line of a file.
+
+Usage:
+  tr <set1> <set2> <file>
+  tr -d <set1> <file>

@@ -1,0 +1,13 @@
+wc, /bin/wc.sh
+alias: 'wc'
+
+Count lines, words, and bytes in
+each given file, then print a total
+when more than one file is given.
+
+Usage:
+  wc [-l|-w|-c] <file> [file...]
+
+  -l  show only line counts
+  -w  show only word counts
+  -c  show only byte counts

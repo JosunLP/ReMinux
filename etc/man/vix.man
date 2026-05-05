@@ -1,0 +1,46 @@
+vix, /bin/vix.sh
+alias: 'vix', 'vim', 'vi'
+
+A Vim-like modal editor for ReMinux,
+designed to be friendly to first-
+time users.
+
+Usage:
+  vix [file]
+
+Modes
+  NORMAL   default; navigation
+  INSERT   typing inserts text;
+           ESC returns to NORMAL
+  COMMAND  ':' commands like :w :q
+  SEARCH   '/text' to search
+  VISUAL   'v' selects characters
+           for x (delete) or y
+           (yank)
+
+Movement (NORMAL/VISUAL)
+  h j k l  left/down/up/right
+  arrow keys also work
+  w / b    next / previous word
+  0 / $    line start / end
+  gg / G   file start / end
+
+Editing
+  i I a A o O   enter INSERT mode
+  x        delete char
+  dd       delete line
+  yy       yank line
+  p / P    paste after / before
+  u        undo
+  Ctrl+R   redo
+
+Commands (after ':')
+  :w [path]    save (optional path)
+  :q           quit (refused if
+               unsaved changes)
+  :q!          force quit
+  :wq / :x     save and quit
+  :set number  show line numbers
+  :set nonumber
+  :set ts=N    tab width
+  :help / F1   open help screen

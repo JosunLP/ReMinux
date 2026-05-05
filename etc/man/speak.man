@@ -1,0 +1,9 @@
+speak, /bin/speak.sh
+alias: 'speak'
+
+Play a click-tone for each word on
+an attached speaker peripheral and
+print the text.
+
+Usage:
+  speak [side] <text...>

@@ -1,5 +1,5 @@
 -- launcher for edit
-args = {...}
+local args = {...}
 local filename = args[1]
 
 if filename == nil then

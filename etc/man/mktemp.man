@@ -1,0 +1,10 @@
+mktemp, /bin/mktemp.sh
+alias: 'mktemp'
+
+Create a unique empty file under
+/tmp and print its path.
+
+Usage:
+  mktemp [template]
+If [template] contains 'XXXXXX' it
+is replaced with random chars.

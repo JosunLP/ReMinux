@@ -1,0 +1,9 @@
+expr, /bin/expr.sh
+alias: 'expr'
+
+Evaluate a simple arithmetic
+expression. Allowed operators:
++ - * / % ^ // and ( ).
+
+Usage:
+  expr <expression>

@@ -1,0 +1,8 @@
+rev, /bin/rev.sh
+alias: 'rev'
+
+Reverse the characters of every
+line in <file>.
+
+Usage:
+  rev <file>

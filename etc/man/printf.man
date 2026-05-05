@@ -1,0 +1,10 @@
+printf, /bin/printf.sh
+alias: 'printf'
+
+Print formatted output. Format
+specifiers follow Lua's
+string.format (%d, %s, %.2f, ...).
+Use \n / \t for newline / tab.
+
+Usage:
+  printf <format> [arg...]

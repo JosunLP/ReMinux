@@ -1,0 +1,9 @@
+uptime, /bin/uptime.sh
+alias: 'uptime'
+
+Print elapsed real-time and
+in-game time since the computer
+booted.
+
+Usage:
+  uptime

@@ -1,0 +1,9 @@
+whoami, /bin/whoami.sh
+alias: 'whoami'
+
+Print the name of the user that is
+currently logged in. Prints 'nobody'
+when no user session is active.
+
+Usage:
+  whoami

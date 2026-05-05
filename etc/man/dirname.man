@@ -1,0 +1,9 @@
+dirname, /bin/dirname.sh
+alias: 'dirname'
+
+Print the directory part of <path>.
+'.' is printed when <path> contains
+no '/'.
+
+Usage:
+  dirname <path>

@@ -1,0 +1,11 @@
+cut, /bin/cut.sh
+alias: 'cut'
+
+Extract sections from each line of
+a file.
+
+Usage:
+  cut -c <ranges> <file>
+  cut -d <delim> -f <ranges> <file>
+Ranges: N , N-M , -M , N- (comma
+separated).

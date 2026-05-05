@@ -1,0 +1,8 @@
+pwd, /bin/pwd.sh
+alias: 'pwd'
+
+Print the absolute path of the
+shell's current working directory.
+
+Usage:
+  pwd

@@ -1,0 +1,9 @@
+yes, /bin/yes.sh
+alias: 'yes'
+
+Print <string> (default 'y')
+<count> times. A count is required
+to avoid infinite loops in CC.
+
+Usage:
+  yes <count> [string]

@@ -1,0 +1,10 @@
+ping, /bin/ping.sh
+alias: 'ping'
+
+Broadcast a 'minux-ping' rednet
+packet and list every responder.
+A modem is opened automatically
+if none is currently active.
+
+Usage:
+  ping [timeout-seconds]

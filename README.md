@@ -1,8 +1,8 @@
-# Minux
+# ReMinux
 
-**Minux** is a Unix-inspired operating system for [CC: Tweaked](https://tweaked.cc/), the popular ComputerCraft fork for Minecraft. It provides a multi-user environment with a package manager, configurable shell, user authentication, and a modular boot system — all running on top of the ComputerCraft Lua API.
+**ReMinux** is a Unix-inspired operating system for [CC: Tweaked](https://tweaked.cc/), the popular ComputerCraft fork for Minecraft. It provides a multi-user environment with a package manager, configurable shell, user authentication, and a modular boot system — all running on top of the ComputerCraft Lua API.
 
-[![CI](https://github.com/JosunLP/Minux/actions/workflows/ci.yml/badge.svg)](https://github.com/JosunLP/Minux/actions/workflows/ci.yml)
+[![CI](https://github.com/JosunLP/ReMinux/actions/workflows/ci.yml/badge.svg)](https://github.com/JosunLP/ReMinux/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
 ---
@@ -34,9 +34,9 @@
 
 1. Place the file `tmp/minux_netinstall.lua` onto a ComputerCraft computer's startup slot, **or** run:
    ```
-   wget https://minux.cc/netinstall /startup.lua
+   wget https://raw.githubusercontent.com/JosunLP/ReMinux/main/tmp/minux_netinstall.lua /startup.lua
    ```
-2. Reboot the computer. The graphical installer will guide you through installation type and source selection.
+2. Reboot the computer. The graphical installer will guide you through installation type and source selection. By default the installer fetches ReMinux directly from this Git repository (`raw.githubusercontent.com/JosunLP/ReMinux`); you can also point it at a different fork, branch, or any custom raw URL, and the legacy `minux.cc` APT installer is still available as a fallback.
 
 ### Manual installation
 
@@ -83,7 +83,7 @@
 │   └── workspace.sh       — Launch the workspace UI
 ├── etc/
 │   ├── api/
-│   │   ├── minux          — Core Minux API (loaded as OS API on boot)
+│   │   ├── minux          — Core ReMinux API (loaded as OS API on boot)
 │   │   └── apt            — APT package manager API
 │   ├── apt/               — APT package data (manifests, aliases, boot addons)
 │   ├── man/               — Manual pages (read with `man <topic>`)
@@ -106,7 +106,7 @@
 | Command      | Description                                      |
 |--------------|--------------------------------------------------|
 | `apt`        | Manage packages (`-i`, `-r`, `-u`, `-U`, …)      |
-| `bash`       | Open the Minux shell; `bash setcolor …` for theme|
+| `bash`       | Open the ReMinux shell; `bash setcolor …` for theme|
 | `cat`        | Print a file; `cat file p` to page               |
 | `config`     | Change system settings (login, ui, debug, …)     |
 | `edit`       | Open the text editor                             |
@@ -125,6 +125,60 @@
 | `useradd`    | Add a new user                                   |
 | `userdel`    | Delete a user                                    |
 | `usermod`    | Manage local users (add/del/psw)                 |
+| `vix` / `vim`| Vim-like modal editor (F1 inside for help)        |
+
+### GNU-style file & text utilities
+
+| Command  | Description                                       |
+|----------|---------------------------------------------------|
+| `basename` / `dirname` / `realpath` | Path component utilities       |
+| `cal`    | Print a monthly calendar                          |
+| `clear`  | Clear the terminal                                |
+| `cut`    | Extract characters or fields from each line       |
+| `date`   | Print the in-game day and time                    |
+| `df`     | Report free / used disk space                     |
+| `du`     | Disk usage summary (`-s`, `-h`)                   |
+| `echo`   | Print arguments (`-n` to suppress newline)        |
+| `env`    | Show computer environment and shell aliases      |
+| `expr`   | Evaluate an arithmetic expression (`+ - * / % ^ //`) |
+| `factor` | Print prime factors of an integer                 |
+| `fold`   | Wrap input lines at a column width                |
+| `grep`   | Search files for a Lua pattern (`-i`, `-n`, `-v`) |
+| `head`   | Print the first N lines of a file                 |
+| `id`     | Print user / host / computer-id                   |
+| `mktemp` | Create a unique file under `/tmp`                 |
+| `nl`     | Number the lines of a file                        |
+| `printf` | Print formatted output (Lua `string.format`)      |
+| `pwd`    | Print the current working directory               |
+| `rev`    | Reverse the characters of every line              |
+| `seq`    | Generate a sequence of integers                   |
+| `sort`   | Sort lines (`-r`, `-n`, `-u`)                     |
+| `stat`   | Print file metadata (size, type, drive, times)    |
+| `tac`    | Print a file in reverse order                     |
+| `tail`   | Print the last N lines of a file                  |
+| `touch`  | Create empty files / ensure they exist            |
+| `tr`     | Translate or delete characters                    |
+| `tree`   | Print a directory tree                            |
+| `uname`  | Print ReMinux/system identification               |
+| `uniq`   | Collapse runs of equal lines (`-c`, `-d`)         |
+| `uptime` | Time since the computer booted                    |
+| `wc`     | Count lines, words and bytes (`-l`, `-w`, `-c`)   |
+| `which`  | Resolve a command/alias to its path               |
+| `whoami` | Print the current logged-in user                  |
+| `xxd` / `hexdump` | Hex+ASCII dump of a file                 |
+| `yes`    | Print a string N times                            |
+
+### CC: Tweaked specific tools
+
+| Command       | Description                                                    |
+|---------------|----------------------------------------------------------------|
+| `chat`        | Minimal rednet chat client on protocol `minux-chat`            |
+| `colortest`   | Render the 16 CC colours as labelled swatches                  |
+| `peripherals` | List attached peripherals; `peripherals <side>` shows methods  |
+| `ping`        | Broadcast a rednet ping and list responders                    |
+| `rs`          | Redstone control: `get`, `on`/`off`, `set`, `pulse`, `bundled` |
+| `speak`       | Play one tone per word on an attached speaker                  |
+| `top`         | Dashboard: id, label, uptime, free disk, peripherals, modems   |
 
 ---
 
@@ -166,7 +220,7 @@ apt -ls               # List active sources
 
 ## CC: Tweaked compatibility
 
-Minux is designed for **CC: Tweaked** and uses only APIs that are present and supported:
+ReMinux is designed for **CC: Tweaked** and uses only APIs that are present and supported:
 
 | API used              | CC:Tweaked status |
 |-----------------------|-------------------|
@@ -177,7 +231,7 @@ Minux is designed for **CC: Tweaked** and uses only APIs that are present and su
 | `shell.openTab()`     | ✅ Advanced computers only |
 | `window.create()`     | ✅ Stable          |
 
-> **Note:** `os.loadAPI()` is deprecated in CC: Tweaked in favour of `require()`. Minux retains it for backwards compatibility with older package scripts but new internal code uses explicit table returns where possible.
+> **Note:** `os.loadAPI()` is deprecated in CC: Tweaked in favour of `require()`. ReMinux retains it for backwards compatibility with older package scripts but new internal code uses explicit table returns where possible.
 
 ---
 

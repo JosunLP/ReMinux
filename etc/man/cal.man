@@ -1,0 +1,9 @@
+cal, /bin/cal.sh
+alias: 'cal'
+
+Print a simple monthly calendar.
+Without arguments, prints the
+current month.
+
+Usage:
+  cal [month [year]]

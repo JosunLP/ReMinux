@@ -1,0 +1,10 @@
+touch, /bin/touch.sh
+alias: 'touch'
+
+Create each named file as empty if
+it does not exist. Existing files
+are left unchanged. Parent
+directories are created on demand.
+
+Usage:
+  touch <file> [file...]

@@ -1,6 +1,6 @@
 ---
 name: Feature request
-about: Suggest an improvement or new feature for Minux
+about: Suggest an improvement or new feature for ReMinux
 title: '[FEATURE] '
 labels: enhancement
 assignees: ''

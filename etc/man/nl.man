@@ -1,0 +1,9 @@
+nl, /bin/nl.sh
+alias: 'nl'
+
+Number the lines of <file>. Empty
+lines are skipped unless -ba is
+given.
+
+Usage:
+  nl [-ba] <file>

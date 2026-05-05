@@ -1,0 +1,11 @@
+tree, /bin/tree.sh
+alias: 'tree'
+
+Print the directory tree rooted at
+<path>, or at the current working
+directory if no path is given.
+Shows directory and file counts at
+the bottom.
+
+Usage:
+  tree [path]

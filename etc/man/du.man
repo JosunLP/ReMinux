@@ -1,0 +1,9 @@
+du, /bin/du.sh
+alias: 'du'
+
+Report disk usage of files and
+directories.
+
+Usage:
+  du [-s] [-h] [path]
+  -s summary, -h human-readable

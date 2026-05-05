@@ -1,0 +1,10 @@
+echo, /bin/echo.sh
+alias: 'echo'
+
+Print arguments to the terminal,
+joined by single spaces.
+
+Usage:
+  echo [-n] [text...]
+
+  -n  do not append a trailing newline.
