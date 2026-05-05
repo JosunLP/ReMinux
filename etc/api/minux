@@ -583,7 +583,7 @@ if created == true then
 permissionStoreCache = nil
 end
 local store = readPermissionStore()
-local recursiveSeed = next(store) == nil
+local shouldSeedRecursively = next(store) == nil
 local paths = {
 "/boot",
 "/boot/autorun.ls",
@@ -607,7 +607,7 @@ local paths = {
 	SERVICE_DEFINITIONS_DIR,
 	}
 for _, path in ipairs(paths) do
-	seedPermissionTree(path, recursiveSeed, store)
+	seedPermissionTree(path, shouldSeedRecursively, store)
 end
 writePermissionStore(store)
 end
@@ -1020,8 +1020,7 @@ function runServiceTrigger(trigger, phase)
 	expect(2, phase, "string", "nil")
 	local services = minux.listServices(trigger)
 	for _, service in ipairs(services) do
-		if phase == nil or service.phase == phase then
-		if service.enabled == true then
+		if (phase == nil or service.phase == phase) and service.enabled == true then
 			local ok, err = minux.startService(service.name, {
 				ignoreDisabled = true,
 				oncePerSession = trigger == "boot",
@@ -1029,9 +1028,8 @@ function runServiceTrigger(trigger, phase)
 			if ok ~= true then
 				return false, err
 			end
-		else
+		elseif phase == nil or service.phase == phase then
 			minux.setServiceState(service.name, "disabled", "disabled")
-		end
 		end
 	end
 	return true
