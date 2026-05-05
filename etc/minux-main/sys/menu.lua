@@ -47,11 +47,10 @@ function menuOptions(title, tChoices, tActions, nSelection, description, tDescri
 		for nLine = baseDraw, #tChoices do 
 			local sLine = ""
 			local mX, mY = term.getCursorPos()
+			local pLine = false
 			if nSelection == nLine then
 				sLine = ">"
 				pLine = true
-			else
-				pLine = false
 			end
 			sLine = sLine .." "..tChoices[nLine] 
 			if pLine == true and mY < termY - 2 then
@@ -113,7 +112,7 @@ function buttonOptions(tChoices, tActions, orientation)
 	local ogTerm = term.current()
 	local termX, termY = term.getSize()
 	local bufferWindow = window.create(ogTerm, 1, 1, termX, termY, true)
-	local ogTerm = term.redirect(bufferWindow)
+	term.redirect(bufferWindow)
 	if orientation == "v" and (#tChoices % 2 == 0) then
 		gridX, gridY = #tChoices/2, 2
 	elseif orientation == "v" then
@@ -130,7 +129,7 @@ function buttonOptions(tChoices, tActions, orientation)
 	term.setBackgroundColor(colortable[2])
 	term.setTextColor(colortable[1])
 	term.clear()
-	ogTable = saveOGs()
+	local ogTable = saveOGs()
 	local regions = {}
 	local moveGridX = 0
 	local moveGridY = 0
@@ -199,7 +198,7 @@ function safeFormLabel(x, y, width, color1, color2, default, color3)
 end
 
 function formLabel(x, y, width, color1, color2, default, color3, protected)
-	regionTable = {
+	local regionTable = {
 	["x"] = x,
 	["y"] = y,
 	["xw"] = x+width,

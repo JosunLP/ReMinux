@@ -1,20 +1,24 @@
--- apt auto update settings
-args = {...}
+-- apt auto-update: persist a boot counter and run updates at a configurable interval.
+local args    = { ... }
 local command = args[1]
 
+local UPDATE_CFG = "/usr/apt/update.cfg"
+
+local function writeUpdateCfg(value)
+local tempfile = fs.open(UPDATE_CFG, "w")
+tempfile.writeLine(value)
+tempfile.close()
+end
+
 if command == "always" then
-	print("setting autoupdate to always")
-	tempfile = fs.open("/usr/apt/update.cfg","w")
-	tempfile.writeLine(command)
-	tempfile.close()
+print("setting autoupdate to always")
+writeUpdateCfg("always")
 elseif command == "enabled" then
-	print("setting autoupdate to enabled")
-	tempfile = fs.open("/usr/apt/update.cfg","w")
-	tempfile.writeLine(command)
-	tempfile.close()
+print("setting autoupdate to enabled")
+writeUpdateCfg("enabled")
 elseif command == "disabled" then
-	print("setting autoupdate to disabled")
-	fs.delete("/usr/apt/update.cfg","w")
+print("setting autoupdate to disabled")
+fs.delete(UPDATE_CFG)
 else
-	print("invalid input, try 'man apt'")
+print("invalid input, try 'man apt'")
 end

@@ -25,7 +25,7 @@ if fs.exists("/usr/apt/update.cfg") then
 		cnf.writeLine(updatecount)
 		cnf.close()
 	elseif line == "always" then
-		minux.debug("update set to always, running")
+		minux.debug("update set to always, running", "minux")
 		shell.run("/bin/apt.sh -U")
 	else
 		minux.debug("update file corrupt, resetting","minux")

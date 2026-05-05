@@ -1,8 +1,6 @@
-local key = 0
 minux.debug("ecpw:start","minux")
 local keyfile = fs.open("/usr/minux-main/config/encr.conf","r")
-local tempkey = keyfile.readLine()
-local key = tonumber(tempkey)
+local key = tonumber(keyfile.readLine())
 keyfile.close()
 minux.debug("ecpw:done" , "minux")
 minux.lsr("/usr/local/auth/")
@@ -14,9 +12,9 @@ while nus ~= nil do
     local tmpdata = editfile.readLine()
     editfile.close()
     local newdata = minux.encrypt(tmpdata,key)
-    local editfile = fs.open(nus,"w")
-    editfile.writeLine(newdata)
-    editfile.close()
+    local editfile2 = fs.open(nus,"w")
+    editfile2.writeLine(newdata)
+    editfile2.close()
     nus = tempfile.readLine()
 end
 minux.debug("ecpw:done","minux")

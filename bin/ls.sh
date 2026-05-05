@@ -1,5 +1,5 @@
 -- ls/dir program
-args = {...}
+local args = {...}
 local foldertarget = args[1]
 local folderoptions = args[2]
 
