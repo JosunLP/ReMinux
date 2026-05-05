@@ -30,6 +30,8 @@ local AUTH_DIR = "/usr/local/auth/"
 local TEMP_EDIT_FILE = "/temp/dev/removeline.tmp"
 local USERNAME_PATTERN = "^[%w][%w_-]*$"
 local USERNAME_RULE_TEXT = "username must start with a letter or digit, then may use letters, digits, '_' and '-'"
+-- Built-in services use low explicit order values, so 1000 keeps undeclared
+-- services after them while still allowing custom services to insert earlier.
 local DEFAULT_SERVICE_ORDER = 1000
 local ioContextStack = {}
 local permissionStoreCache
