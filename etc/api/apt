@@ -457,9 +457,9 @@ end
 	for index = 1, #installedPackages do
 		local nextpack = installedPackages[index]
 		minux.debug("finding source", "apt")
-		local sourceList = apt.findsource(nextpack)
+		local sourceList, sourceError = apt.findsource(nextpack)
 		if type(sourceList) ~= "table" then
-			minux.debug("update:source lookup failed:"..nextpack, "apt")
+			minux.debug("update:source lookup failed:"..nextpack..":"..tostring(sourceError), "apt")
 		else
 			local serverFound = false
 			local manifestCache = manager.manifestCacheDirectory..nextpack..".db"
@@ -587,8 +587,8 @@ print(errorMessage)
 return false
 end
 
-local repositoryState = string.match(manifest, "([^\r\n]+)")
-if repositoryState ~= "AIF" then
+	local manifestHeader = string.match(manifest, "([^\r\n]+)")
+	if manifestHeader ~= "AIF" then
 minux.debug("ERROR:107", "apt")
 print("Verification failed: this is not a valid repository")
 return false
