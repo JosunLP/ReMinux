@@ -1,0 +1,8 @@
+tail, /bin/tail.sh
+alias: 'tail'
+
+Print the last lines of a file.
+Defaults to 10 lines.
+
+Usage:
+  tail [-n <count>] <file>

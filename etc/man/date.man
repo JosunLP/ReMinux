@@ -1,0 +1,13 @@
+date, /bin/date.sh
+alias: 'date'
+
+Print the in-game day, time-of-day,
+and the host date.
+
+Usage:
+  date [format]
+
+If 'format' is given, it is used as
+a Lua os.date format string.
+Without arguments, prints
+'Day N HH:MM (date)'.

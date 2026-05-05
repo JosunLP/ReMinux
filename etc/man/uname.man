@@ -1,0 +1,16 @@
+uname, /bin/uname.sh
+alias: 'uname'
+
+Print system identification: Minux
+version, kernel host string, the
+computer label and id, and Lua
+runtime.
+
+Usage:
+  uname [-a|-s|-r|-n|-m]
+
+  -a  all (default)
+  -s  kernel/system name
+  -r  Minux release/version
+  -n  computer label
+  -m  Lua/architecture

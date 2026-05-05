@@ -1,0 +1,9 @@
+which, /bin/which.sh
+alias: 'which'
+
+Resolve a command name to the file
+that would actually run, including
+shell aliases.
+
+Usage:
+  which <command>

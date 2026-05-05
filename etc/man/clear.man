@@ -1,0 +1,8 @@
+clear, /bin/clear.sh
+alias: 'clear'
+
+Clear the terminal and reset the
+cursor to the home position (1,1).
+
+Usage:
+  clear

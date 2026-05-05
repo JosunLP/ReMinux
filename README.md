@@ -34,9 +34,9 @@
 
 1. Place the file `tmp/minux_netinstall.lua` onto a ComputerCraft computer's startup slot, **or** run:
    ```
-   wget https://minux.cc/netinstall /startup.lua
+   wget https://raw.githubusercontent.com/JosunLP/Minux/main/tmp/minux_netinstall.lua /startup.lua
    ```
-2. Reboot the computer. The graphical installer will guide you through installation type and source selection.
+2. Reboot the computer. The graphical installer will guide you through installation type and source selection. By default the installer fetches Minux directly from this Git repository (`raw.githubusercontent.com/JosunLP/Minux`); you can also point it at a different fork, branch, or any custom raw URL, and the legacy `minux.cc` APT installer is still available as a fallback.
 
 ### Manual installation
 
@@ -125,6 +125,26 @@
 | `useradd`    | Add a new user                                   |
 | `userdel`    | Delete a user                                    |
 | `usermod`    | Manage local users (add/del/psw)                 |
+| `vix` / `vim`| Vim-like modal editor (F1 inside for help)        |
+
+### GNU-style file & text utilities
+
+| Command  | Description                                       |
+|----------|---------------------------------------------------|
+| `clear`  | Clear the terminal                                |
+| `date`   | Print the in-game day and time                    |
+| `df`     | Report free / used disk space                     |
+| `echo`   | Print arguments (`-n` to suppress newline)        |
+| `grep`   | Search files for a Lua pattern (`-i`, `-n`, `-v`) |
+| `head`   | Print the first N lines of a file                 |
+| `pwd`    | Print the current working directory               |
+| `tail`   | Print the last N lines of a file                  |
+| `touch`  | Create empty files / ensure they exist            |
+| `tree`   | Print a directory tree                            |
+| `uname`  | Print Minux/system identification                 |
+| `wc`     | Count lines, words and bytes (`-l`, `-w`, `-c`)   |
+| `which`  | Resolve a command/alias to its path               |
+| `whoami` | Print the current logged-in user                  |
 
 ---
 

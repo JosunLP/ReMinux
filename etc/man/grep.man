@@ -1,0 +1,16 @@
+grep, /bin/grep.sh
+alias: 'grep'
+
+Print lines of one or more files
+that match a Lua pattern. To match
+literal punctuation characters,
+escape them with '%'.
+
+Usage:
+  grep [-i] [-n] [-v] <pattern> <file>...
+
+  -i  case-insensitive match
+  -n  prefix matched lines with
+      the line number
+  -v  invert match: print lines that
+      do not match the pattern

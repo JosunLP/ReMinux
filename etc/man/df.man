@@ -1,0 +1,10 @@
+df, /bin/df.sh
+alias: 'df'
+
+Report disk space for the
+filesystem containing <path> (or
+the root '/'). Shows total, used,
+free, and percent-used.
+
+Usage:
+  df [path]

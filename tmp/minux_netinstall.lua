@@ -1,255 +1,535 @@
--- minux computercraft OS netinstaller - https://minux.cc/
--- Menu API by ComputerCrafter
--- buffer added by Missooni
--- change this line to point the installer's private option to another url
-customsource = "https://127.0.0.1/apt/"
+-- Minux net-installer
+--
+-- Bootstraps a Minux installation directly from this Git repository,
+-- using the raw GitHub content URLs.  The list of files to install is
+-- read from /etc/apt/manifest/minux-main.db, which is also the manifest
+-- consumed by the APT package manager once Minux is installed.  This
+-- removes the need for a separate "packaged" build artefact and lets
+-- anyone fork the repository and host their own install of Minux.
+--
+-- Original installer (c) Minux team
+-- Menu API by ComputerCrafter, double-buffer by Missooni
+-- Refactored to use Git in 2026 for the JosunLP/Minux fork.
 
-local ogTerm = term.current()
+------------------------------------------------------------
+-- Configuration
+------------------------------------------------------------
+
+local DEFAULT_REPO     = "JosunLP/Minux"
+local DEFAULT_BRANCH   = "main"
+local LEGACY_APT_OS    = "https://minux.cc/apt/2.0/os/"
+local LEGACY_APT_SOFT  = "https://minux.cc/apt/2.0/soft/"
+local LEGACY_APT_BETA  = "https://minux.cc/beta/"
+local MANIFEST_PATH    = "/etc/apt/list/minux-main.db"
+local LEGACY_MANIFEST  = "/etc/apt/manifest/minux-main.db"
+
+------------------------------------------------------------
+-- Terminal helpers
+------------------------------------------------------------
+
+local ogTerm     = term.current()
 local termX, termY = term.getSize()
 local bufferWindow = window.create(ogTerm, 1, 1, termX, termY)
--- Uses ">" as pointer instead of "->"
-function menuOptions(title, tChoices, tActions)
-local check = true
-local nSelection = 1
-repeat
-bufferWindow.setVisible(false)
-term.redirect(bufferWindow)
-term.clear()
-local width, height = term.getSize()
-paintutils.drawLine(1, 1, width, 1, colors.gray)
-term.setCursorPos(1, 1)
-term.setBackgroundColor(colors.gray)
-print(title)
-term.setBackgroundColor(colors.black)
+local dumpWindow   = window.create(term.current(), 1, 1, 1, 1, false)
+
+local function disableOutput()
+        local previousTerm = term.current()
+        term.redirect(dumpWindow)
+        return previousTerm
+end
+
+local function enableOutput(previousTerm)
+        term.redirect(previousTerm)
+end
+
+local function clearScreen()
+        term.setBackgroundColor(colors.black)
+        term.setTextColor(colors.white)
+        term.clear()
+        term.setCursorPos(1, 1)
+end
+
+local function printError(message)
+        if term.isColor() then term.setTextColor(colors.red) end
+        print(message)
+        if term.isColor() then term.setTextColor(colors.white) end
+end
+
+local function printOk(message)
+        if term.isColor() then term.setTextColor(colors.lime) end
+        print(message)
+        if term.isColor() then term.setTextColor(colors.white) end
+end
+
+------------------------------------------------------------
+-- Menu (selection list)
+------------------------------------------------------------
+
+local function showMenu(title, choices, actions)
+        local active = true
+        local selection = 1
+        repeat
+                bufferWindow.setVisible(false)
+                term.redirect(bufferWindow)
+                term.setBackgroundColor(colors.black)
+                term.clear()
+                local width = term.getSize()
+                paintutils.drawLine(1, 1, width, 1, colors.gray)
+                term.setCursorPos(1, 1)
+                term.setBackgroundColor(colors.gray)
+                term.setTextColor(colors.white)
+                print(title)
+                term.setBackgroundColor(colors.black)
+                print("")
+                for index = 1, #choices do
+                        local prefix = "  "
+                        if selection == index then
+                                prefix = "> "
+                                term.setTextColor(colors.yellow)
+                        else
+                                term.setTextColor(colors.white)
+                        end
+                        print(prefix .. choices[index])
+                end
+                term.setTextColor(colors.white)
+                bufferWindow.setVisible(true)
+
+                local _, key = os.pullEvent("key")
+                if key == keys.up or key == keys.w then
+                        if choices[selection - 1] then selection = selection - 1 end
+                elseif key == keys.down or key == keys.s then
+                        if choices[selection + 1] then selection = selection + 1 end
+                elseif key == keys.enter then
+                        if actions[selection] then
+                                term.redirect(ogTerm)
+                                clearScreen()
+                                actions[selection]()
+                                active = false
+                        end
+                end
+        until active == false
+end
+
+------------------------------------------------------------
+-- Installation source descriptors
+------------------------------------------------------------
+
+-- An installation source is a strategy for fetching a file from a remote
+-- location, given the file's repository-relative path.  Two kinds are
+-- supported:
+--   * git: serves files from raw.githubusercontent.com/<repo>/<branch>/
+--   * apt: serves files from a legacy minux.cc-style APT repository, by
+--          downloading and executing a packed .map file.
+local Source = {}
+Source.__index = Source
+
+function Source.git(repo, branch)
+        return setmetatable({
+                kind   = "git",
+                repo   = repo or DEFAULT_REPO,
+                branch = branch or DEFAULT_BRANCH,
+                base   = "https://raw.githubusercontent.com/"
+                        .. (repo or DEFAULT_REPO) .. "/"
+                        .. (branch or DEFAULT_BRANCH) .. "/",
+        }, Source)
+end
+
+function Source.apt(baseUrl, softUrl)
+        return setmetatable({
+                kind = "apt",
+                base = baseUrl,
+                soft = softUrl,
+        }, Source)
+end
+
+function Source:describe()
+        if self.kind == "git" then
+                return "Git: " .. self.repo .. "@" .. self.branch
+        end
+        return "APT: " .. self.base
+end
+
+-- Translate a repository-relative path (e.g. "boot/init.sys" or
+-- "/boot/init.sys") into an absolute fetch URL.
+function Source:urlFor(path)
+        local clean = path
+        while clean:sub(1, 1) == "/" do clean = clean:sub(2) end
+        return self.base .. clean
+end
+
+------------------------------------------------------------
+-- Filesystem helpers
+------------------------------------------------------------
+
+local function ensureParent(filepath)
+        local parent = fs.getDir(filepath)
+        if parent ~= nil and parent ~= "" and fs.exists(parent) == false then
+                fs.makeDir(parent)
+        end
+end
+
+local function writeFile(filepath, content)
+        ensureParent(filepath)
+        if fs.exists(filepath) then fs.delete(filepath) end
+        local handle = fs.open(filepath, "w")
+        handle.write(content)
+        handle.close()
+end
+
+------------------------------------------------------------
+-- HTTP helpers
+------------------------------------------------------------
+
+local function httpFetch(url)
+        if http == nil then
+                return nil, "http API not available"
+        end
+        if http.checkURL ~= nil and http.checkURL(url) ~= true then
+                return nil, "URL rejected by http.checkURL: " .. url
+        end
+        local response = http.get(url)
+        if response == nil then
+                return nil, "request failed: " .. url
+        end
+        local body = response.readAll()
+        response.close()
+        if body == nil or body == "" then
+                return nil, "empty response: " .. url
+        end
+        return body
+end
+
+local function downloadFile(source, repoPath, destPath)
+        local url = source:urlFor(repoPath)
+        local body, err = httpFetch(url)
+        if body == nil then return false, err end
+        writeFile(destPath, body)
+        return true
+end
+
+------------------------------------------------------------
+-- Manifest (Git-driven install)
+------------------------------------------------------------
+
+-- Return the canonical list of files to install, fetched from the
+-- manifest in this repository.  Falls back to a built-in minimal list if
+-- the network manifest cannot be retrieved.
+local function fetchFileList(source)
+        local body, err = httpFetch(source:urlFor(MANIFEST_PATH))
+        if body == nil then
+                -- Try the legacy manifest path as a fallback.
+                body, err = httpFetch(source:urlFor(LEGACY_MANIFEST))
+        end
+        if body == nil then
+                return nil, err
+        end
+
+        local files = {}
+        local inFileList = false
+        for line in body:gmatch("([^\r\n]+)") do
+                if line == "[filelist]" then
+                        inFileList = true
+                elseif line:sub(1, 1) == "[" then
+                        inFileList = false
+                elseif inFileList and line ~= "" then
+                        table.insert(files, line)
+                end
+        end
+        if #files == 0 then
+                return nil, "manifest contained no [filelist]"
+        end
+        return files
+end
+
+------------------------------------------------------------
+-- Install strategies
+------------------------------------------------------------
+
+local function installFromGit(source, profile)
+        print("Fetching file manifest from " .. source:describe())
+        local files, err = fetchFileList(source)
+        if files == nil then
+                printError("Cannot read manifest: " .. tostring(err))
+                printError("Aborting installation.")
+                return false
+        end
+        printOk("Manifest retrieved (" .. #files .. " files).")
+        print("")
+
+        local total   = #files
+        local failed  = {}
+        for index, repoPath in ipairs(files) do
+                local destPath = repoPath
+                if destPath:sub(1, 1) ~= "/" then destPath = "/" .. destPath end
+                local pct = math.floor((index - 1) * 100 / total)
+                io.write(string.format("[%3d%%] %s ", pct, destPath))
+                local ok, fetchErr = downloadFile(source, repoPath, destPath)
+                if ok then
+                        if term.isColor() then term.setTextColor(colors.lime) end
+                        print("OK")
+                else
+                        if term.isColor() then term.setTextColor(colors.red) end
+                        print("FAIL")
+                        table.insert(failed, repoPath .. " (" .. tostring(fetchErr) .. ")")
+                end
+                if term.isColor() then term.setTextColor(colors.white) end
+        end
+
+        if #failed > 0 then
+                printError("Some files could not be downloaded:")
+                for _, entry in ipairs(failed) do print("  - " .. entry) end
+                printError("Installation may be incomplete.")
+        end
+
+        -- Also fetch /startup.lua so the computer boots Minux on next start.
+        local startupOk = downloadFile(source, "startup.lua", "/startup.lua")
+        if startupOk == false then
+                -- Older repos used /startup; try once more.
+                downloadFile(source, "startup", "/startup")
+        end
+
+        -- Generate the package database and the APT source list.
+        ensureParent("/etc/apt/list/installed.db")
+        local installed = fs.open("/etc/apt/list/installed.db", "w")
+        installed.writeLine("minux-main")
+        if profile == "desktop" then
+                installed.writeLine("menu")
+                installed.writeLine("auth-client")
+                installed.writeLine("netlib")
+        elseif profile == "default" then
+                installed.writeLine("menu")
+                installed.writeLine("auth-client")
+                installed.writeLine("netlib")
+        end
+        installed.close()
+
+        ensureParent("/usr/apt/source.ls")
+        local sourceFile = fs.open("/usr/apt/source.ls", "w")
+        sourceFile.writeLine(LEGACY_APT_OS)
+        sourceFile.writeLine(LEGACY_APT_SOFT)
+        sourceFile.close()
+
+        return #failed == 0
+end
+
+local function installFromApt(source, profile)
+        print("Fetching APT manifest from " .. source.base)
+        local manifestUrl = source.base .. "manifest/minux-main.db"
+        local body, err = httpFetch(manifestUrl)
+        if body == nil then
+                printError("Cannot reach APT source: " .. tostring(err))
+                return false
+        end
+        ensureParent(LEGACY_MANIFEST)
+        writeFile(LEGACY_MANIFEST, body)
+
+        local first = body:match("([^\r\n]+)")
+        if first ~= "AIF=true" then
+                printError("Verification failed: not a valid APT manifest.")
+                return false
+        end
+
+        printOk("Manifest verified, downloading package map.")
+        local previousTerm = disableOutput()
+        shell.run("wget run " .. source.base .. "repository/minux-main.map /")
+        enableOutput(previousTerm)
+
+        ensureParent("/etc/apt/list/installed.db")
+        local installed = fs.open("/etc/apt/list/installed.db", "w")
+        installed.writeLine("minux-main")
+        if profile == "desktop" then
+                installed.writeLine("menu")
+                installed.writeLine("minex")
+                installed.writeLine("auth-client")
+        elseif profile == "default" then
+                installed.writeLine("menu")
+                installed.writeLine("auth-client")
+                installed.writeLine("netlib")
+        end
+        installed.close()
+
+        ensureParent("/usr/apt/source.ls")
+        local sourceFile = fs.open("/usr/apt/source.ls", "w")
+        sourceFile.writeLine(source.base)
+        if source.soft ~= nil then sourceFile.writeLine(source.soft) end
+        sourceFile.close()
+
+        return true
+end
+
+local function runInstall(source, profile)
+        if source.kind == "git" then
+                return installFromGit(source, profile)
+        end
+        return installFromApt(source, profile)
+end
+
+------------------------------------------------------------
+-- Main wizard
+------------------------------------------------------------
+
+local function chooseAction()
+        local choice
+        showMenu("Minux Installer", {
+                "Install Minux (recommended)",
+                "Reset existing installation",
+                "Repair Minux (keep settings)",
+                "Start an empty CraftOS shell",
+                "Start computer normally",
+        }, {
+                function() choice = "install" end,
+                function() choice = "reinstall" end,
+                function() choice = "repair" end,
+                function() choice = "shell" end,
+                function() choice = "start" end,
+        })
+        return choice
+end
+
+local function chooseSource()
+        local source
+        local profile = "default"
+        showMenu("Installation Source", {
+                "GitHub: " .. DEFAULT_REPO .. " @ " .. DEFAULT_BRANCH .. " (recommended)",
+                "GitHub: " .. DEFAULT_REPO .. " (choose branch)",
+                "GitHub: custom repository",
+                "Custom raw URL (Git, Gitea, GitLab, ...)",
+                "Legacy APT: minux.cc stable",
+                "Legacy APT: minux.cc beta",
+                "Legacy APT: custom server",
+        }, {
+                function() source = Source.git(DEFAULT_REPO, DEFAULT_BRANCH) end,
+                function()
+                        write("Branch (default 'main'): ")
+                        local input = read()
+                        if input == nil or input == "" then input = DEFAULT_BRANCH end
+                        source = Source.git(DEFAULT_REPO, input)
+                end,
+                function()
+                        write("Repository (owner/name): ")
+                        local repo = read()
+                        write("Branch (default 'main'): ")
+                        local branch = read()
+                        if repo == nil or repo == "" then repo = DEFAULT_REPO end
+                        if branch == nil or branch == "" then branch = DEFAULT_BRANCH end
+                        source = Source.git(repo, branch)
+                end,
+                function()
+                        print("Enter a base URL ending with '/'. The installer")
+                        print("will append repository-relative paths to it.")
+                        write("URL: ")
+                        local url = read()
+                        if url == nil or url == "" then
+                                printError("No URL given, defaulting to GitHub.")
+                                source = Source.git(DEFAULT_REPO, DEFAULT_BRANCH)
+                        else
+                                if url:sub(-1) ~= "/" then url = url .. "/" end
+                                source = setmetatable({
+                                        kind = "git", base = url,
+                                        repo = url, branch = "custom",
+                                }, Source)
+                        end
+                end,
+                function() source = Source.apt(LEGACY_APT_OS, LEGACY_APT_SOFT) end,
+                function() source = Source.apt(LEGACY_APT_BETA) end,
+                function()
+                        write("APT base URL: ")
+                        local url = read()
+                        if url == nil or url == "" then
+                                printError("No URL given, defaulting to legacy stable.")
+                                source = Source.apt(LEGACY_APT_OS, LEGACY_APT_SOFT)
+                        else
+                                if url:sub(-1) ~= "/" then url = url .. "/" end
+                                source = Source.apt(url)
+                        end
+                end,
+        })
+        if source == nil then return nil end
+
+        showMenu("Installation Profile", {
+                "Default (recommended)",
+                "Desktop (more apps)",
+                "Minimal (core only)",
+        }, {
+                function() profile = "default" end,
+                function() profile = "desktop" end,
+                function() profile = "minimal" end,
+        })
+
+        return source, profile
+end
+
+------------------------------------------------------------
+-- Entry point
+------------------------------------------------------------
+
+if dofile ~= nil and fs.exists("/rom/modules/main/cc/expect.lua") then
+        _G.expect = dofile("/rom/modules/main/cc/expect.lua")
+end
+
+clearScreen()
+local action = chooseAction()
+
+if action == "shell" then
+        return 0
+elseif action == "start" then
+        if fs.exists("/startup.lua") then
+                shell.run("/startup.lua")
+        elseif fs.exists("/startup") then
+                shell.run("/startup")
+        else
+                printError("No installation detected, dropping into shell.")
+        end
+        return 0
+elseif action == "repair" then
+        if fs.exists("/etc/api/minux") and fs.exists("/etc/api/apt") then
+                print("Loading Minux API")
+                os.loadAPI("/etc/api/minux")
+                os.loadAPI("/etc/api/apt")
+                print("Forcing APT update")
+                apt.update("-f")
+                printOk("Repair complete. Reboot or run /boot/init.sys.")
+                shell.run("/rom/programs/shell.lua")
+        else
+                printError("Cannot find Minux API; aborting repair.")
+                shell.run("/rom/programs/shell.lua")
+        end
+        return 0
+end
+
+-- install / reinstall
+if action == "install" and (fs.exists("/startup") or fs.exists("/startup.lua")) then
+        print("This computer already has software installed.")
+        print("Type 'yes' to overwrite, anything else to abort.")
+        write("> ")
+        local confirm = read()
+        if confirm ~= "yes" and confirm ~= "Yes" and confirm ~= "YES" then
+                printError("Aborted.")
+                return 0
+        end
+end
+
+local source, profile = chooseSource()
+if source == nil then
+        printError("No source selected, aborting.")
+        return 0
+end
+
 print("")
-    for nLine = 1, #tChoices do 
-        local sLine = " "
-        if nSelection == nLine then
-            sLine = ">"
-            pLine = true
-        else
-            pLine = false
-        end
-        sLine = sLine .." "..tChoices[nLine] 
-        if pLine == true then
-            term.setTextColor(colors.lightGray)
-            print(sLine)
-            term.setTextColor(colors.white)
-        else
-            print(sLine)
-        end
-    end
-    bufferWindow.setVisible(true)
-    local sEvent, nKey = os.pullEvent("key")
-    if nKey == keys.up or nKey == keys.w then
-        if tChoices[nSelection - 1] then
-            nSelection = nSelection - 1
-        end
-    elseif nKey == keys.down or nKey == keys.s  then
-        if tChoices[nSelection + 1] then 
-            nSelection = nSelection + 1
-        end
-    elseif nKey == keys.enter then 
-        if tActions[nSelection] then
-            tActions[nSelection]() 
-            check = false
-        else
-            print("Error: Selection out of bounds: ", nSelection)
-            print("Press Enter to continue...")
-            read() 
-        end
-    end
-until check == false 
-end
-local dumpWindow = window.create(term.current(), 1, 1, 1, 1, false);
-function disableoutput()
-  ogTerm = term.current();
-  term.redirect(dumpWindow);
-  return ogTerm
-end
--- needs a monitor to return to
-function enableoutput(ogTerm)
-  term.redirect(ogTerm);
-end
-expectfile = "/rom/modules/main/cc/expect.lua"
-_G.expect = dofile(expectfile)
-term.clear()
-term.setCursorPos(1,1)
-	local title = "Minux Installer"
-	local choices = {"install minux", "reset existing installation", "repair minux - keep settings", "start an empty CraftOS shell","start computer"}
-	local actions = {}
-	actions[1] = function()
-	print("installation selected")
-	input = "install"
-	end
-	actions[2] = function()
-	print("reinstall selected")
-	input = "reinstall"
-	end
-	actions[3] = function()
-	print("repair selected")
-	input = "repair"
-	end
-	actions[4] = function()
-	print("shell selected")
-	input = "shell"
-	end	
-	actions[5] = function()
-	print("starting computer")
-	input = "start"
-	end
-menuOptions(title, choices, actions)
-if input == "repair" then
-	if fs.exists("/etc/api/minux") then
-		print("attempting to load api's")
-		os.loadAPI("/etc/api/minux")
-		os.loadAPI("/etc/api/apt")
-		print("attempting to force-update software")
-		apt.update("-f")
-		print("done, reboot the system or run /boot/init.sys")
-		print("launching shell")
-		shell.run("/rom/programs/shell.lua")
-	else
-		print("Can't find instructions file, aborting")
-		print("launching shell")
-		shell.run("/rom/programs/shell.lua")
-	end	
-elseif input == "shell" then return 0 
-elseif input == "start" then
-	if fs.exists("/startup") then shell.run("/startup")
-	elseif fs.exists("/startup.lua") then shell.run("/startup.lua")
-	else
-		print("no installation detected, dropping into shell")
-		return 0
-	end
-elseif input == "install" or "reinstall" then
-	if input == "install" then 
-		if fs.exists("/startup") then
-			print("This system already has software installed")
-			print("are you sure you want to overwrite this?")
-			print("")
-			print("type yes to proceed")
-			print("anything else to abort")
-			input = read()
-			if input == "yes" or input == "Yes" or input == "YES" then
-				return 0
-			end
-		end
-	end
+print("Installing from: " .. source:describe())
+print("Profile        : " .. profile)
+print("")
 
--- selecting installation source
-	local title = "Minux Installation source"
-	local choices = {"latest - Default","latest - desktop","latest - minimal","test - beta - unstable", "private server","manually enter"}
-	local iactions = {}
+local ok = runInstall(source, profile)
 
-	iactions[1] = function()
-	print("default selected")
-	input = "default"
-	end
-	iactions[2] = function()
-	print("desktop selected")
-	input = "desktop"
-	end
-	iactions[3] = function()
-	print("minimal selected")
-	input = "minimal"
-	end
-	iactions[4] = function()
-	print("beta selected")
-	input = "beta"
-	end
-	iactions[5] = function()
-	print("private")
-	input = "private"
-	end
-	iactions[6] = function()
-	print("custom")
-	input = "custom"
-	end	
-menuOptions(title, choices, iactions)
-
-if input == "default" or input == "minimal" or input == "desktop" then aptsource = "https://minux.cc/apt/2.0/os/"
-elseif input == "beta" then aptsource = "https://minux.cc/beta/"
-elseif input == "private" then aptsource = customsource
-elseif input == "custom" then
-	print("what is the server's url?")
-	print("give full path including https://")
-	ainput = read()
-	if ainput == nil or ainput == "" then print("invalid input, aborting") return 0
-	else aptsource = ainput end
+clearScreen()
+if ok then
+        printOk("Minux base installed.")
+else
+        printError("Minux installation finished with errors.")
+        printError("Inspect the messages above; you can re-run the installer to retry.")
 end
-
--- we check if the provided source is valid/live
-print("Retrieving files from:"..aptsource)
-if fs.exists("/etc/apt/manifest/minux-main.db") then fs.delete("/etc/apt/manifest/minux-main.db") end
-shell.run("wget "..aptsource.."/manifest/minux-main.db /etc/apt/manifest/minux-main.db")
-
--- now we open the manifest file and check if it is actually a manifest file at all (invalid url catcher)
-file = "start"
-if fs.exists("/etc/apt/manifest/minux-main.db") == false then
-	print("Invalid installation source or server offline.")
-	return false
-end
-local temp = fs.open("/etc/apt/manifest/minux-main.db", "r")
--- 404 error catcher
-file = temp.readLine()
-if file ~= "AIF=true" then
-	print("Error 404, Pack data missing or corrupt, aborting.")
-	print("AIF verification failed, the downloaded file is not a manifest file")
-	print("This means the provided source URL is invalid")
-	return 0
-end
-
--- we download the files for "minux-main" as described in the manifest
-print("manifest retrieved, downloading package")
-local oldterm = disableoutput()
-shell.run("wget run "..aptsource.."/repository/minux-main.map /")
-enableoutput(oldterm)
-print("Download Finished")
-
--- now we write the files down
-if fs.exists("/etc/apt/list/installed.db") == false then
-	print("Generating installed.db")
-	file = fs.open("/etc/apt/list/installed.db" , "w")
-	file.writeLine("minux-main")
-	if input == "desktop" then
-		file.writeLine("devlib")
-		file.writeLine("auth-client")
-		file.writeLine("sword")
-		file.writeLine("minex")
-		file.writeLine("ldris")
-		file.writeLine("minesweeper")
-		file.writeLine("solitaire")
-		file.writeLine("sonata")
-		file.writeLine("pain")
-		file.writeLine("menu")
-		file.writeLine("musicstream")
-	elseif input == "default" then
-		file.writeLine("menu")
-		file.writeLine("minex")
-		file.writeLine("netlib")
-		file.writeLine("auth-client")
-	end
-	file.close()
-end
-
-print("Generating source file")
-sourcefile = fs.open("/usr/apt/source.ls" , "w")
-sourcefile.writeLine(aptsource)
-if input == "default" or input == "minimal" or input == "desktop" then
-	sourcefile.writeLine("https://minux.cc/apt/2.0/soft/")
-end
-sourcefile.close()
-print("Building boot configuration")
-shell.run("/etc/apt/sys/rebuildalias.sys")
--- we wait for an enter, then reboot
-term.clear()
-term.setCursorPos(1,1)
-print("Minux base installed.")
-print("you can host your own download server! see our wiki for more info.")
-print("Special thanks to LDDestroier for making progdor, patron saint of the slow connections.")
-print(" ")
-print("hit enter to continue the installation process.")
-input = read()
+print("")
+print("Hit Enter to reboot.")
+read()
 os.reboot()
-end

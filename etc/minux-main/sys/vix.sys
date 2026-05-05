@@ -1,0 +1,1052 @@
+--[[
+        vix — A Vim-like editor for Minux / CC: Tweaked.
+
+        Designed to be approachable for users who have never touched a modal
+        editor before, while still feeling familiar to Vim regulars.
+
+        Modes
+                NORMAL    — default; navigation and editing commands
+                INSERT    — type freely; ESC returns to NORMAL
+                COMMAND   — entered with ':' (e.g. :w, :q, :help)
+                SEARCH    — entered with '/' or '?' (forward/backward)
+                VISUAL    — entered with 'v'; selects a range of characters
+                            for x (delete) or y (yank)
+
+        User-friendly affordances
+                * Status line always shows the current mode in plain English,
+                  the file name, and a short hint such as "ESC=normal, :w=save".
+                * F1 or :help opens an in-editor cheatsheet.
+                * Line numbers can be toggled with :set number / :set nonumber.
+                * Tabs render as configurable spaces (default 4).
+                * Confirmation prompts on :q with unsaved changes.
+
+        Implementation notes
+                * Pure CC: Tweaked APIs only (term, fs, os, keys, paintutils,
+                  colours; no globals leaked).
+                * Buffer is a 1-indexed array of strings (one per line).
+                * Single Editor object (OOP) wraps state and behaviour.
+]]
+
+local args = { ... }
+
+------------------------------------------------------------
+-- Utility helpers
+------------------------------------------------------------
+
+local function clamp(value, low, high)
+        if value < low then return low end
+        if value > high then return high end
+        return value
+end
+
+local function readEntireFile(path)
+        local lines = {}
+        if fs.exists(path) == false then
+                return { "" }
+        end
+        local handle = fs.open(path, "r")
+        if handle == nil then return { "" } end
+        local line = handle.readLine()
+        while line ~= nil do
+                table.insert(lines, line)
+                line = handle.readLine()
+        end
+        handle.close()
+        if #lines == 0 then table.insert(lines, "") end
+        return lines
+end
+
+local function writeEntireFile(path, lines)
+        local parent = fs.getDir(path)
+        if parent ~= nil and parent ~= "" and fs.exists(parent) == false then
+                fs.makeDir(parent)
+        end
+        local handle = fs.open(path, "w")
+        if handle == nil then return false, "cannot open for writing" end
+        for index = 1, #lines do
+                if index < #lines then
+                        handle.writeLine(lines[index])
+                else
+                        handle.write(lines[index])
+                end
+        end
+        handle.close()
+        return true
+end
+
+local function expandTabs(line, tabWidth)
+        if line:find("\t", 1, true) == nil then return line end
+        local pieces = {}
+        local column = 0
+        for index = 1, #line do
+                local char = line:sub(index, index)
+                if char == "\t" then
+                        local pad = tabWidth - (column % tabWidth)
+                        pieces[#pieces + 1] = string.rep(" ", pad)
+                        column = column + pad
+                else
+                        pieces[#pieces + 1] = char
+                        column = column + 1
+                end
+        end
+        return table.concat(pieces)
+end
+
+------------------------------------------------------------
+-- Editor object
+------------------------------------------------------------
+
+local Editor = {}
+Editor.__index = Editor
+
+local MODE_NORMAL  = "NORMAL"
+local MODE_INSERT  = "INSERT"
+local MODE_COMMAND = "COMMAND"
+local MODE_SEARCH  = "SEARCH"
+local MODE_VISUAL  = "VISUAL"
+
+function Editor.new(filename)
+        local termW, termH = term.getSize()
+        local self = setmetatable({
+                filename     = filename,
+                lines        = filename and readEntireFile(filename) or { "" },
+                cursor       = { row = 1, col = 1 },
+                view         = { row = 1, col = 1 }, -- top-left visible cell
+                screen       = { width = termW, height = termH },
+                mode         = MODE_NORMAL,
+                message      = nil,
+                messageColor = nil,
+                dirty        = false,
+                running      = true,
+                showNumbers  = false,
+                tabWidth     = 4,
+                yankBuffer   = "",
+                yankIsLine   = false,
+                lastSearch   = nil,
+                searchDir    = 1,
+                undoStack    = {},
+                redoStack    = {},
+                cmdBuffer    = "",
+                cmdPrefix    = "",
+                visualAnchor = nil,
+                pendingOp    = nil,
+        }, Editor)
+        return self
+end
+
+function Editor:hasColor()
+        return term.isColor()
+end
+
+function Editor:setMessage(text, colour)
+        self.message = text
+        self.messageColor = colour or colors.white
+end
+
+------------------------------------------------------------
+-- Undo / redo
+------------------------------------------------------------
+
+function Editor:snapshot()
+        local copy = {}
+        for index = 1, #self.lines do copy[index] = self.lines[index] end
+        local entry = {
+                lines = copy,
+                row   = self.cursor.row,
+                col   = self.cursor.col,
+        }
+        table.insert(self.undoStack, entry)
+        -- A new edit invalidates the redo history.
+        self.redoStack = {}
+        if #self.undoStack > 100 then
+                table.remove(self.undoStack, 1)
+        end
+end
+
+function Editor:applySnapshot(entry)
+        local lines = {}
+        for index = 1, #entry.lines do lines[index] = entry.lines[index] end
+        self.lines = lines
+        self.cursor.row = clamp(entry.row, 1, #self.lines)
+        self.cursor.col = clamp(entry.col, 1, #self.lines[self.cursor.row] + 1)
+end
+
+function Editor:undo()
+        local entry = table.remove(self.undoStack)
+        if entry == nil then
+                self:setMessage("Already at oldest change.", colors.yellow)
+                return
+        end
+        local current = {
+                lines = {},
+                row   = self.cursor.row,
+                col   = self.cursor.col,
+        }
+        for index = 1, #self.lines do current.lines[index] = self.lines[index] end
+        table.insert(self.redoStack, current)
+        self:applySnapshot(entry)
+        self.dirty = true
+        self:setMessage("Undo.", colors.lightBlue)
+end
+
+function Editor:redo()
+        local entry = table.remove(self.redoStack)
+        if entry == nil then
+                self:setMessage("Already at newest change.", colors.yellow)
+                return
+        end
+        local current = {
+                lines = {},
+                row   = self.cursor.row,
+                col   = self.cursor.col,
+        }
+        for index = 1, #self.lines do current.lines[index] = self.lines[index] end
+        table.insert(self.undoStack, current)
+        self:applySnapshot(entry)
+        self.dirty = true
+        self:setMessage("Redo.", colors.lightBlue)
+end
+
+------------------------------------------------------------
+-- Buffer accessors
+------------------------------------------------------------
+
+function Editor:line(row)
+        return self.lines[row] or ""
+end
+
+function Editor:setLine(row, value)
+        self.lines[row] = value
+end
+
+function Editor:lineCount()
+        return #self.lines
+end
+
+function Editor:gutterWidth()
+        if self.showNumbers == false then return 0 end
+        return #tostring(self:lineCount()) + 1
+end
+
+function Editor:contentWidth()
+        return self.screen.width - self:gutterWidth()
+end
+
+function Editor:contentHeight()
+        return self.screen.height - 2 -- status line + command line
+end
+
+------------------------------------------------------------
+-- Cursor / scrolling
+------------------------------------------------------------
+
+function Editor:clampCursor()
+        self.cursor.row = clamp(self.cursor.row, 1, math.max(1, self:lineCount()))
+        local lineLen = #self:line(self.cursor.row)
+        local maxCol = lineLen + 1
+        if self.mode == MODE_NORMAL or self.mode == MODE_VISUAL then
+                maxCol = math.max(1, lineLen)
+        end
+        self.cursor.col = clamp(self.cursor.col, 1, maxCol)
+end
+
+function Editor:ensureVisible()
+        local height = self:contentHeight()
+        local width  = self:contentWidth()
+        if self.cursor.row < self.view.row then
+                self.view.row = self.cursor.row
+        elseif self.cursor.row > self.view.row + height - 1 then
+                self.view.row = self.cursor.row - height + 1
+        end
+        if self.cursor.col < self.view.col then
+                self.view.col = self.cursor.col
+        elseif self.cursor.col > self.view.col + width - 1 then
+                self.view.col = self.cursor.col - width + 1
+        end
+        if self.view.row < 1 then self.view.row = 1 end
+        if self.view.col < 1 then self.view.col = 1 end
+end
+
+------------------------------------------------------------
+-- Rendering
+------------------------------------------------------------
+
+function Editor:setColors(fg, bg)
+        if self:hasColor() then
+                if fg ~= nil then term.setTextColor(fg) end
+                if bg ~= nil then term.setBackgroundColor(bg) end
+        else
+                term.setTextColor(colors.white)
+                term.setBackgroundColor(colors.black)
+        end
+end
+
+function Editor:render()
+        self:clampCursor()
+        self:ensureVisible()
+
+        term.setBackgroundColor(colors.black)
+        term.setTextColor(colors.white)
+        term.clear()
+
+        local height       = self:contentHeight()
+        local width        = self:contentWidth()
+        local gutter       = self:gutterWidth()
+        local totalLines   = self:lineCount()
+
+        for screenRow = 1, height do
+                local bufferRow = self.view.row + screenRow - 1
+                term.setCursorPos(1, screenRow)
+                term.setBackgroundColor(colors.black)
+                if bufferRow <= totalLines then
+                        if self.showNumbers then
+                                self:setColors(colors.gray, colors.black)
+                                term.write(string.format("%" .. (gutter - 1) .. "d ", bufferRow))
+                                self:setColors(colors.white, colors.black)
+                        end
+                        local rendered = expandTabs(self:line(bufferRow), self.tabWidth)
+                        local slice = rendered:sub(self.view.col, self.view.col + width - 1)
+                        if self.mode == MODE_VISUAL and self.visualAnchor ~= nil then
+                                self:writeVisualLine(bufferRow, slice)
+                        else
+                                term.write(slice)
+                        end
+                else
+                        if self:hasColor() then term.setTextColor(colors.lightGray) end
+                        term.write("~")
+                        self:setColors(colors.white, colors.black)
+                end
+        end
+
+        self:renderStatusLine()
+        self:renderCommandLine()
+        self:positionCursor()
+end
+
+function Editor:writeVisualLine(bufferRow, slice)
+        -- Determine [startRow..endRow], [startCol..endCol] of the selection.
+        local anchor = self.visualAnchor
+        local cur    = self.cursor
+        local startRow, startCol, endRow, endCol
+        if anchor.row < cur.row or (anchor.row == cur.row and anchor.col <= cur.col) then
+                startRow, startCol = anchor.row, anchor.col
+                endRow,   endCol   = cur.row,    cur.col
+        else
+                startRow, startCol = cur.row,    cur.col
+                endRow,   endCol   = anchor.row, anchor.col
+        end
+
+        if bufferRow < startRow or bufferRow > endRow then
+                term.write(slice)
+                return
+        end
+
+        local selStart, selEnd = 1, #slice
+        if bufferRow == startRow then selStart = math.max(1, startCol - self.view.col + 1) end
+        if bufferRow == endRow   then selEnd   = math.max(0, endCol   - self.view.col + 1) end
+        selStart = math.max(1, selStart)
+        selEnd   = math.min(#slice, selEnd)
+
+        if selStart > 1 then term.write(slice:sub(1, selStart - 1)) end
+        if selEnd >= selStart then
+                self:setColors(colors.white, colors.gray)
+                term.write(slice:sub(selStart, selEnd))
+                self:setColors(colors.white, colors.black)
+        end
+        if selEnd < #slice then term.write(slice:sub(selEnd + 1)) end
+end
+
+function Editor:renderStatusLine()
+        local row = self.screen.height - 1
+        term.setCursorPos(1, row)
+        if self:hasColor() then
+                term.setBackgroundColor(colors.gray)
+                term.setTextColor(colors.white)
+        end
+        term.clearLine()
+
+        local modeLabel = "[" .. self.mode .. "]"
+        local name = self.filename or "[No Name]"
+        local dirtyMark = self.dirty and " [+]" or ""
+        local left = string.format("%s %s%s", modeLabel, name, dirtyMark)
+        local right = string.format("Ln %d/%d  Col %d",
+                self.cursor.row, self:lineCount(), self.cursor.col)
+
+        local pad = self.screen.width - #left - #right
+        if pad < 1 then pad = 1 end
+        term.setCursorPos(1, row)
+        term.write(left .. string.rep(" ", pad) .. right)
+        self:setColors(colors.white, colors.black)
+end
+
+function Editor:renderCommandLine()
+        local row = self.screen.height
+        term.setCursorPos(1, row)
+        term.setBackgroundColor(colors.black)
+        term.clearLine()
+        if self.mode == MODE_COMMAND or self.mode == MODE_SEARCH then
+                self:setColors(colors.white, colors.black)
+                term.write(self.cmdPrefix .. self.cmdBuffer)
+        elseif self.message ~= nil then
+                if self:hasColor() then term.setTextColor(self.messageColor) end
+                term.write(self.message)
+                self:setColors(colors.white, colors.black)
+        else
+                if self:hasColor() then term.setTextColor(colors.lightGray) end
+                local hint
+                if self.mode == MODE_NORMAL then
+                        hint = "i=insert  v=visual  :=command  /=search  F1=help"
+                elseif self.mode == MODE_INSERT then
+                        hint = "ESC=normal mode"
+                else
+                        hint = "ESC=normal mode  :w=save  :q=quit"
+                end
+                hint = hint:sub(1, self.screen.width)
+                term.write(hint)
+                self:setColors(colors.white, colors.black)
+        end
+end
+
+function Editor:positionCursor()
+        if self.mode == MODE_COMMAND or self.mode == MODE_SEARCH then
+                term.setCursorPos(#self.cmdPrefix + #self.cmdBuffer + 1, self.screen.height)
+                term.setCursorBlink(true)
+                return
+        end
+
+        local rendered = expandTabs(self:line(self.cursor.row):sub(1, self.cursor.col - 1), self.tabWidth)
+        local screenCol = #rendered - self.view.col + 1 + self:gutterWidth() + 1
+        local screenRow = self.cursor.row - self.view.row + 1
+        if screenCol < 1 then screenCol = 1 end
+        if screenRow < 1 then screenRow = 1 end
+        term.setCursorPos(screenCol, screenRow)
+        term.setCursorBlink(self.mode == MODE_INSERT)
+end
+
+------------------------------------------------------------
+-- Editing operations (NORMAL mode movement / mutation)
+------------------------------------------------------------
+
+function Editor:moveLeft()  self.cursor.col = self.cursor.col - 1 end
+function Editor:moveRight() self.cursor.col = self.cursor.col + 1 end
+function Editor:moveUp()    self.cursor.row = self.cursor.row - 1 end
+function Editor:moveDown()  self.cursor.row = self.cursor.row + 1 end
+
+function Editor:moveLineStart() self.cursor.col = 1 end
+function Editor:moveLineEnd()
+        self.cursor.col = math.max(1, #self:line(self.cursor.row))
+        if self.mode == MODE_INSERT then
+                self.cursor.col = #self:line(self.cursor.row) + 1
+        end
+end
+
+function Editor:moveFileStart()
+        self.cursor.row = 1
+        self.cursor.col = 1
+end
+
+function Editor:moveFileEnd()
+        self.cursor.row = self:lineCount()
+        self.cursor.col = math.max(1, #self:line(self.cursor.row))
+end
+
+function Editor:moveWordForward()
+        local row = self.cursor.row
+        local line = self:line(row)
+        local col = self.cursor.col
+        -- skip current word characters
+        while col <= #line and line:sub(col, col):match("[%w_]") do col = col + 1 end
+        -- skip whitespace and punctuation
+        while col <= #line and line:sub(col, col):match("[^%w_]") do col = col + 1 end
+        if col > #line and row < self:lineCount() then
+                self.cursor.row = row + 1
+                self.cursor.col = 1
+        else
+                self.cursor.col = col
+        end
+end
+
+function Editor:moveWordBackward()
+        local row = self.cursor.row
+        local col = self.cursor.col
+        if col == 1 and row > 1 then
+                self.cursor.row = row - 1
+                self.cursor.col = math.max(1, #self:line(self.cursor.row))
+                return
+        end
+        col = col - 1
+        local line = self:line(row)
+        while col > 1 and line:sub(col, col):match("[^%w_]") do col = col - 1 end
+        while col > 1 and line:sub(col - 1, col - 1):match("[%w_]") do col = col - 1 end
+        self.cursor.col = math.max(1, col)
+end
+
+function Editor:deleteCharUnderCursor()
+        local row = self.cursor.row
+        local line = self:line(row)
+        if #line == 0 then return end
+        self:snapshot()
+        local col = self.cursor.col
+        self:setLine(row, line:sub(1, col - 1) .. line:sub(col + 1))
+        self.dirty = true
+end
+
+function Editor:deleteLine()
+        self:snapshot()
+        self.yankBuffer = self:line(self.cursor.row)
+        self.yankIsLine = true
+        if self:lineCount() == 1 then
+                self:setLine(1, "")
+        else
+                table.remove(self.lines, self.cursor.row)
+        end
+        self.cursor.col = 1
+        if self.cursor.row > self:lineCount() then
+                self.cursor.row = self:lineCount()
+        end
+        self.dirty = true
+end
+
+function Editor:yankLine()
+        self.yankBuffer = self:line(self.cursor.row)
+        self.yankIsLine = true
+        self:setMessage("Line yanked.", colors.lime)
+end
+
+function Editor:paste(after)
+        if self.yankBuffer == nil or self.yankBuffer == "" and self.yankIsLine == false then
+                self:setMessage("Yank buffer is empty.", colors.yellow)
+                return
+        end
+        self:snapshot()
+        if self.yankIsLine then
+                local insertAt = after and self.cursor.row + 1 or self.cursor.row
+                table.insert(self.lines, insertAt, self.yankBuffer)
+                self.cursor.row = insertAt
+                self.cursor.col = 1
+        else
+                local row  = self.cursor.row
+                local line = self:line(row)
+                local col  = after and self.cursor.col + 1 or self.cursor.col
+                col = clamp(col, 1, #line + 1)
+                self:setLine(row, line:sub(1, col - 1) .. self.yankBuffer .. line:sub(col))
+                self.cursor.col = col + #self.yankBuffer - 1
+        end
+        self.dirty = true
+end
+
+function Editor:openLineBelow()
+        self:snapshot()
+        table.insert(self.lines, self.cursor.row + 1, "")
+        self.cursor.row = self.cursor.row + 1
+        self.cursor.col = 1
+        self.mode = MODE_INSERT
+        self.dirty = true
+end
+
+function Editor:openLineAbove()
+        self:snapshot()
+        table.insert(self.lines, self.cursor.row, "")
+        self.cursor.col = 1
+        self.mode = MODE_INSERT
+        self.dirty = true
+end
+
+------------------------------------------------------------
+-- Insert-mode editing
+------------------------------------------------------------
+
+function Editor:insertChar(char)
+        local row = self.cursor.row
+        local col = self.cursor.col
+        local line = self:line(row)
+        self:setLine(row, line:sub(1, col - 1) .. char .. line:sub(col))
+        self.cursor.col = col + 1
+        self.dirty = true
+end
+
+function Editor:insertNewline()
+        self:snapshot()
+        local row = self.cursor.row
+        local col = self.cursor.col
+        local line = self:line(row)
+        local before = line:sub(1, col - 1)
+        local after  = line:sub(col)
+        self:setLine(row, before)
+        table.insert(self.lines, row + 1, after)
+        self.cursor.row = row + 1
+        self.cursor.col = 1
+        self.dirty = true
+end
+
+function Editor:backspace()
+        local row = self.cursor.row
+        local col = self.cursor.col
+        if col > 1 then
+                local line = self:line(row)
+                self:setLine(row, line:sub(1, col - 2) .. line:sub(col))
+                self.cursor.col = col - 1
+                self.dirty = true
+        elseif row > 1 then
+                self:snapshot()
+                local previous = self:line(row - 1)
+                local current  = self:line(row)
+                self:setLine(row - 1, previous .. current)
+                table.remove(self.lines, row)
+                self.cursor.row = row - 1
+                self.cursor.col = #previous + 1
+                self.dirty = true
+        end
+end
+
+------------------------------------------------------------
+-- Visual mode
+------------------------------------------------------------
+
+function Editor:visualSelectionRange()
+        local anchor = self.visualAnchor
+        local cur    = self.cursor
+        if anchor.row < cur.row or (anchor.row == cur.row and anchor.col <= cur.col) then
+                return anchor.row, anchor.col, cur.row, cur.col
+        end
+        return cur.row, cur.col, anchor.row, anchor.col
+end
+
+function Editor:visualDelete()
+        local sR, sC, eR, eC = self:visualSelectionRange()
+        self:snapshot()
+        if sR == eR then
+                local line = self:line(sR)
+                self.yankBuffer = line:sub(sC, eC)
+                self.yankIsLine = false
+                self:setLine(sR, line:sub(1, sC - 1) .. line:sub(eC + 1))
+        else
+                local first = self:line(sR):sub(1, sC - 1)
+                local last  = self:line(eR):sub(eC + 1)
+                local pieces = { self:line(sR):sub(sC) }
+                for r = sR + 1, eR - 1 do pieces[#pieces + 1] = self:line(r) end
+                pieces[#pieces + 1] = self:line(eR):sub(1, eC)
+                self.yankBuffer = table.concat(pieces, "\n")
+                self.yankIsLine = false
+                self:setLine(sR, first .. last)
+                for r = eR, sR + 1, -1 do table.remove(self.lines, r) end
+        end
+        self.cursor.row = sR
+        self.cursor.col = sC
+        self.visualAnchor = nil
+        self.mode = MODE_NORMAL
+        self.dirty = true
+end
+
+function Editor:visualYank()
+        local sR, sC, eR, eC = self:visualSelectionRange()
+        if sR == eR then
+                self.yankBuffer = self:line(sR):sub(sC, eC)
+                self.yankIsLine = false
+        else
+                local pieces = { self:line(sR):sub(sC) }
+                for r = sR + 1, eR - 1 do pieces[#pieces + 1] = self:line(r) end
+                pieces[#pieces + 1] = self:line(eR):sub(1, eC)
+                self.yankBuffer = table.concat(pieces, "\n")
+                self.yankIsLine = false
+        end
+        self.visualAnchor = nil
+        self.mode = MODE_NORMAL
+        self:setMessage("Selection yanked.", colors.lime)
+end
+
+------------------------------------------------------------
+-- Search
+------------------------------------------------------------
+
+function Editor:findNext()
+        if self.lastSearch == nil or self.lastSearch == "" then
+                self:setMessage("No previous search.", colors.yellow)
+                return
+        end
+        local startRow = self.cursor.row
+        local startCol = self.cursor.col + 1
+        local total = self:lineCount()
+        for offset = 0, total do
+                local row = ((startRow + offset - 1) % total) + 1
+                local line = self:line(row)
+                local fromCol = (row == startRow and offset == 0) and startCol or 1
+                local found = line:find(self.lastSearch, fromCol, true)
+                if found ~= nil then
+                        self.cursor.row = row
+                        self.cursor.col = found
+                        return
+                end
+        end
+        self:setMessage("Pattern not found: " .. self.lastSearch, colors.yellow)
+end
+
+------------------------------------------------------------
+-- Help
+------------------------------------------------------------
+
+local HELP_TEXT = {
+        "vix — quick reference",
+        "",
+        "Modes",
+        "  i / I    insert  /  insert at line start",
+        "  a / A    append after cursor / append at line end",
+        "  o / O    open new line below / above",
+        "  v        visual selection (character-wise)",
+        "  ESC      return to NORMAL mode",
+        "",
+        "Movement (NORMAL / VISUAL)",
+        "  h j k l  left, down, up, right (arrow keys also work)",
+        "  w / b    next / previous word",
+        "  0 / $    line start / line end",
+        "  gg / G   file start / file end",
+        "  /text    search forward for 'text'  (n = next match)",
+        "",
+        "Editing",
+        "  x        delete character under cursor",
+        "  dd       delete current line",
+        "  yy       yank current line",
+        "  p / P    paste after / before cursor",
+        "  u        undo            Ctrl+R   redo",
+        "",
+        "Commands  (type ':' first)",
+        "  :w [path]    save (optional new path)",
+        "  :q           quit (refuses if unsaved changes)",
+        "  :q!          force quit",
+        "  :wq / :x     save and quit",
+        "  :set number  show line numbers",
+        "  :set nonumber",
+        "  :help / F1   open this help screen",
+        "",
+        "Press any key to return to the editor.",
+}
+
+function Editor:showHelp()
+        term.setBackgroundColor(colors.black)
+        term.setTextColor(colors.white)
+        term.clear()
+        term.setCursorPos(1, 1)
+        for _, line in ipairs(HELP_TEXT) do
+                if line:find("^vix") or line:find("^Modes") or line:find("^Movement")
+                                or line:find("^Editing") or line:find("^Commands") then
+                        if self:hasColor() then term.setTextColor(colors.yellow) end
+                        print(line)
+                        if self:hasColor() then term.setTextColor(colors.white) end
+                else
+                        print(line)
+                end
+        end
+        os.pullEvent("key")
+        -- swallow the key_up that follows so it doesn't leak into the editor
+        os.pullEvent("key_up")
+end
+
+------------------------------------------------------------
+-- Command-line execution (':' commands)
+------------------------------------------------------------
+
+function Editor:save(targetPath)
+        local path = targetPath or self.filename
+        if path == nil or path == "" then
+                self:setMessage("No file name. Use :w <path> to save.", colors.red)
+                return false
+        end
+        local ok, err = writeEntireFile(path, self.lines)
+        if ok == false then
+                self:setMessage("Save failed: " .. tostring(err), colors.red)
+                return false
+        end
+        self.filename = path
+        self.dirty = false
+        self:setMessage('Wrote "' .. path .. '"', colors.lime)
+        return true
+end
+
+function Editor:executeCommand(command)
+        command = command:gsub("^%s+", ""):gsub("%s+$", "")
+        if command == "" then return end
+
+        local verb, rest = command:match("^(%S+)%s*(.*)$")
+        verb = verb or command
+
+        if verb == "w" or verb == "write" then
+                self:save(rest ~= "" and rest or nil)
+        elseif verb == "q" or verb == "quit" then
+                if self.dirty then
+                        self:setMessage("Unsaved changes. Use :q! to discard or :wq to save.", colors.red)
+                else
+                        self.running = false
+                end
+        elseif verb == "q!" or verb == "quit!" then
+                self.running = false
+        elseif verb == "wq" or verb == "x" then
+                if self:save(rest ~= "" and rest or nil) then
+                        self.running = false
+                end
+        elseif verb == "help" or verb == "h" then
+                self:showHelp()
+        elseif verb == "set" then
+                if rest == "number" or rest == "nu" then
+                        self.showNumbers = true
+                elseif rest == "nonumber" or rest == "nonu" then
+                        self.showNumbers = false
+                elseif rest:match("^tabstop=") or rest:match("^ts=") then
+                        local value = tonumber(rest:match("=(%d+)"))
+                        if value ~= nil and value > 0 then self.tabWidth = value end
+                else
+                        self:setMessage("Unknown :set option: " .. rest, colors.yellow)
+                end
+        elseif tonumber(verb) ~= nil then
+                self.cursor.row = clamp(tonumber(verb), 1, self:lineCount())
+                self.cursor.col = 1
+        else
+                self:setMessage("Not an editor command: " .. command, colors.red)
+        end
+end
+
+------------------------------------------------------------
+-- Input dispatch
+------------------------------------------------------------
+
+function Editor:handleNormal(event, key)
+        self.message = nil
+        if event ~= "char" and event ~= "key" then return end
+
+        if event == "char" then
+                local char = key
+                local pending = self.pendingOp
+                self.pendingOp = nil
+                if pending == "d" then
+                        if char == "d" then self:deleteLine() end
+                        return
+                elseif pending == "y" then
+                        if char == "y" then self:yankLine() end
+                        return
+                elseif pending == "g" then
+                        if char == "g" then self:moveFileStart() end
+                        return
+                end
+
+                if char == "h" then self:moveLeft()
+                elseif char == "j" then self:moveDown()
+                elseif char == "k" then self:moveUp()
+                elseif char == "l" then self:moveRight()
+                elseif char == "w" then self:moveWordForward()
+                elseif char == "b" then self:moveWordBackward()
+                elseif char == "0" then self:moveLineStart()
+                elseif char == "$" then self:moveLineEnd()
+                elseif char == "G" then self:moveFileEnd()
+                elseif char == "g" then self.pendingOp = "g"
+                elseif char == "i" then self.mode = MODE_INSERT
+                elseif char == "I" then self:moveLineStart() self.mode = MODE_INSERT
+                elseif char == "a" then self.cursor.col = self.cursor.col + 1 self.mode = MODE_INSERT
+                elseif char == "A" then self:moveLineEnd() self.mode = MODE_INSERT
+                elseif char == "o" then self:openLineBelow()
+                elseif char == "O" then self:openLineAbove()
+                elseif char == "x" then self:deleteCharUnderCursor()
+                elseif char == "d" then self.pendingOp = "d"
+                elseif char == "y" then self.pendingOp = "y"
+                elseif char == "p" then self:paste(true)
+                elseif char == "P" then self:paste(false)
+                elseif char == "u" then self:undo()
+                elseif char == "n" then self:findNext()
+                elseif char == "v" then
+                        self.mode = MODE_VISUAL
+                        self.visualAnchor = { row = self.cursor.row, col = self.cursor.col }
+                elseif char == ":" then
+                        self.mode = MODE_COMMAND
+                        self.cmdBuffer = ""
+                        self.cmdPrefix = ":"
+                elseif char == "/" then
+                        self.mode = MODE_SEARCH
+                        self.cmdBuffer = ""
+                        self.cmdPrefix = "/"
+                end
+        elseif event == "key" then
+                if key == keys.left  then self:moveLeft()
+                elseif key == keys.right then self:moveRight()
+                elseif key == keys.up    then self:moveUp()
+                elseif key == keys.down  then self:moveDown()
+                elseif key == keys.home  then self:moveLineStart()
+                elseif key == keys["end"] then self:moveLineEnd()
+                elseif key == keys.f1    then self:showHelp()
+                elseif key == keys.r and self:isCtrlHeld() then self:redo() end
+        end
+end
+
+function Editor:isCtrlHeld()
+        -- ComputerCraft does not expose modifier state directly; we instead
+        -- detect Ctrl combinations by listening for the leftCtrl/rightCtrl
+        -- key code in the dispatcher.  This helper keeps the public API
+        -- clean for future extension.
+        return self._ctrlHeld == true
+end
+
+function Editor:handleInsert(event, key)
+        self.message = nil
+        if event == "char" then
+                self:insertChar(key)
+        elseif event == "key" then
+                if key == keys.enter then
+                        self:insertNewline()
+                elseif key == keys.backspace then
+                        self:backspace()
+                elseif key == keys.tab then
+                        for _ = 1, self.tabWidth do self:insertChar(" ") end
+                elseif key == keys.left  then self:moveLeft()
+                elseif key == keys.right then self:moveRight()
+                elseif key == keys.up    then self:moveUp()
+                elseif key == keys.down  then self:moveDown()
+                elseif key == keys.home  then self:moveLineStart()
+                elseif key == keys["end"] then self:moveLineEnd()
+                end
+        end
+end
+
+function Editor:handleCommandLine(event, key)
+        if event == "char" then
+                self.cmdBuffer = self.cmdBuffer .. key
+        elseif event == "key" then
+                if key == keys.enter then
+                        local buffer = self.cmdBuffer
+                        local prefix = self.cmdPrefix
+                        self.cmdBuffer = ""
+                        self.cmdPrefix = ""
+                        self.mode = MODE_NORMAL
+                        if prefix == ":" then
+                                self:executeCommand(buffer)
+                        elseif prefix == "/" then
+                                if buffer ~= "" then
+                                        self.lastSearch = buffer
+                                        self:findNext()
+                                end
+                        end
+                elseif key == keys.backspace then
+                        if #self.cmdBuffer > 0 then
+                                self.cmdBuffer = self.cmdBuffer:sub(1, -2)
+                        else
+                                self.cmdBuffer = ""
+                                self.cmdPrefix = ""
+                                self.mode = MODE_NORMAL
+                        end
+                end
+        end
+end
+
+function Editor:handleVisual(event, key)
+        self.message = nil
+        if event == "char" then
+                if key == "h" then self:moveLeft()
+                elseif key == "j" then self:moveDown()
+                elseif key == "k" then self:moveUp()
+                elseif key == "l" then self:moveRight()
+                elseif key == "w" then self:moveWordForward()
+                elseif key == "b" then self:moveWordBackward()
+                elseif key == "0" then self:moveLineStart()
+                elseif key == "$" then self:moveLineEnd()
+                elseif key == "x" or key == "d" then self:visualDelete()
+                elseif key == "y" then self:visualYank()
+                end
+        elseif event == "key" then
+                if key == keys.left  then self:moveLeft()
+                elseif key == keys.right then self:moveRight()
+                elseif key == keys.up    then self:moveUp()
+                elseif key == keys.down  then self:moveDown()
+                end
+        end
+end
+
+------------------------------------------------------------
+-- Main loop
+------------------------------------------------------------
+
+function Editor:run()
+        term.setCursorBlink(true)
+        while self.running do
+                self:render()
+                local event, param = os.pullEvent()
+                if event == "char" then
+                        if self.mode == MODE_NORMAL then
+                                self:handleNormal("char", param)
+                        elseif self.mode == MODE_INSERT then
+                                self:handleInsert("char", param)
+                        elseif self.mode == MODE_COMMAND or self.mode == MODE_SEARCH then
+                                self:handleCommandLine("char", param)
+                        elseif self.mode == MODE_VISUAL then
+                                self:handleVisual("char", param)
+                        end
+                elseif event == "key" then
+                        if param == keys.leftCtrl or param == keys.rightCtrl then
+                                self._ctrlHeld = true
+                        end
+                        if self.mode == MODE_INSERT and param == keys.tab then
+                                self:handleInsert("key", param)
+                        elseif param == keys.tab then
+                                -- intentionally ignore tab outside of INSERT mode
+                        elseif param == keys["end"] or param == keys.home
+                                        or param == keys.left or param == keys.right
+                                        or param == keys.up or param == keys.down
+                                        or param == keys.enter or param == keys.backspace
+                                        or param == keys.f1 then
+                                if self.mode == MODE_NORMAL then
+                                        self:handleNormal("key", param)
+                                elseif self.mode == MODE_INSERT then
+                                        self:handleInsert("key", param)
+                                elseif self.mode == MODE_COMMAND or self.mode == MODE_SEARCH then
+                                        self:handleCommandLine("key", param)
+                                elseif self.mode == MODE_VISUAL then
+                                        self:handleVisual("key", param)
+                                end
+                        elseif self.mode == MODE_INSERT and (param == keys.leftCtrl or param == keys.rightCtrl) then
+                                -- ignore raw Ctrl press in insert
+                        elseif (param == keys.leftCtrl or param == keys.rightCtrl)
+                                        and self.mode == MODE_NORMAL then
+                                -- ignore solo Ctrl in normal mode
+                        elseif param == keys.r and self._ctrlHeld and self.mode == MODE_NORMAL then
+                                self:redo()
+                        end
+
+                        if param == keys.leftCtrl or param == keys.rightCtrl then
+                                -- nothing
+                        elseif param == 1 -- ESC keycode in CC: Tweaked
+                                        or (keys.escape ~= nil and param == keys.escape)
+                                        or (keys.esc ~= nil and param == keys.esc) then
+                                if self.mode == MODE_INSERT or self.mode == MODE_VISUAL then
+                                        self.mode = MODE_NORMAL
+                                        self.visualAnchor = nil
+                                elseif self.mode == MODE_COMMAND or self.mode == MODE_SEARCH then
+                                        self.cmdBuffer = ""
+                                        self.cmdPrefix = ""
+                                        self.mode = MODE_NORMAL
+                                end
+                        end
+                elseif event == "key_up" then
+                        if param == keys.leftCtrl or param == keys.rightCtrl then
+                                self._ctrlHeld = false
+                        end
+                elseif event == "term_resize" then
+                        local w, h = term.getSize()
+                        self.screen.width  = w
+                        self.screen.height = h
+                end
+        end
+        term.setCursorBlink(false)
+        term.setBackgroundColor(colors.black)
+        term.setTextColor(colors.white)
+        term.clear()
+        term.setCursorPos(1, 1)
+end
+
+------------------------------------------------------------
+-- Entry point
+------------------------------------------------------------
+
+local filename = args[1]
+if filename ~= nil and filename ~= "" then
+        if shell ~= nil and shell.resolve ~= nil then
+                filename = shell.resolve(filename)
+        end
+end
+
+local editor = Editor.new(filename)
+editor:run()
