@@ -17,6 +17,7 @@
 
 local DEFAULT_REPO     = "JosunLP/ReMinux"
 local DEFAULT_BRANCH   = "main"
+local GITHUB_API_BASE  = "https://api.github.com/repos/"
 local LEGACY_APT_OS    = "https://minux.cc/apt/2.0/os/"
 local LEGACY_APT_SOFT  = "https://minux.cc/apt/2.0/soft/"
 local LEGACY_APT_BETA  = "https://minux.cc/beta/"
@@ -180,14 +181,14 @@ end
 -- HTTP helpers
 ------------------------------------------------------------
 
-local function httpFetch(url)
+local function httpFetch(url, headers)
         if http == nil then
                 return nil, "http API not available"
         end
         if http.checkURL ~= nil and http.checkURL(url) ~= true then
                 return nil, "URL rejected by http.checkURL: " .. url
         end
-        local response = http.get(url)
+        local response = http.get(url, headers)
         if response == nil then
                 return nil, "request failed: " .. url
         end
@@ -197,6 +198,42 @@ local function httpFetch(url)
                 return nil, "empty response: " .. url
         end
         return body
+end
+
+local function decodeJson(body)
+        if textutils == nil then return nil end
+        local decoder = textutils.unserialiseJSON or textutils.unserializeJSON
+        if decoder == nil then return nil end
+        local ok, data = pcall(decoder, body)
+        if ok ~= true or type(data) ~= "table" then return nil end
+        return data
+end
+
+local function fetchLatestReleaseTag(repo)
+        local body = httpFetch(GITHUB_API_BASE .. repo .. "/releases/latest", {
+                ["User-Agent"] = "ReMinux",
+                Accept = "application/vnd.github+json",
+        })
+        if body == nil then return nil end
+
+        local data = decodeJson(body)
+        if data ~= nil and type(data.tag_name) == "string" and data.tag_name ~= "" then
+                return data.tag_name
+        end
+
+        local tag = body:match([["tag_name"%s*:%s*"([^"]+)"]])
+        if tag ~= nil and tag ~= "" then
+                return tag
+        end
+        return nil
+end
+
+local function resolveRecommendedGitSource(repo, fallbackRef)
+        local latestTag = fetchLatestReleaseTag(repo)
+        if latestTag ~= nil then
+                return Source.git(repo, latestTag)
+        end
+        return Source.git(repo, fallbackRef)
 end
 
 local function downloadFile(source, repoPath, destPath)
@@ -399,7 +436,7 @@ local function chooseSource()
         local source
         local profile = "default"
         showMenu("Installation Source", {
-                "GitHub: " .. DEFAULT_REPO .. " @ " .. DEFAULT_BRANCH .. " (recommended)",
+                "GitHub Release: latest stable for " .. DEFAULT_REPO .. " (recommended)",
                 "GitHub: " .. DEFAULT_REPO .. " (choose branch)",
                 "GitHub: custom repository",
                 "Custom raw URL (Git, Gitea, GitLab, ...)",
@@ -407,7 +444,7 @@ local function chooseSource()
                 "Legacy APT: minux.cc beta",
                 "Legacy APT: custom server",
         }, {
-                function() source = Source.git(DEFAULT_REPO, DEFAULT_BRANCH) end,
+                function() source = resolveRecommendedGitSource(DEFAULT_REPO, DEFAULT_BRANCH) end,
                 function()
                         write("Branch (default 'main'): ")
                         local input = read()

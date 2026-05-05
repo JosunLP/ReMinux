@@ -12,6 +12,15 @@ programListPath = "/temp/apt/programs.ls",
 manifestDirectory = "/etc/apt/list/",
 manifestCacheDirectory = "/temp/apt/manifest/",
 mapCacheDirectory = "/temp/apt/map/",
+githubRepo = "JosunLP/ReMinux",
+githubDefaultRef = "main",
+githubApiBase = "https://api.github.com/repos/JosunLP/ReMinux/",
+latestReleaseResolved = false,
+latestReleaseTag = nil,
+legacySources = {
+"https://minux.cc/apt/2.0/soft/",
+"https://minux.cc/apt/2.0/os/",
+},
 buildJobs = {
 boot = {
 sourceDir = "/etc/apt/boot/",
@@ -34,15 +43,11 @@ label = "autorun",
 },
 presetSources = {
 stable = {
-"https://minux.cc/apt/2.0/soft/",
-"https://minux.cc/apt/2.0/os/",
 },
 beta = {
 "https://minux.cc/beta/",
 },
 goldcube = {
-"https://minux.cc/apt/2.0/soft/",
-"https://minux.cc/apt/2.0/os/",
 "https://goldcube.minux.cc/stable/",
 },
 },
@@ -105,9 +110,154 @@ function AptManager:isSourceAccessAllowed()
 return _G.admin == true or (_G.login ~= nil and _G.owner == _G.login)
 end
 
+function AptManager:normalizeSource(source)
+if source == nil or source == "" then
+return source
+end
+if string.sub(source, -1) ~= "/" then
+return source.."/"
+end
+return source
+end
+
+function AptManager:joinSourcePath(source, suffix)
+return self:normalizeSource(source)..suffix
+end
+
+function AptManager:readRemoteText(url, headers)
+if http.checkURL(url) ~= true then
+return nil
+end
+
+local response = http.get(url, headers)
+if response == nil then
+return nil
+end
+
+local contents = response.readAll()
+response.close()
+if contents == nil or contents == "" then
+return nil
+end
+
+return contents
+end
+
+function AptManager:getJsonDecoder()
+if textutils ~= nil then
+return textutils.unserialiseJSON or textutils.unserializeJSON
+end
+return nil
+end
+
+function AptManager:getLatestReleaseTag()
+if self.latestReleaseResolved == true then
+return self.latestReleaseTag
+end
+self.latestReleaseResolved = true
+
+local body = self:readRemoteText(self.githubApiBase.."releases/latest", {
+["User-Agent"] = "ReMinux",
+Accept = "application/vnd.github+json",
+})
+if body == nil then
+self.latestReleaseTag = nil
+return nil
+end
+
+local decoder = self:getJsonDecoder()
+if decoder ~= nil then
+local ok, data = pcall(decoder, body)
+if ok == true and type(data) == "table" and type(data.tag_name) == "string" and data.tag_name ~= "" then
+self.latestReleaseTag = data.tag_name
+return data.tag_name
+end
+end
+
+local tag = string.match(body, [["tag_name"%s*:%s*"([^"]+)"]])
+if tag ~= nil and tag ~= "" then
+self.latestReleaseTag = tag
+return tag
+end
+
+self.latestReleaseTag = nil
+return nil
+end
+
+function AptManager:getReMinuxSourceForRef(ref)
+return "https://raw.githubusercontent.com/"..self.githubRepo.."/"..ref.."/etc/apt/"
+end
+
+function AptManager:getDefaultReMinuxSource()
+local latestTag = self:getLatestReleaseTag()
+if latestTag ~= nil then
+return self:getReMinuxSourceForRef(latestTag)
+end
+return self:getReMinuxSourceForRef(self.githubDefaultRef)
+end
+
+function AptManager:dedupeSources(sources)
+local unique = {}
+local seen = {}
+for index = 1, #sources do
+local source = self:normalizeSource(sources[index])
+if type(source) == "string" and source ~= "" and seen[source] ~= true then
+seen[source] = true
+table.insert(unique, source)
+end
+end
+return unique
+end
+
+function AptManager:isOfficialReMinuxSource(source)
+source = self:normalizeSource(source)
+if type(source) ~= "string" or source == "" then
+return false
+end
+for index = 1, #self.legacySources do
+if source == self:normalizeSource(self.legacySources[index]) then
+return true
+end
+end
+return string.match(source, "^https://raw%.githubusercontent%.com/"..self.githubRepo.."/.-/etc/apt/?$") ~= nil
+end
+
+function AptManager:getPreferredSources(packname, sources)
+local preferred = {}
+local useOfficialSource = packname == "minux-main" and #sources == 0
+for index = 1, #sources do
+if packname == "minux-main" and self:isOfficialReMinuxSource(sources[index]) then
+useOfficialSource = true
+break
+end
+end
+if useOfficialSource == true then
+table.insert(preferred, self:getDefaultReMinuxSource())
+end
+for index = 1, #sources do
+table.insert(preferred, sources[index])
+end
+return self:dedupeSources(preferred)
+end
+
 function AptManager:getPresetSources(source)
 if source == "default" then
 source = "stable"
+end
+
+local copy = {}
+if source == "stable" then
+table.insert(copy, self:getDefaultReMinuxSource())
+for index = 1, #self.legacySources do
+table.insert(copy, self.legacySources[index])
+end
+return self:dedupeSources(copy)
+end
+
+if source == "goldcube" then
+for index = 1, #self.legacySources do
+table.insert(copy, self.legacySources[index])
+end
 end
 
 local preset = self.presetSources[source]
@@ -115,11 +265,10 @@ if preset == nil then
 return nil
 end
 
-local copy = {}
 for index = 1, #preset do
 copy[index] = preset[index]
 end
-return copy
+return self:dedupeSources(copy)
 end
 
 function AptManager:buildFromDirectory(job)
@@ -172,6 +321,7 @@ table.insert(sources, packageSource)
 end
 end
 
+sources = self:getPreferredSources(packname, sources)
 if #sources == 0 then
 minux.debug("Error:102:", "apt")
 return nil, 102
@@ -182,18 +332,8 @@ return sources
 end
 
 function AptManager:readRepositoryManifest(source)
-local manifestUrl = source.."manifest/APT.db"
-if http.checkURL(manifestUrl) ~= true then
-return nil, "server unreachable"
-end
-
-local response = http.get(manifestUrl)
-if response == nil then
-return nil, "server unreachable"
-end
-
-local contents = response.readAll()
-response.close()
+local manifestUrl = self:joinSourcePath(source, "manifest/APT.db")
+local contents = self:readRemoteText(manifestUrl)
 if contents == nil or contents == "" then
 return nil, "server unreachable"
 end
@@ -202,18 +342,20 @@ return contents
 end
 
 function AptManager:appendSource(source)
+source = self:normalizeSource(source)
 local sources = self:readLines(self.sourceListPath)
 table.insert(sources, source)
-self:writeLines(self.sourceListPath, sources)
+self:writeLines(self.sourceListPath, self:dedupeSources(sources))
 end
 
 function AptManager:removeSource(source)
+source = self:normalizeSource(source)
 local sources = self:readLines(self.sourceListPath)
 local updated = {}
 local removed = false
 
 for index = 1, #sources do
-if removed == false and sources[index] == source then
+if removed == false and self:normalizeSource(sources[index]) == source then
 removed = true
 else
 table.insert(updated, sources[index])
@@ -305,9 +447,10 @@ local packageSource = nil
 minux.debug("start search for pack", "apt")
 for index = 1, #sources do
 local source = sources[index]
-minux.debug("trying "..source.."manifest/"..packname..".db", "apt")
+local manifestUrl = manager:joinSourcePath(source, "manifest/"..packname..".db")
+minux.debug("trying "..manifestUrl, "apt")
 fs.delete(manifestPath)
-local downloaded = minux.download(source.."manifest/"..packname..".db", manifestPath)
+local downloaded = minux.download(manifestUrl, manifestPath)
 if downloaded == true then
 local temp = fs.open(manifestPath, "r")
 local manifestState = temp.readLine()
@@ -369,10 +512,10 @@ fs.delete(keyfile)
 end
 
 manager:ensureDirectory(manager.mapCacheDirectory)
-local downloadSource = packageSource.."repository/"..packname..".map"
+local downloadSource = manager:joinSourcePath(packageSource, "repository/"..packname..".map")
 local isPhp = minux.findline(manifestPath, "php=true")
 if isPhp ~= false and isPhp ~= nil then
-downloadSource = packageSource.."repository/map.php?id="..packname.."&type=map&type=clean"
+downloadSource = manager:joinSourcePath(packageSource, "repository/map.php?id="..packname.."&type=map&type=clean")
 end
 
 local mapPath = manager.mapCacheDirectory..packname..".map"
@@ -473,7 +616,7 @@ for index = 1, #installedPackages do
 		for sourceIndex = 1, #sourceList do
 			local source = sourceList[sourceIndex]
 			minux.debug("trying:"..source.."/"..nextpack, "apt")
-			minux.download(source.."/manifest/"..nextpack..".db", manifestCache)
+			minux.download(manager:joinSourcePath(source, "manifest/"..nextpack..".db"), manifestCache)
 			local line = minux.findline(manifestCache, "AIF=true")
 			if line ~= nil and line ~= false then
 				serverFound = true
@@ -559,6 +702,7 @@ end
 
 function checksource(source)
 	expect(1, source, "string")
+	source = manager:normalizeSource(source)
 	local line = minux.findline(manager.sourceListPath, source)
 	return line ~= false and line ~= nil
 end

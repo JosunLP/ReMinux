@@ -35,6 +35,12 @@ remove an app
 -u : 'update', updates 
 an app, if no app name 
 is provided update all.
+for 'minux-main', apt
+prefers the latest
+GitHub Release from
+this repository and
+falls back to 'main'
+if no release exists.
 
 -U : 'forced update', 
 force update all.
@@ -78,8 +84,9 @@ programs are installed
 on the machine, in case 
 of corruption.
 
-/etc/apt/version -keeps
- the version files.
+/etc/apt/list - also
+stores the installed
+manifest versions.
 changing these files 
 will alter the known
 version and trigger an 

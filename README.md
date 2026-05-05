@@ -10,7 +10,7 @@
 ## Features
 
 - **Multi-user authentication** — local or network (AUTH server) login, with optional password encryption
-- **APT-style package manager** — install, remove, and update packages from hosted repositories
+- **APT-style package manager** — install, remove, and update packages from hosted repositories, with ReMinux itself tracking GitHub Releases
 - **Configurable UI** — choose between `workspace`, `menu`, `prompt`, or plain `craftos` as your shell
 - **Peripheral auto-detection** — modems, monitors, printers, and speakers are detected on boot
 - **Crash handler** — a staged watchdog prevents boot loops and offers a repair shell
@@ -36,7 +36,7 @@
    ```
    wget https://raw.githubusercontent.com/JosunLP/ReMinux/main/tmp/minux_netinstall.lua /startup.lua
    ```
-2. Reboot the computer. The graphical installer will guide you through installation type and source selection. By default the installer fetches ReMinux directly from this Git repository (`raw.githubusercontent.com/JosunLP/ReMinux`); you can also point it at a different fork, branch, or any custom raw URL, and the legacy `minux.cc` APT installer is still available as a fallback.
+2. Reboot the computer. The graphical installer will guide you through installation type and source selection. By default it prefers the latest GitHub Release from this repository and falls back to `main` when no release is published; you can also point it at a different fork, branch, or any custom raw URL, and the legacy `minux.cc` APT installer is still available as a fallback.
 
 ### Manual installation
 
@@ -215,6 +215,8 @@ apt -l                # List installed packages
 apt -la               # List packages available from sources
 apt -ls               # List active sources
 ```
+
+For the built-in `minux-main` package, ReMinux now prefers the repository's latest GitHub Release as the update source and only falls back to the `main` branch when no release is available.
 
 ---
 
