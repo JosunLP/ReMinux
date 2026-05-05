@@ -35,9 +35,25 @@ remove an app
 -u : 'update', updates 
 an app, if no app name 
 is provided update all.
+for repository packages
+listed in
+'/etc/apt/manifest/APT.db',
+apt
+prefers the latest
+GitHub Release from
+this repository and
+falls back to 'main'
+if no release exists.
 
 -U : 'forced update', 
 force update all.
+
+-v : 'version', shows
+installed and remote
+version information.
+if no app name is
+given it checks
+'minux-main'.
 
 -s : 'source' ,sets an 
 additional repo source
@@ -78,8 +94,11 @@ programs are installed
 on the machine, in case 
 of corruption.
 
-/etc/apt/version -keeps
- the version files.
+/etc/apt/list - keeps
+the installed package
+manifests, including
+the version metadata
+used for update checks.
 changing these files 
 will alter the known
 version and trigger an 
@@ -92,3 +111,12 @@ this file containts the
 apt repository sources, 
 you can delete the ones 
 you don't want
+
+release tags for
+repository packages
+should
+follow 'vX.Y.Z'.
+suffixed tags are
+treated as
+prereleases and
+ignored by updates.

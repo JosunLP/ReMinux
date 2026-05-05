@@ -3,6 +3,12 @@
 local AptManager = {}
 AptManager.__index = AptManager
 
+local APT_ERROR_PACKAGE_NOT_FOUND = 105
+local APT_ERROR_SOURCE_UNAVAILABLE = 111
+local VERSION_LESS = -1
+local VERSION_EQUAL = 0
+local VERSION_GREATER = 1
+
 function AptManager.new()
 return setmetatable({
 installedListPath = "/etc/apt/list/installed.db",
@@ -12,6 +18,27 @@ programListPath = "/temp/apt/programs.ls",
 manifestDirectory = "/etc/apt/list/",
 manifestCacheDirectory = "/temp/apt/manifest/",
 mapCacheDirectory = "/temp/apt/map/",
+githubRepo = "JosunLP/ReMinux",
+githubDefaultRef = "main",
+githubApiBase = "https://api.github.com/repos/JosunLP/ReMinux/",
+repositoryManifestPath = "/etc/apt/manifest/APT.db",
+releaseCachePath = "/temp/apt/github-release.db",
+releaseCacheTtl = 3600,
+releaseApiPerPage = 30,
+releaseApiMaxPages = 5,
+latestReleaseResolved = false,
+latestReleaseTag = nil,
+latestReleaseStatus = nil,
+repositoryPackages = nil,
+legacySources = {
+"https://minux.cc/apt/2.0/soft/",
+"https://minux.cc/apt/2.0/os/",
+},
+officialAptSources = {
+"https://minux.cc/apt/2.0/soft/",
+"https://minux.cc/apt/2.0/os/",
+"https://minux.cc/beta/",
+},
 buildJobs = {
 boot = {
 sourceDir = "/etc/apt/boot/",
@@ -105,9 +132,480 @@ function AptManager:isSourceAccessAllowed()
 return _G.admin == true or (_G.login ~= nil and _G.owner == _G.login)
 end
 
+function AptManager:normalizeSource(source)
+if source == nil or source == "" then
+return source
+end
+if string.sub(source, -1) ~= "/" then
+return source.."/"
+end
+return source
+end
+
+function AptManager:joinSourcePath(source, suffix)
+return self:normalizeSource(source)..suffix
+end
+
+function AptManager:readRemoteText(url, headers)
+if http.checkURL(url) ~= true then
+return nil
+end
+
+local response = http.get(url, headers)
+if response == nil then
+return nil
+end
+
+local contents = response.readAll()
+response.close()
+if contents == nil or contents == "" then
+return nil
+end
+
+return contents
+end
+
+function AptManager:getJsonDecoder()
+if textutils ~= nil then
+return textutils.unserialiseJSON or textutils.unserializeJSON
+end
+return nil
+end
+
+function AptManager:getCurrentEpochSeconds()
+if os.epoch == nil then
+return nil
+end
+return math.floor(os.epoch("utc") / 1000)
+end
+
+function AptManager:isReleaseTag(tag)
+return type(tag) == "string" and (
+string.match(tag, "^v?%d+%.%d+%.%d+$") ~= nil or
+string.match(tag, "^v?%d+%.%d+%.%d+[-+][%w%._%-]+$") ~= nil
+) 
+end
+
+function AptManager:isStableVersionTag(tag)
+return type(tag) == "string" and string.match(tag, "^v?%d+%.%d+%.%d+$") ~= nil
+end
+
+function AptManager:isOfficialRef(ref)
+return ref == self.githubDefaultRef or self:isReleaseTag(ref)
+end
+
+function AptManager:getRepositoryPackages()
+if self.repositoryPackages ~= nil and fs.exists(self.repositoryManifestPath) then
+return self.repositoryPackages
+end
+
+local packages = {}
+if fs.exists(self.repositoryManifestPath) then
+local lines = self:readLines(self.repositoryManifestPath)
+for index = 1, #lines do
+local entry = lines[index]
+if entry ~= "" and entry ~= "AIF" then
+packages[entry] = true
+end
+end
+else
+packages["minux-main"] = true
+end
+
+if fs.exists(self.repositoryManifestPath) then
+self.repositoryPackages = packages
+end
+return packages
+end
+
+function AptManager:isRepositoryPackage(packname)
+return self:getRepositoryPackages()[packname] == true
+end
+
+function AptManager:readLatestReleaseCache()
+local now = self:getCurrentEpochSeconds()
+if now == nil or fs.exists(self.releaseCachePath) == false then
+return false, nil, nil
+end
+
+local file = fs.open(self.releaseCachePath, "r")
+local cachedAt = tonumber(file.readLine())
+local cachedStatus = file.readLine()
+local cachedTag = file.readLine()
+file.close()
+if cachedAt == nil then
+return false, nil, nil
+end
+if now - cachedAt > self.releaseCacheTtl then
+return false, nil, nil
+end
+-- Older cache files stored only two lines: [timestamp, tag-or-NONE].
+if cachedTag == nil then
+cachedTag = cachedStatus
+if cachedTag == "NONE" then
+cachedStatus = "none"
+else
+cachedStatus = "ok"
+end
+end
+if cachedStatus == "none" then
+return true, "none", nil
+end
+if cachedStatus == "ok" and self:isStableVersionTag(cachedTag) then
+return true, "ok", cachedTag
+end
+return false, nil, nil
+end
+
+function AptManager:writeLatestReleaseCache(status, tag)
+local now = self:getCurrentEpochSeconds()
+if now == nil then
+return
+end
+self:ensureParentDirectory(self.releaseCachePath)
+local file = fs.open(self.releaseCachePath, "w")
+file.writeLine(now)
+file.writeLine(status)
+file.writeLine(tag or "")
+file.close()
+end
+
+function AptManager:parseVersion(version)
+if type(version) ~= "string" then
+return nil
+end
+local clean = string.gsub(version, "^v", "")
+local major, minor, patch, suffix = string.match(clean, "^(%d+)%.(%d+)%.(%d+)(.*)$")
+if major == nil then
+return nil
+end
+if suffix == "" then
+suffix = nil
+else
+local firstCharacter = string.sub(suffix, 1, 1)
+if firstCharacter == "-" or firstCharacter == "+" or firstCharacter == "." then
+suffix = string.sub(suffix, 2)
+end
+end
+return {
+major = tonumber(major),
+minor = tonumber(minor),
+patch = tonumber(patch),
+suffix = suffix,
+}
+end
+
+function AptManager:splitVersionSuffix(suffix)
+local tokens = {}
+local current = ""
+local currentIsDigit = nil
+local suffixValue = suffix or ""
+local suffixLength = string.len(suffixValue)
+for index = 1, suffixLength do
+local char = string.sub(suffixValue, index, index)
+if char == "." or char == "-" or char == "_" then
+if current ~= "" then
+table.insert(tokens, current)
+current = ""
+currentIsDigit = nil
+end
+else
+local isDigit = string.match(char, "%d") ~= nil
+if current ~= "" and currentIsDigit ~= isDigit then
+table.insert(tokens, current)
+current = char
+else
+current = current..char
+end
+currentIsDigit = isDigit
+end
+end
+if current ~= "" then
+table.insert(tokens, current)
+end
+return tokens
+end
+
+function AptManager:compareVersions(left, right)
+if left == right then
+return VERSION_EQUAL
+end
+local leftVersion = self:parseVersion(left)
+local rightVersion = self:parseVersion(right)
+if leftVersion == nil or rightVersion == nil then
+return nil
+end
+if leftVersion.major ~= rightVersion.major then
+return leftVersion.major > rightVersion.major and VERSION_GREATER or VERSION_LESS
+end
+if leftVersion.minor ~= rightVersion.minor then
+return leftVersion.minor > rightVersion.minor and VERSION_GREATER or VERSION_LESS
+end
+if leftVersion.patch ~= rightVersion.patch then
+return leftVersion.patch > rightVersion.patch and VERSION_GREATER or VERSION_LESS
+end
+if leftVersion.suffix == rightVersion.suffix then
+return VERSION_EQUAL
+elseif leftVersion.suffix == nil then
+return VERSION_GREATER
+elseif rightVersion.suffix == nil then
+return VERSION_LESS
+else
+local leftTokens = self:splitVersionSuffix(leftVersion.suffix)
+local rightTokens = self:splitVersionSuffix(rightVersion.suffix)
+local maxTokens = math.max(#leftTokens, #rightTokens)
+for index = 1, maxTokens do
+local leftToken = leftTokens[index]
+local rightToken = rightTokens[index]
+if leftToken ~= rightToken then
+if leftToken == nil then
+return VERSION_LESS
+elseif rightToken == nil then
+return VERSION_GREATER
+end
+local leftNumber = tonumber(leftToken)
+local rightNumber = tonumber(rightToken)
+if leftNumber ~= nil and rightNumber ~= nil then
+return leftNumber > rightNumber and VERSION_GREATER or VERSION_LESS
+elseif leftNumber ~= nil then
+return VERSION_LESS
+elseif rightNumber ~= nil then
+return VERSION_GREATER
+elseif leftToken > rightToken then
+return VERSION_GREATER
+else
+return VERSION_LESS
+end
+end
+end
+return VERSION_EQUAL
+end
+end
+
+function AptManager:selectHighestReleaseTag(releases)
+if type(releases) ~= "table" then
+return nil
+end
+local bestTag = nil
+for index = 1, #releases do
+local release = releases[index]
+local tag = release.tag_name
+if type(release) == "table" and release.draft ~= true and release.prerelease ~= true and self:isStableVersionTag(tag) then
+if bestTag == nil or self:compareVersions(tag, bestTag) == VERSION_GREATER then
+bestTag = tag
+end
+end
+end
+return bestTag
+end
+
+function AptManager:fetchReleasePage(page)
+local body = self:readRemoteText(self.githubApiBase.."releases?per_page="..self.releaseApiPerPage.."&page="..page, {
+["User-Agent"] = "ReMinux",
+Accept = "application/vnd.github+json",
+})
+if body == nil then
+return nil, "error"
+end
+
+local decoder = self:getJsonDecoder()
+if decoder == nil then
+return nil, "error"
+end
+
+local ok, data = pcall(decoder, body)
+if ok ~= true or type(data) ~= "table" then
+return nil, "error"
+end
+return data, nil
+end
+
+function AptManager:getLatestReleaseTag()
+if self.latestReleaseResolved == true then
+return self.latestReleaseTag, self.latestReleaseStatus
+end
+
+local cacheFound, cachedStatus, cachedTag = self:readLatestReleaseCache()
+if cacheFound == true then
+self.latestReleaseResolved = true
+self.latestReleaseStatus = cachedStatus
+self.latestReleaseTag = cachedTag
+return cachedTag, cachedStatus
+end
+
+self.latestReleaseStatus = "pending"
+self.latestReleaseTag = nil
+local bestTag = nil
+for page = 1, self.releaseApiMaxPages do
+local releases, pageError = self:fetchReleasePage(page)
+if pageError ~= nil then
+self.latestReleaseStatus = "error"
+return nil, "error"
+end
+local pageBestTag = self:selectHighestReleaseTag(releases)
+if pageBestTag ~= nil and (bestTag == nil or self:compareVersions(pageBestTag, bestTag) == VERSION_GREATER) then
+bestTag = pageBestTag
+end
+if #releases < self.releaseApiPerPage then
+break
+end
+end
+
+if bestTag ~= nil then
+self.latestReleaseResolved = true
+self.latestReleaseStatus = "ok"
+self.latestReleaseTag = bestTag
+self:writeLatestReleaseCache("ok", bestTag)
+return bestTag, "ok"
+end
+
+self.latestReleaseResolved = true
+self.latestReleaseStatus = "none"
+self.latestReleaseTag = nil
+self:writeLatestReleaseCache("none", "")
+return nil, "none"
+end
+
+function AptManager:getReMinuxSourceForRef(ref)
+return "https://raw.githubusercontent.com/"..self.githubRepo.."/"..ref.."/etc/apt/"
+end
+
+function AptManager:getDefaultReMinuxSource()
+local latestTag, latestStatus = self:getLatestReleaseTag()
+if latestStatus == "ok" and latestTag ~= nil then
+return self:getReMinuxSourceForRef(latestTag), "ok"
+end
+if latestStatus == "none" then
+return self:getReMinuxSourceForRef(self.githubDefaultRef), "none"
+end
+return nil, latestStatus
+end
+
+function AptManager:dedupeSources(sources)
+local unique = {}
+local seen = {}
+for index = 1, #sources do
+local source = self:normalizeSource(sources[index])
+if type(source) == "string" and source ~= "" and seen[source] ~= true then
+seen[source] = true
+table.insert(unique, source)
+end
+end
+return unique
+end
+
+function AptManager:escapePattern(text)
+return string.gsub(text, "([%(%)%.%%%+%-%*%?%[%]%^%$])", "%%%1")
+end
+
+function AptManager:parseOfficialSourceRef(source)
+source = self:normalizeSource(source)
+if type(source) ~= "string" or source == "" then
+return nil
+end
+local ref = string.match(source, "^https://raw%.githubusercontent%.com/"..self:escapePattern(self.githubRepo).."/([^/]+)/etc/apt/?$")
+if self:isOfficialRef(ref) then
+return ref
+end
+return nil
+end
+
+function AptManager:getPackageSource(packname)
+local packdb = self.manifestDirectory..packname..".db"
+if fs.exists(packdb) ~= true then
+return nil
+end
+local lineNumber = minux.findline(packdb, "https://")
+if lineNumber ~= false and lineNumber ~= nil then
+return self:normalizeSource(minux.printline(packdb, lineNumber))
+end
+return nil
+end
+
+function AptManager:isOfficialReMinuxSource(source)
+source = self:normalizeSource(source)
+if type(source) ~= "string" or source == "" then
+return false
+end
+for index = 1, #self.officialAptSources do
+if source == self:normalizeSource(self.officialAptSources[index]) then
+return true
+end
+end
+return self:parseOfficialSourceRef(source) ~= nil
+end
+
+function AptManager:isStableOfficialSource(source)
+source = self:normalizeSource(source)
+if type(source) ~= "string" or source == "" then
+return false
+end
+for index = 1, #self.legacySources do
+if source == self:normalizeSource(self.legacySources[index]) then
+return true
+end
+end
+local ref = self:parseOfficialSourceRef(source)
+return ref == self.githubDefaultRef or self:isStableVersionTag(ref)
+end
+
+function AptManager:shouldPreferOfficialReleaseSource(sources, packageSource)
+if #sources == 0 then
+return packageSource == nil or self:isStableOfficialSource(packageSource)
+end
+
+local sawStableSource = false
+for index = 1, #sources do
+local source = self:normalizeSource(sources[index])
+if type(source) == "string" and source ~= "" then
+if self:isStableOfficialSource(source) then
+sawStableSource = true
+else
+return false
+end
+end
+end
+if packageSource ~= nil then
+if self:isStableOfficialSource(packageSource) ~= true then
+return false
+end
+sawStableSource = true
+end
+return sawStableSource
+end
+
+function AptManager:getPreferredSources(packname, configuredSources, packageSource)
+local preferred = {}
+local useOfficialSource = false
+if self:isRepositoryPackage(packname) == true then
+useOfficialSource = self:shouldPreferOfficialReleaseSource(configuredSources, packageSource)
+end
+if useOfficialSource == true then
+local officialSource = self:getDefaultReMinuxSource()
+if officialSource ~= nil then
+table.insert(preferred, officialSource)
+end
+end
+for index = 1, #configuredSources do
+table.insert(preferred, configuredSources[index])
+end
+if packageSource ~= nil then
+table.insert(preferred, packageSource)
+end
+return self:dedupeSources(preferred)
+end
+
 function AptManager:getPresetSources(source)
 if source == "default" then
 source = "stable"
+end
+
+local copy = {}
+if source == "stable" then
+for index = 1, #self.legacySources do
+table.insert(copy, self.legacySources[index])
+end
+return self:dedupeSources(copy)
 end
 
 local preset = self.presetSources[source]
@@ -115,11 +613,10 @@ if preset == nil then
 return nil
 end
 
-local copy = {}
 for index = 1, #preset do
 copy[index] = preset[index]
 end
-return copy
+return self:dedupeSources(copy)
 end
 
 function AptManager:buildFromDirectory(job)
@@ -161,17 +658,16 @@ for index = 1, #sources do
 minux.debug("apt-source:"..sources[index], "apt")
 end
 
+local packageSource = self:getPackageSource(packname)
 local packdb = self.manifestDirectory..packname..".db"
 if fs.exists(packdb) then
 minux.debug("package.db file found", "apt")
-local lineNumber = minux.findline(packdb, "https://")
-if lineNumber ~= false and lineNumber ~= nil then
-local packageSource = minux.printline(packdb, lineNumber)
+if packageSource ~= nil then
 minux.debug("apt-source:"..packageSource, "apt")
-table.insert(sources, packageSource)
 end
 end
 
+sources = self:getPreferredSources(packname, sources, packageSource)
 if #sources == 0 then
 minux.debug("Error:102:", "apt")
 return nil, 102
@@ -182,18 +678,8 @@ return sources
 end
 
 function AptManager:readRepositoryManifest(source)
-local manifestUrl = source.."manifest/APT.db"
-if http.checkURL(manifestUrl) ~= true then
-return nil, "server unreachable"
-end
-
-local response = http.get(manifestUrl)
-if response == nil then
-return nil, "server unreachable"
-end
-
-local contents = response.readAll()
-response.close()
+local manifestUrl = self:joinSourcePath(source, "manifest/APT.db")
+local contents = self:readRemoteText(manifestUrl)
 if contents == nil or contents == "" then
 return nil, "server unreachable"
 end
@@ -201,19 +687,72 @@ end
 return contents
 end
 
+function AptManager:getAvailablePackage(packname, cacheSuffix)
+local sources, sourceError = self:findSources(packname)
+if type(sources) ~= "table" then
+return nil, nil, sourceError
+end
+
+self:ensureDirectory(self.manifestCacheDirectory)
+local manifestCache = self.manifestCacheDirectory..packname.."."..(cacheSuffix or "info")..".db"
+local sawReachableSource = false
+local sourceUnavailable = false
+for index = 1, #sources do
+local source = sources[index]
+local manifestUrl = self:joinSourcePath(source, "manifest/"..packname..".db")
+fs.delete(manifestCache)
+local downloaded = minux.download(manifestUrl, manifestCache)
+if downloaded == true then
+local line = minux.findline(manifestCache, "AIF=true")
+if line ~= nil and line ~= false then
+local version = apt.version(manifestCache)
+fs.delete(manifestCache)
+return source, version, nil
+end
+local _, repositoryError = self:readRepositoryManifest(source)
+if repositoryError ~= nil then
+sourceUnavailable = true
+else
+sawReachableSource = true
+end
+else
+local _, repositoryError = self:readRepositoryManifest(source)
+if repositoryError ~= nil then
+sourceUnavailable = true
+else
+sawReachableSource = true
+end
+end
+end
+
+if fs.exists(manifestCache) then
+fs.delete(manifestCache)
+end
+if sawReachableSource == true then
+return nil, nil, nil
+end
+if sourceUnavailable == true then
+return nil, nil, APT_ERROR_SOURCE_UNAVAILABLE
+end
+return nil, nil, nil
+end
+
 function AptManager:appendSource(source)
+source = self:normalizeSource(source)
 local sources = self:readLines(self.sourceListPath)
 table.insert(sources, source)
-self:writeLines(self.sourceListPath, sources)
+self:writeLines(self.sourceListPath, self:dedupeSources(sources))
 end
 
 function AptManager:removeSource(source)
+source = self:normalizeSource(source)
 local sources = self:readLines(self.sourceListPath)
 local updated = {}
 local removed = false
 
 for index = 1, #sources do
-if removed == false and sources[index] == source then
+local nextSource = self:normalizeSource(sources[index])
+if removed == false and nextSource == source then
 removed = true
 else
 table.insert(updated, sources[index])
@@ -305,9 +844,10 @@ local packageSource = nil
 minux.debug("start search for pack", "apt")
 for index = 1, #sources do
 local source = sources[index]
-minux.debug("trying "..source.."manifest/"..packname..".db", "apt")
+local manifestUrl = manager:joinSourcePath(source, "manifest/"..packname..".db")
+minux.debug("trying "..manifestUrl, "apt")
 fs.delete(manifestPath)
-local downloaded = minux.download(source.."manifest/"..packname..".db", manifestPath)
+local downloaded = minux.download(manifestUrl, manifestPath)
 if downloaded == true then
 local temp = fs.open(manifestPath, "r")
 local manifestState = temp.readLine()
@@ -369,10 +909,10 @@ fs.delete(keyfile)
 end
 
 manager:ensureDirectory(manager.mapCacheDirectory)
-local downloadSource = packageSource.."repository/"..packname..".map"
+local downloadSource = manager:joinSourcePath(packageSource, "repository/"..packname..".map")
 local isPhp = minux.findline(manifestPath, "php=true")
 if isPhp ~= false and isPhp ~= nil then
-downloadSource = packageSource.."repository/map.php?id="..packname.."&type=map&type=clean"
+downloadSource = packageSource.."repository/map.php?id="..packname.."&type=map&clean=true"
 end
 
 local mapPath = manager.mapCacheDirectory..packname..".map"
@@ -397,6 +937,7 @@ minux.debug("getpack:E110:keyfile check failed", "apt")
 return 110
 end
 
+manager.repositoryPackages = nil
 minux.debug("getpack:ending", "apt")
 return true
 end
@@ -439,8 +980,26 @@ fs.delete(manifestFile)
 minux.debug("updating configuration", "apt")
 minux.removestring(manager.installedListPath, packname)
 apt.rebuildgenerated()
+manager.repositoryPackages = nil
 minux.debug("Finished", "apt")
 return true
+end
+
+function AptManager:shouldUpdatePackage(installedVersion, availableVersion, forcedupdate)
+if forcedupdate == true then
+return true
+end
+if availableVersion == nil then
+return false
+end
+if installedVersion == nil then
+return true
+end
+local comparison = self:compareVersions(availableVersion, installedVersion)
+if comparison ~= nil then
+return comparison == VERSION_GREATER
+end
+return availableVersion ~= installedVersion
 end
 
 function update(packname)
@@ -448,8 +1007,26 @@ expect(1, packname, "string", "nil")
 verifyconfig()
 
 local forcedupdate = packname == "-f"
-if packname ~= nil and forcedupdate ~= true and apt.checkinstall(packname) == true then
+if packname ~= nil and forcedupdate ~= true then
+if apt.checkinstall(packname) ~= true then
+return false
+end
 minux.debug("update:updating:"..packname, "apt")
+local installedVersion = nil
+local manifestPath = manager.manifestDirectory..packname..".db"
+if fs.exists(manifestPath) then
+installedVersion = apt.version(manifestPath)
+end
+local _, availableVersion, sourceError = manager:getAvailablePackage(packname, "single")
+if sourceError ~= nil then
+return sourceError
+end
+if availableVersion == nil then
+return APT_ERROR_PACKAGE_NOT_FOUND
+end
+if manager:shouldUpdatePackage(installedVersion, availableVersion, false) ~= true then
+return true
+end
 local updateResult = apt.getpack(packname)
 if updateResult == true then
 apt.rebuildgenerated()
@@ -459,51 +1036,84 @@ return updateResult
 end
 
 minux.debug("reading installed.db", "apt")
-manager:ensureDirectory(manager.manifestCacheDirectory)
 local installedPackages = manager:readLines(manager.installedListPath)
 for index = 1, #installedPackages do
-	local nextpack = installedPackages[index]
-	minux.debug("finding source", "apt")
-	local sourceList, sourceError = apt.findsource(nextpack)
-	if type(sourceList) ~= "table" then
-		minux.debug("update:source lookup failed:"..nextpack..":"..tostring(sourceError), "apt")
-	else
-		local serverFound = false
-		local manifestCache = manager.manifestCacheDirectory..nextpack..".db"
-		for sourceIndex = 1, #sourceList do
-			local source = sourceList[sourceIndex]
-			minux.debug("trying:"..source.."/"..nextpack, "apt")
-			minux.download(source.."/manifest/"..nextpack..".db", manifestCache)
-			local line = minux.findline(manifestCache, "AIF=true")
-			if line ~= nil and line ~= false then
-				serverFound = true
-				break
-			end
-		end
-
-		if serverFound == true then
-			local installedVersion = "unknown"
-			local newVersion = apt.version(manifestCache)
-			if fs.exists(manager.manifestDirectory..nextpack..".db") then
-				installedVersion = apt.version(manager.manifestDirectory..nextpack..".db")
-			end
-			local packageUpToDate = newVersion == installedVersion
-			if packageUpToDate == true then
-				minux.debug("version number matches", "apt")
-			else
-				minux.debug("version number mismatch", "apt")
-			end
-			if forcedupdate == true or packageUpToDate ~= true then
-				minux.debug("updating pack:", "apt")
-				apt.getpack(nextpack)
-			end
-		end
-	end
+local nextpack = installedPackages[index]
+minux.debug("finding source", "apt")
+local installedVersion = nil
+local manifestPath = manager.manifestDirectory..nextpack..".db"
+if fs.exists(manifestPath) then
+installedVersion = apt.version(manifestPath)
+end
+local _, availableVersion, sourceError = manager:getAvailablePackage(nextpack, "update")
+if sourceError ~= nil then
+minux.debug("update:source lookup failed:"..nextpack..":"..tostring(sourceError), "apt")
+elseif availableVersion == nil then
+minux.debug("update:package manifest unavailable:"..nextpack, "apt")
+else
+local packageNeedsUpdate = manager:shouldUpdatePackage(installedVersion, availableVersion, forcedupdate)
+if packageNeedsUpdate == true then
+minux.debug("updating pack:", "apt")
+apt.getpack(nextpack)
+else
+minux.debug("update:package already current or newer:"..nextpack, "apt")
+end
+end
 end
 
 minux.debug("updating configuration", "apt")
 apt.rebuildgenerated()
 return true
+end
+
+function packageinfo(packname)
+expect(1, packname, "string", "nil")
+verifyconfig()
+
+if packname == nil then
+packname = "minux-main"
+end
+
+local info = {
+package = packname,
+installed = apt.checkinstall(packname),
+installedVersion = nil,
+availableVersion = nil,
+source = nil,
+releaseTag = nil,
+releaseStatus = "disabled",
+releaseTracking = false,
+repositoryPackage = manager:isRepositoryPackage(packname),
+}
+
+local installedManifest = manager.manifestDirectory..packname..".db"
+if fs.exists(installedManifest) then
+info.installedVersion = apt.version(installedManifest)
+end
+
+local configuredSources = manager:readLines(manager.sourceListPath)
+local packageSource = manager:getPackageSource(packname)
+if info.repositoryPackage == true and manager:shouldPreferOfficialReleaseSource(configuredSources, packageSource) == true then
+info.releaseTracking = true
+local latestTag, latestStatus = manager:getLatestReleaseTag()
+info.releaseStatus = latestStatus or "error"
+if latestStatus == "ok" then
+info.releaseTag = latestTag
+end
+end
+local source, availableVersion, sourceError = manager:getAvailablePackage(packname, "info")
+if sourceError ~= nil then
+info.error = sourceError
+return info
+end
+if source == nil or availableVersion == nil then
+info.error = APT_ERROR_PACKAGE_NOT_FOUND
+return info
+end
+info.source = source
+info.availableVersion = availableVersion
+
+return info
 end
 
 function version(dbfile)
@@ -559,6 +1169,7 @@ end
 
 function checksource(source)
 	expect(1, source, "string")
+	source = manager:normalizeSource(source)
 	local line = minux.findline(manager.sourceListPath, source)
 	return line ~= false and line ~= nil
 end

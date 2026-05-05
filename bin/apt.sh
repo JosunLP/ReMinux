@@ -15,6 +15,8 @@ setupdate = "-a",
 ["list-installed"] = "-l",
 ["list-available"] = "-la",
 ["list-source"] = "-ls",
+version = "-v",
+status = "-v",
 }
 
 if commandAliases[command] ~= nil then
@@ -64,6 +66,46 @@ local result = apt.update(targetPackage)
 return printResult(result == true, "Update complete", "Update failed")
 end
 
+local function describeLookupError(errorCode)
+if errorCode == 102 then
+return "no package sources configured"
+elseif errorCode == 105 then
+return "package not found"
+elseif errorCode == 111 then
+return "source unavailable"
+end
+return tostring(errorCode)
+end
+
+local function runVersion(targetPackage)
+local info = apt.packageinfo(targetPackage)
+if type(info) ~= "table" then
+print("Version lookup failed")
+return false
+end
+
+print("Package: " .. info.package)
+print("Installed: " .. tostring(info.installed))
+print("Installed version: " .. tostring(info.installedVersion or "unknown"))
+print("Available version: " .. tostring(info.availableVersion or "unknown"))
+if info.releaseTracking == true then
+if info.releaseStatus == "ok" then
+print("Latest GitHub release: " .. tostring(info.releaseTag))
+elseif info.releaseStatus == "none" then
+print("Latest GitHub release: none")
+elseif info.releaseStatus == "error" then
+print("Latest GitHub release: unavailable")
+end
+end
+if info.source ~= nil then
+print("Source: " .. info.source)
+end
+if info.error ~= nil then
+print("Lookup error: " .. describeLookupError(info.error))
+end
+return true
+end
+
 if command == "-i" and packageName ~= nil and (_G.admin == true or packageName == "auth-client") then
 runInstall(packageName)
 elseif command == "-r" and packageName ~= nil and _G.admin == true then
@@ -89,6 +131,8 @@ end
 shell.run("/bin/less.sh /temp/apt/programs.ls")
 elseif command == "-l" then
 shell.run("/bin/less.sh /etc/apt/list/installed.db")
+elseif command == "-v" then
+runVersion(packageName)
 elseif command == nil and apt.checkinstall("menu") == true then
 shell.run("/etc/minux-main/menu/soft.sys")
 else

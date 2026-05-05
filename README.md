@@ -10,7 +10,7 @@
 ## Features
 
 - **Multi-user authentication** — local or network (AUTH server) login, with optional password encryption
-- **APT-style package manager** — install, remove, and update packages from hosted repositories
+- **APT-style package manager** — install, remove, and update packages from hosted repositories, with repository-shipped packages tracking GitHub Releases
 - **Configurable UI** — choose between `workspace`, `menu`, `prompt`, or plain `craftos` as your shell
 - **Peripheral auto-detection** — modems, monitors, printers, and speakers are detected on boot
 - **Crash handler** — a staged watchdog prevents boot loops and offers a repair shell
@@ -36,7 +36,7 @@
    ```
    wget https://raw.githubusercontent.com/JosunLP/ReMinux/main/tmp/minux_netinstall.lua /startup.lua
    ```
-2. Reboot the computer. The graphical installer will guide you through installation type and source selection. By default the installer fetches ReMinux directly from this Git repository (`raw.githubusercontent.com/JosunLP/ReMinux`); you can also point it at a different fork, branch, or any custom raw URL, and the legacy `minux.cc` APT installer is still available as a fallback.
+2. Reboot the computer. The graphical installer will guide you through installation type and source selection. By default it prefers the latest GitHub Release from this repository and falls back to `main` when no release is published; you can also point it at a different fork, branch, or any custom raw URL, and the legacy `minux.cc` APT installer is still available as a fallback.
 
 ### Manual installation
 
@@ -209,12 +209,16 @@ apt -r <package>      # Remove a package
 apt -u                # Update all installed packages
 apt -U                # Force-update all packages
 apt -u <package>      # Update a single package
+apt -v [package]      # Show installed/available version information
 apt -s <source-url>   # Add a repository source
 apt -c <source-url>   # Remove a repository source
 apt -l                # List installed packages
 apt -la               # List packages available from sources
 apt -ls               # List active sources
 ```
+
+For packages shipped by this repository (as listed in `/etc/apt/manifest/APT.db`), ReMinux now prefers the repository's latest stable GitHub Release as the update source and only falls back to the `main` branch when no stable release is available.
+Stable release tags used by the updater should follow `vX.Y.Z`. Suffixed tags such as `X.Y.Z-suffix` are treated as prereleases and are not selected by automatic updates.
 
 ---
 

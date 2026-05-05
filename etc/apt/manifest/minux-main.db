@@ -1,5 +1,5 @@
 AIF=true
-https://minux.cc/apt/2.0/os/
+https://raw.githubusercontent.com/JosunLP/ReMinux/main/etc/apt/
 version=3.0.0
 author=minux-team
 php=false
@@ -9,6 +9,7 @@ php=false
 /boot/network/dhcp.sys
 /boot/network/update.sys
 /boot/alias.ls
+/etc/apt/manifest/APT.db
 /etc/apt/boot/minux-main.d
 /etc/minux-main/sys/menu.lua
 /etc/minux-main/sys/ecpw.sys

@@ -17,6 +17,9 @@
 
 local DEFAULT_REPO     = "JosunLP/ReMinux"
 local DEFAULT_BRANCH   = "main"
+local GITHUB_API_BASE  = "https://api.github.com/repos/"
+local RELEASES_PER_PAGE = 30
+local RELEASE_PAGES_MAX = 5
 local LEGACY_APT_OS    = "https://minux.cc/apt/2.0/os/"
 local LEGACY_APT_SOFT  = "https://minux.cc/apt/2.0/soft/"
 local LEGACY_APT_BETA  = "https://minux.cc/beta/"
@@ -180,14 +183,14 @@ end
 -- HTTP helpers
 ------------------------------------------------------------
 
-local function httpFetch(url)
+local function httpFetch(url, headers)
         if http == nil then
                 return nil, "http API not available"
         end
         if http.checkURL ~= nil and http.checkURL(url) ~= true then
                 return nil, "URL rejected by http.checkURL: " .. url
         end
-        local response = http.get(url)
+        local response = http.get(url, headers)
         if response == nil then
                 return nil, "request failed: " .. url
         end
@@ -197,6 +200,106 @@ local function httpFetch(url)
                 return nil, "empty response: " .. url
         end
         return body
+end
+
+local function decodeJson(body)
+        if textutils == nil then return nil end
+        local decoder = textutils.unserialiseJSON or textutils.unserializeJSON
+        if decoder == nil then return nil end
+        local ok, data = pcall(decoder, body)
+        if ok ~= true or type(data) ~= "table" then return nil end
+        return data
+end
+
+local function isReleaseTag(tag)
+        return type(tag) == "string" and (tag:match("^v?%d+%.%d+%.%d+$") ~= nil or tag:match("^v?%d+%.%d+%.%d+[-+][%w%._%-]+$") ~= nil)
+end
+
+local function isStableReleaseTag(tag)
+        return type(tag) == "string" and tag:match("^v?%d+%.%d+%.%d+$") ~= nil
+end
+
+local function parseVersion(version)
+        if type(version) ~= "string" then return nil end
+        local clean = version:gsub("^v", "")
+        local major, minor, patch = clean:match("^(%d+)%.(%d+)%.(%d+)$")
+        if major == nil then return nil end
+        return { major = tonumber(major), minor = tonumber(minor), patch = tonumber(patch) }
+end
+
+local function compareVersions(left, right)
+        if left == right then return 0 end
+        local leftVersion = parseVersion(left)
+        local rightVersion = parseVersion(right)
+        if leftVersion == nil or rightVersion == nil then return nil end
+        if leftVersion.major ~= rightVersion.major then
+                return leftVersion.major > rightVersion.major and 1 or -1
+        elseif leftVersion.minor ~= rightVersion.minor then
+                return leftVersion.minor > rightVersion.minor and 1 or -1
+        elseif leftVersion.patch ~= rightVersion.patch then
+                return leftVersion.patch > rightVersion.patch and 1 or -1
+        end
+        return 0
+end
+
+local function selectHighestReleaseTag(releases)
+        local bestTag = nil
+        for index = 1, #releases do
+                local release = releases[index]
+                local tag = release.tag_name
+                if type(release) == "table" and release.draft ~= true and release.prerelease ~= true and isStableReleaseTag(tag) then
+                        if bestTag == nil or compareVersions(tag, bestTag) == 1 then
+                                bestTag = tag
+                        end
+                end
+        end
+        return bestTag
+end
+
+local function fetchReleasePage(repo, page)
+        local body, err = httpFetch(GITHUB_API_BASE .. repo .. "/releases?per_page=" .. RELEASES_PER_PAGE .. "&page=" .. page, {
+                ["User-Agent"] = "ReMinux",
+                Accept = "application/vnd.github+json",
+        })
+        if body == nil then return nil, "error", err end
+
+        local data = decodeJson(body)
+        if type(data) ~= "table" then return nil, "error", "invalid GitHub API response" end
+        return data
+end
+
+local function fetchHighestReleaseTag(repo)
+        local bestTag = nil
+        for page = 1, RELEASE_PAGES_MAX do
+                local releases, status, err = fetchReleasePage(repo, page)
+                if releases == nil then return nil, status, err end
+
+                local pageBestTag = selectHighestReleaseTag(releases)
+                if pageBestTag ~= nil and (bestTag == nil or compareVersions(pageBestTag, bestTag) == 1) then
+                        bestTag = pageBestTag
+                end
+                if #releases < RELEASES_PER_PAGE then break end
+        end
+
+        if bestTag ~= nil then return bestTag, "ok" end
+        return nil, "none"
+end
+
+local function resolveRecommendedGitSource(repo, fallbackRef)
+        local latestTag, status, err = fetchHighestReleaseTag(repo)
+        local source
+        if status == "ok" and latestTag ~= nil then
+                source = Source.git(repo, latestTag)
+        elseif status == "none" then
+                source = Source.git(repo, fallbackRef)
+        else
+                return nil, err or "unable to read GitHub releases"
+        end
+        source.configuredSources = {
+                LEGACY_APT_SOFT,
+                LEGACY_APT_OS,
+        }
+        return source
 end
 
 local function downloadFile(source, repoPath, destPath)
@@ -309,9 +412,15 @@ local function installFromGit(source, profile)
 
         ensureParent("/usr/apt/source.ls")
         local sourceFile = fs.open("/usr/apt/source.ls", "w")
-        sourceFile.writeLine(source:urlFor("/etc/apt/"))
-        sourceFile.writeLine(LEGACY_APT_SOFT)
-        sourceFile.writeLine(LEGACY_APT_OS)
+        if type(source.configuredSources) == "table" and #source.configuredSources > 0 then
+                for index = 1, #source.configuredSources do
+                        sourceFile.writeLine(source.configuredSources[index])
+                end
+        else
+                sourceFile.writeLine(source:urlFor("/etc/apt/"))
+                sourceFile.writeLine(LEGACY_APT_SOFT)
+                sourceFile.writeLine(LEGACY_APT_OS)
+        end
         sourceFile.close()
 
         return #failed == 0
@@ -399,7 +508,7 @@ local function chooseSource()
         local source
         local profile = "default"
         showMenu("Installation Source", {
-                "GitHub: " .. DEFAULT_REPO .. " @ " .. DEFAULT_BRANCH .. " (recommended)",
+                "GitHub Release: latest stable for " .. DEFAULT_REPO .. " (recommended)",
                 "GitHub: " .. DEFAULT_REPO .. " (choose branch)",
                 "GitHub: custom repository",
                 "Custom raw URL (Git, Gitea, GitLab, ...)",
@@ -407,7 +516,15 @@ local function chooseSource()
                 "Legacy APT: minux.cc beta",
                 "Legacy APT: custom server",
         }, {
-                function() source = Source.git(DEFAULT_REPO, DEFAULT_BRANCH) end,
+                function()
+                        local resolvedSource, err = resolveRecommendedGitSource(DEFAULT_REPO, DEFAULT_BRANCH)
+                        if resolvedSource == nil then
+                                printError("GitHub Releases unavailable: " .. tostring(err))
+                                printError("Choose another installation source and try again.")
+                        else
+                                source = resolvedSource
+                        end
+                end,
                 function()
                         write("Branch (default 'main'): ")
                         local input = read()
