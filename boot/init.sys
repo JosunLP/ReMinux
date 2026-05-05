@@ -121,7 +121,7 @@ if term.isColor() then term.setTextColor(colors.white) end
 if fs.exists("/boot/alias.ls") then
 shell.run("/boot/alias.ls")
 else
-minux.debug("/boot/alias.ls missing - skipping (will be rebuilt by sanity check)", "minux")
+minux.debug("/boot/alias.ls not found - core aliases unavailable until APT regenerates it; boot continues with shell-builtin commands only", "minux")
 end
 
 -- Sanity check (update the same status line once complete)
