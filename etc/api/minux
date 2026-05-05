@@ -998,13 +998,16 @@ end
 function crypt(message, shift)
 expect(1, message, "string")
 expect(2, shift, "number")
+-- Caesar shift over the 26-letter alphabet and the 10 decimal digits.
+-- Lua's % operator returns a non-negative remainder for a positive divisor,
+-- so negative shifts (used by decrypt) are handled correctly.
 local result = {}
 for index = 1, #message do
 local char = message:sub(index, index)
 if char >= "a" and char <= "z" then
-char = string.char(((char:byte() - 96 + shift) % 24) + 96)
+char = string.char(((char:byte() - 97 + shift) % 26) + 97)
 elseif char >= "A" and char <= "Z" then
-char = string.char(((char:byte() - 65 + shift) % 24) + 65)
+char = string.char(((char:byte() - 65 + shift) % 26) + 65)
 elseif char >= "0" and char <= "9" then
 char = string.char(((char:byte() - 48 + shift) % 10) + 48)
 end

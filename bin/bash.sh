@@ -1,5 +1,5 @@
 -- bash shell launcher
-args = {...}
+local args = {...}
 local command = args[1]
 local txtcolor = args[2]
 local bgcolor = args[3]

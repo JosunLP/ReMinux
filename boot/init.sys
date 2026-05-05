@@ -118,7 +118,9 @@ screenpos(cursorver)
 print("[V:" .. _G.version .. "]")
 if term.isColor() then term.setTextColor(colors.white) end
 
+if fs.exists("/boot/alias.ls") then
 shell.run("/boot/alias.ls")
+end
 
 -- Sanity check (update the same status line once complete)
 printBootItem("Sanitycheck", "Running", true)
