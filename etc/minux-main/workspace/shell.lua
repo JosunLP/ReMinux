@@ -105,7 +105,7 @@ local function executeProgram(remainingRecursion, path, args, ioContext)
         end
 
         hashbangArgs[0] = originalHashbangPath
-        return executeProgram(remainingRecursion, resolvedHashbangProgram, hashbangArgs)
+        return executeProgram(remainingRecursion, resolvedHashbangProgram, hashbangArgs, ioContext)
     end
 
     contents = contents .. "\n" .. (file.readAll() or "")

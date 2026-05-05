@@ -59,7 +59,9 @@ important locations:
 /usr/local/auth/users 
 - this is where user 
 files are stored. for 
-now passwords are not 
-hashed.
+now passwords are kept
+in recoverable form
+(plain or encrypted),
+not hashed.
 empty passwords are
 rejected.
