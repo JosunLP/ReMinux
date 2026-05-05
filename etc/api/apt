@@ -97,11 +97,12 @@ file.close()
 end
 
 function AptManager:isPackageAccessAllowed(packname)
-return _G.admin == true or _G.owner == true or _G.owner == _G.login or packname == "auth-client"
+local isOwner = _G.owner == true or (_G.login ~= nil and _G.owner == _G.login)
+return _G.admin == true or isOwner or packname == "auth-client"
 end
 
 function AptManager:isSourceAccessAllowed()
-return _G.admin == true or _G.owner == _G.login
+return _G.admin == true or (_G.login ~= nil and _G.owner == _G.login)
 end
 
 function AptManager:getPresetSources(source)
