@@ -12,6 +12,8 @@ jobs:
   publish-release:
     name: Publish GitHub Release
     runs-on: ubuntu-latest
+    env:
+      RELEASE_TAG_PATTERN: '^v?[0-9]+\.[0-9]+\.[0-9]+([-+][0-9A-Za-z._-]+)?$'
 
     steps:
       - name: Checkout
@@ -25,7 +27,7 @@ jobs:
           TAG_NAME: ${{ github.ref_name }}
         run: |
           set -euo pipefail
-          if [[ ! "$TAG_NAME" =~ ^v?[0-9]+\.[0-9]+\.[0-9]+([-+][0-9A-Za-z._-]+)?$ ]]; then
+          if [[ ! "$TAG_NAME" =~ $RELEASE_TAG_PATTERN ]]; then
             echo "Release tags must match vX.Y.Z or X.Y.Z-suffix"
             exit 1
           fi
@@ -84,6 +86,10 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           TAG_NAME: ${{ github.ref_name }}
         run: |
+          if [[ ! "$TAG_NAME" =~ $RELEASE_TAG_PATTERN ]]; then
+            echo "Release tags must match vX.Y.Z or X.Y.Z-suffix"
+            exit 1
+          fi
           prerelease_flag=""
           if [[ ! "$TAG_NAME" =~ ^v?[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
             prerelease_flag="--prerelease"

@@ -18,6 +18,8 @@ githubApiBase = "https://api.github.com/repos/JosunLP/ReMinux/",
 repositoryManifestPath = "/etc/apt/manifest/APT.db",
 releaseCachePath = "/temp/apt/github-release.db",
 releaseCacheTtl = 3600,
+releaseApiPerPage = 30,
+releaseApiMaxPages = 5,
 latestReleaseResolved = false,
 latestReleaseTag = nil,
 latestReleaseStatus = nil,
@@ -273,8 +275,11 @@ return nil
 end
 if suffix == "" then
 suffix = nil
-elseif string.sub(suffix, 1, 1) == "-" or string.sub(suffix, 1, 1) == "+" or string.sub(suffix, 1, 1) == "." then
+else
+local firstCharacter = string.sub(suffix, 1, 1)
+if firstCharacter == "-" or firstCharacter == "+" or firstCharacter == "." then
 suffix = string.sub(suffix, 2)
+end
 end
 return {
 major = tonumber(major),
@@ -386,6 +391,27 @@ end
 return bestTag
 end
 
+function AptManager:fetchReleasePage(page)
+local body = self:readRemoteText(self.githubApiBase.."releases?per_page="..self.releaseApiPerPage.."&page="..page, {
+["User-Agent"] = "ReMinux",
+Accept = "application/vnd.github+json",
+})
+if body == nil then
+return nil, "error"
+end
+
+local decoder = self:getJsonDecoder()
+if decoder == nil then
+return nil, "error"
+end
+
+local ok, data = pcall(decoder, body)
+if ok ~= true or type(data) ~= "table" then
+return nil, "error"
+end
+return data, nil
+end
+
 function AptManager:getLatestReleaseTag()
 if self.latestReleaseResolved == true then
 return self.latestReleaseTag, self.latestReleaseStatus
@@ -399,37 +425,25 @@ self.latestReleaseTag = cachedTag
 return cachedTag, cachedStatus
 end
 
-local body = self:readRemoteText(self.githubApiBase.."releases?per_page=100", {
-["User-Agent"] = "ReMinux",
-Accept = "application/vnd.github+json",
-})
-if body == nil then
-self.latestReleaseResolved = true
-self.latestReleaseTag = nil
-self.latestReleaseStatus = "error"
-return nil, "error"
-end
-
-local decoder = self:getJsonDecoder()
-if decoder == nil then
-self.latestReleaseResolved = true
-self.latestReleaseTag = nil
-self.latestReleaseStatus = "error"
-return nil, "error"
-end
-
-local ok, data = pcall(decoder, body)
-if ok ~= true or type(data) ~= "table" then
-self.latestReleaseResolved = true
-self.latestReleaseTag = nil
-self.latestReleaseStatus = "error"
-return nil, "error"
-end
-
 self.latestReleaseResolved = true
 self.latestReleaseStatus = "none"
 self.latestReleaseTag = nil
-local bestTag = self:selectHighestReleaseTag(data)
+local bestTag = nil
+for page = 1, self.releaseApiMaxPages do
+local releases, pageError = self:fetchReleasePage(page)
+if pageError ~= nil then
+self.latestReleaseStatus = "error"
+return nil, "error"
+end
+local pageBestTag = self:selectHighestReleaseTag(releases)
+if pageBestTag ~= nil and (bestTag == nil or self:compareVersions(pageBestTag, bestTag) == 1) then
+bestTag = pageBestTag
+end
+if #releases < self.releaseApiPerPage then
+break
+end
+end
+
 if bestTag ~= nil then
 self.latestReleaseStatus = "ok"
 self.latestReleaseTag = bestTag

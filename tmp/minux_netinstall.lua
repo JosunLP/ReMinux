@@ -18,6 +18,8 @@
 local DEFAULT_REPO     = "JosunLP/ReMinux"
 local DEFAULT_BRANCH   = "main"
 local GITHUB_API_BASE  = "https://api.github.com/repos/"
+local RELEASES_PER_PAGE = 30
+local RELEASE_PAGES_MAX = 5
 local LEGACY_APT_OS    = "https://minux.cc/apt/2.0/os/"
 local LEGACY_APT_SOFT  = "https://minux.cc/apt/2.0/soft/"
 local LEGACY_APT_BETA  = "https://minux.cc/beta/"
@@ -240,19 +242,10 @@ local function compareVersions(left, right)
         return 0
 end
 
-local function fetchHighestReleaseTag(repo)
-        local body, err = httpFetch(GITHUB_API_BASE .. repo .. "/releases?per_page=100", {
-                ["User-Agent"] = "ReMinux",
-                Accept = "application/vnd.github+json",
-        })
-        if body == nil then return nil, "error", err end
-
-        local data = decodeJson(body)
-        if type(data) ~= "table" then return nil, "error", "invalid GitHub API response" end
-
+local function selectHighestReleaseTag(releases)
         local bestTag = nil
-        for index = 1, #data do
-                local release = data[index]
+        for index = 1, #releases do
+                local release = releases[index]
                 local tag = release.tag_name
                 if type(release) == "table" and release.draft ~= true and release.prerelease ~= true and isStableReleaseTag(tag) then
                         if bestTag == nil or compareVersions(tag, bestTag) == 1 then
@@ -260,10 +253,35 @@ local function fetchHighestReleaseTag(repo)
                         end
                 end
         end
+        return bestTag
+end
 
-        if bestTag ~= nil then
-                return bestTag, "ok"
+local function fetchReleasePage(repo, page)
+        local body, err = httpFetch(GITHUB_API_BASE .. repo .. "/releases?per_page=" .. RELEASES_PER_PAGE .. "&page=" .. page, {
+                ["User-Agent"] = "ReMinux",
+                Accept = "application/vnd.github+json",
+        })
+        if body == nil then return nil, "error", err end
+
+        local data = decodeJson(body)
+        if type(data) ~= "table" then return nil, "error", "invalid GitHub API response" end
+        return data
+end
+
+local function fetchHighestReleaseTag(repo)
+        local bestTag = nil
+        for page = 1, RELEASE_PAGES_MAX do
+                local releases, status, err = fetchReleasePage(repo, page)
+                if releases == nil then return nil, status, err end
+
+                local pageBestTag = selectHighestReleaseTag(releases)
+                if pageBestTag ~= nil and (bestTag == nil or compareVersions(pageBestTag, bestTag) == 1) then
+                        bestTag = pageBestTag
+                end
+                if #releases < RELEASES_PER_PAGE then break end
         end
+
+        if bestTag ~= nil then return bestTag, "ok" end
         return nil, "none"
 end
 
