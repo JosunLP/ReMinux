@@ -665,7 +665,7 @@ missingFile(SETTINGS_FILE, "System settings file " .. SETTINGS_FILE, { "login=di
 if os ~= nil and type(os.loadAPI) == "function" then
 addAuditFinding(findings, "ok", "CC: Tweaked API os.loadAPI is available")
 else
-addAuditFinding(findings, "error", "CC: Tweaked API os.loadAPI is missing")
+addAuditFinding(findings, "warning", "CC: Tweaked API os.loadAPI is missing (deprecated upstream)")
 end
 if window ~= nil and type(window.create) == "function" then
 addAuditFinding(findings, "ok", "CC: Tweaked window.create is available")
@@ -1211,6 +1211,11 @@ minux.debug("http-get:url rejected: " .. tostring(checkErr or address), "minux")
 return false
 end
 ensureParentDirectory(filepath)
+local parent = fs.getDir(filepath)
+if parent ~= nil and parent ~= "" and fs.exists(parent) ~= true then
+minux.debug("http-get:parent directory missing: " .. parent, "minux")
+return false
+end
 for attempt = 1, 3 do
 minux.debug("minux:http-request:" .. address, "minux")
 local response, requestErr = http.get(address)
