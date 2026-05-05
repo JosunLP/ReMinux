@@ -1,0 +1,10 @@
+colortest, /bin/colortest.sh
+alias: 'colortest'
+
+Render all 16 CC colours as
+labelled swatches. Useful to
+verify that the computer is
+advanced (colour-capable).
+
+Usage:
+  colortest

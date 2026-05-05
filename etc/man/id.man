@@ -1,0 +1,9 @@
+id, /bin/id.sh
+alias: 'id'
+
+Print user, host label and
+computer-id information for the
+current session.
+
+Usage:
+  id

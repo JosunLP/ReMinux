@@ -1,0 +1,8 @@
+fold, /bin/fold.sh
+alias: 'fold'
+
+Wrap each input line at <width>
+columns (default 80).
+
+Usage:
+  fold [-w <width>] <file>

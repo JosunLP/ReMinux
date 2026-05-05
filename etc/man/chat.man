@@ -1,0 +1,9 @@
+chat, /bin/chat.sh
+alias: 'chat'
+
+Minimal rednet chat client on
+protocol 'minux-chat'. Type :quit
+to exit, :who to list peers.
+
+Usage:
+  chat [nick]

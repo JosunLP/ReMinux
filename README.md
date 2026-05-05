@@ -131,20 +131,54 @@
 
 | Command  | Description                                       |
 |----------|---------------------------------------------------|
+| `basename` / `dirname` / `realpath` | Path component utilities       |
+| `cal`    | Print a monthly calendar                          |
 | `clear`  | Clear the terminal                                |
+| `cut`    | Extract characters or fields from each line       |
 | `date`   | Print the in-game day and time                    |
 | `df`     | Report free / used disk space                     |
+| `du`     | Disk usage summary (`-s`, `-h`)                   |
 | `echo`   | Print arguments (`-n` to suppress newline)        |
+| `env`    | Show computer environment and shell aliases      |
+| `expr`   | Evaluate an arithmetic expression (`+ - * / % ^ //`) |
+| `factor` | Print prime factors of an integer                 |
+| `fold`   | Wrap input lines at a column width                |
 | `grep`   | Search files for a Lua pattern (`-i`, `-n`, `-v`) |
 | `head`   | Print the first N lines of a file                 |
+| `id`     | Print user / host / computer-id                   |
+| `mktemp` | Create a unique file under `/tmp`                 |
+| `nl`     | Number the lines of a file                        |
+| `printf` | Print formatted output (Lua `string.format`)      |
 | `pwd`    | Print the current working directory               |
+| `rev`    | Reverse the characters of every line              |
+| `seq`    | Generate a sequence of integers                   |
+| `sort`   | Sort lines (`-r`, `-n`, `-u`)                     |
+| `stat`   | Print file metadata (size, type, drive, times)    |
+| `tac`    | Print a file in reverse order                     |
 | `tail`   | Print the last N lines of a file                  |
 | `touch`  | Create empty files / ensure they exist            |
+| `tr`     | Translate or delete characters                    |
 | `tree`   | Print a directory tree                            |
 | `uname`  | Print Minux/system identification                 |
+| `uniq`   | Collapse runs of equal lines (`-c`, `-d`)         |
+| `uptime` | Time since the computer booted                    |
 | `wc`     | Count lines, words and bytes (`-l`, `-w`, `-c`)   |
 | `which`  | Resolve a command/alias to its path               |
 | `whoami` | Print the current logged-in user                  |
+| `xxd` / `hexdump` | Hex+ASCII dump of a file                 |
+| `yes`    | Print a string N times                            |
+
+### CC: Tweaked specific tools
+
+| Command       | Description                                                    |
+|---------------|----------------------------------------------------------------|
+| `chat`        | Minimal rednet chat client on protocol `minux-chat`            |
+| `colortest`   | Render the 16 CC colours as labelled swatches                  |
+| `peripherals` | List attached peripherals; `peripherals <side>` shows methods  |
+| `ping`        | Broadcast a rednet ping and list responders                    |
+| `rs`          | Redstone control: `get`, `on`/`off`, `set`, `pulse`, `bundled` |
+| `speak`       | Play one tone per word on an attached speaker                  |
+| `top`         | Dashboard: id, label, uptime, free disk, peripherals, modems   |
 
 ---
 

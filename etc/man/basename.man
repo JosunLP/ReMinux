@@ -1,0 +1,8 @@
+basename, /bin/basename.sh
+alias: 'basename'
+
+Strip directory and an optional
+suffix from a path.
+
+Usage:
+  basename <path> [suffix]

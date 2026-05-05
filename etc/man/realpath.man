@@ -1,0 +1,9 @@
+realpath, /bin/realpath.sh
+alias: 'realpath'
+
+Print the canonical absolute path
+of <path>, resolved against the
+shell's current working directory.
+
+Usage:
+  realpath <path>

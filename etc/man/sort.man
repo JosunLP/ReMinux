@@ -1,0 +1,9 @@
+sort, /bin/sort.sh
+alias: 'sort'
+
+Sort the lines of one or more
+files.
+
+Usage:
+  sort [-r] [-n] [-u] <file>...
+  -r reverse, -n numeric, -u unique

@@ -1,0 +1,9 @@
+seq, /bin/seq.sh
+alias: 'seq'
+
+Print a sequence of integers.
+
+Usage:
+  seq <last>
+  seq <first> <last>
+  seq <first> <step> <last>

@@ -1,0 +1,10 @@
+top, /bin/top.sh
+alias: 'top'
+
+Dashboard summary of the local
+computer: id, label, uptime, free
+disk space, attached peripherals
+and open rednet modems.
+
+Usage:
+  top

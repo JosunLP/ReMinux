@@ -1,0 +1,8 @@
+tac, /bin/tac.sh
+alias: 'tac'
+
+Print the lines of <file> in
+reverse order.
+
+Usage:
+  tac <file>

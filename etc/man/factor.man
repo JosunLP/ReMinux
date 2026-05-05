@@ -1,0 +1,8 @@
+factor, /bin/factor.sh
+alias: 'factor'
+
+Print the prime factors of each
+given non-negative integer.
+
+Usage:
+  factor <number> [number...]

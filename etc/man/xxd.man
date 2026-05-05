@@ -1,0 +1,9 @@
+xxd, /bin/xxd.sh
+alias: 'xxd', 'hexdump'
+
+Hex+ASCII dump of <file>, 16 bytes
+per line. Non-printable bytes are
+rendered as '.'.
+
+Usage:
+  xxd <file>

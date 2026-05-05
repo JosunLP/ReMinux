@@ -1,0 +1,13 @@
+rs, /bin/rs.sh
+alias: 'rs', 'redstone'
+
+Control and inspect redstone on
+any of the six sides.
+
+Usage:
+  rs                       all sides
+  rs get <side>            on/level
+  rs on|off <side>         set state
+  rs set <side> <0..15>    analog
+  rs pulse <side> [secs]   pulse
+  rs bundled <side>        bundled

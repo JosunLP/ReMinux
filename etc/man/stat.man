@@ -1,0 +1,9 @@
+stat, /bin/stat.sh
+alias: 'stat'
+
+Display metadata about a file or
+directory: type, size, drive, and
+timestamps when supported.
+
+Usage:
+  stat <path>
