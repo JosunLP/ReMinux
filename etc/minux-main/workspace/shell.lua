@@ -34,6 +34,11 @@ do
 end
 local expect = require("cc.expect").expect
 local exception = require "cc.internal.exception"
+local parser = dofile("/etc/minux-main/workspace/parser.lua")
+local executor = dofile("/etc/minux-main/workspace/executor.lua")
+local baseRead = read
+local baseWrite = write
+local basePrint = print
 
 -- Colours
 local promptColour, textColour, bgColour
@@ -49,23 +54,12 @@ end
 
 local function tokenise(...)
     local sLine = table.concat({ ... }, " ")
-    local tWords = {}
-    local bQuoted = false
-    for match in string.gmatch(sLine .. "\"", "(.-)\"") do
-        if bQuoted then
-            table.insert(tWords, match)
-        else
-            for m in string.gmatch(match, "[^ \t]+") do
-                table.insert(tWords, m)
-            end
-        end
-        bQuoted = not bQuoted
-    end
-    return tWords
+    local words = parser.tokeniseWords(sLine)
+    return words or {}
 end
 
 -- Execute a program using os.run, unless a shebang is present.
-local function executeProgram(remainingRecursion, path, args)
+local function executeProgram(remainingRecursion, path, args, ioContext)
     local file, err = fs.open(path, "r")
     if not file then
         printError(err)
@@ -112,6 +106,37 @@ local function executeProgram(remainingRecursion, path, args)
     local dir = fs.getDir(path)
     local env = setmetatable(createShellEnv(dir), { __index = _G })
     env.arg = args
+    env.print = function(...)
+        local values = {}
+        for i = 1, select("#", ...) do
+            values[i] = tostring(select(i, ...))
+        end
+        if minux ~= nil and type(minux.writeOutputLine) == "function" then
+            minux.writeOutputLine(table.concat(values, "\t"))
+        else
+            basePrint(...)
+        end
+    end
+    env.write = function(text)
+        local context = minux ~= nil and type(minux.getIoContext) == "function" and minux.getIoContext() or nil
+        if type(context) == "table" and type(context.write) == "function" then
+            context.write(tostring(text or ""))
+            return
+        end
+        baseWrite(text)
+    end
+    env.read = function(...)
+        local context = minux ~= nil and type(minux.getIoContext) == "function" and minux.getIoContext() or nil
+        if type(context) == "table" and type(context.read) == "function" then
+            return context.read(...)
+        end
+        return baseRead(...)
+    end
+    env.io = setmetatable({
+        write = function(...)
+            env.write(...)
+        end,
+    }, { __index = io })
 
     local func, err = load(contents, "@/" .. path, nil, env)
     if not func then
@@ -133,7 +158,13 @@ local function executeProgram(remainingRecursion, path, args)
         end
     end
 
+    if ioContext ~= nil and minux ~= nil and type(minux.pushIoContext) == "function" then
+        minux.pushIoContext(ioContext)
+    end
     local ok, err, co = exception.try(func, table.unpack(args, 1, args.n))
+    if ioContext ~= nil and minux ~= nil and type(minux.popIoContext) == "function" then
+        minux.popIoContext()
+    end
 
     if ok then return true end
 
@@ -145,13 +176,7 @@ local function executeProgram(remainingRecursion, path, args)
     return false
 end
 
---- Run a program with the supplied arguments.
-function shell.execute(command, ...)
-    expect(1, command, "string")
-    for i = 1, select('#', ...) do
-        expect(i + 1, select(i, ...), "string")
-    end
-
+local function runResolvedCommand(command, arguments, ioContext)
     local sPath = shell.resolveProgram(command)
     if sPath ~= nil then
         tProgramStack[#tProgramStack + 1] = sPath
@@ -163,7 +188,7 @@ function shell.execute(command, ...)
             multishell.setTitle(multishell.getCurrent(), sTitle)
         end
 
-        local result = executeProgram(100, sPath, { [0] = command, ... })
+        local result = executeProgram(100, sPath, arguments, ioContext)
 
         tProgramStack[#tProgramStack] = nil
         if multishell then
@@ -178,18 +203,67 @@ function shell.execute(command, ...)
             end
         end
         return result
-       else
+    else
         printError("No such program")
         return false
     end
 end
 
+--- Run a program with the supplied arguments.
+function shell.execute(command, ...)
+    expect(1, command, "string")
+    for i = 1, select('#', ...) do
+        expect(i + 1, select(i, ...), "string")
+    end
+    return runResolvedCommand(command, { [0] = command, ... }, nil)
+end
+
+function shell.executeWithContext(command, arguments, ioContext)
+    expect(1, command, "string")
+    expect(2, arguments, "table")
+    expect(3, ioContext, "table", "nil")
+    local argv = { [0] = command, n = #arguments }
+    for index = 1, #arguments do
+        expect(index + 2, arguments[index], "string")
+        argv[index] = arguments[index]
+    end
+    return runResolvedCommand(command, argv, ioContext)
+end
+
 -- Install shell API
 function shell.run(...)
-    local tWords = tokenise(...)
-    local sCommand = tWords[1]
-    if sCommand then
-        return shell.execute(sCommand, table.unpack(tWords, 2))
+    local argumentCount = select("#", ...)
+    if argumentCount == 0 then
+        return false
+    end
+    if argumentCount > 1 then
+        local arguments = { ... }
+        local sCommand = arguments[1]
+        if sCommand ~= nil then
+            return shell.execute(sCommand, table.unpack(arguments, 2))
+        end
+        return false
+    end
+    local line = ...
+    local ast, err = parser.parse(line)
+    if ast == nil then
+        printError(err)
+        return false
+    end
+    if ast.kind ~= "empty" then
+        local ok, err = executor.executeAst(ast, {
+            executeCommand = function(commandNode, ioContext)
+                local arguments = {}
+                for index = 2, #commandNode.argv do
+                    arguments[#arguments + 1] = commandNode.argv[index]
+                end
+                return shell.executeWithContext(commandNode.argv[1], arguments, ioContext)
+            end,
+        }, nil)
+        if ok ~= true and err ~= nil and err ~= "" then
+            printError(err)
+        end
+        return ok
     end
     return false
 end
@@ -592,35 +666,6 @@ else
         if result:match("%S") and tCommandHistory[#tCommandHistory] ~= result then
             table.insert(tCommandHistory, result)
         end
-        -- minux splitting the results into several commands based on '&&' markers
-        local multicommandmarker = string.find(result, "&&")
-        -- if we cannot find our marker, we proceed as normal
-        if multicommandmarker == nil then
-            shell.run(result)
-        else
-            minux.debug("this line has a split marker","minux")
-            minux.debug("it is char:"..multicommandmarker , "minux")
-            minux.debug(result, "minux")
-            minux.debug("splitting character", "minux")
-            -- we split the commands
-            local separateCmds = {}
-            while string.find(result, "&&") do
-                table.insert(	separateCmds, string.sub(result, 1, string.find(result, "&&")-2)	)
-                result = string.sub(	result, string.find(result, "&&")+3, #result	)
-            end
-            table.insert(	separateCmds, result)
-            
-            -- we run our split commands untill nil
-            minux.debug(textutils.serialise(separateCmds), "minux")
-            local cmdcounter = 1 
-            local didrun = true
-            while separateCmds[cmdcounter] ~= nil and didrun ~= false do
-                didrun = false
-                minux.debug("running."..separateCmds[cmdcounter], "minux")
-                local properend = shell.run(separateCmds[cmdcounter])
-                if properend == true then didrun = true end
-                cmdcounter = cmdcounter + 1
-            end  
-        end
+        shell.run(result)
     end
 end

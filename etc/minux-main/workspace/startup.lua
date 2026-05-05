@@ -154,7 +154,9 @@ if turtle then
     ))
 end
 -- run boot addons
-shell.run("/boot/addon.d")
+minux.startService("addons", {
+    oncePerSession = true,
+})
 
 -- Run autorun files
  if fs.exists("/rom/autorun") and fs.isDir("/rom/autorun") then

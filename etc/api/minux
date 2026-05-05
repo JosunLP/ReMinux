@@ -20,6 +20,9 @@ local NO_USER = "foo"
 local ROOT_USER = "root"
 local ROOT_GROUP = "root"
 local PERMISSIONS_FILE = "/usr/minux-main/data/permissions.db"
+local SERVICES_FILE = "/usr/minux-main/data/services.db"
+local SERVICE_DISABLED_FILE = "/usr/minux-main/data/services-disabled.db"
+local SERVICE_DEFINITIONS_DIR = "/etc/minux-main/services"
 local SETTINGS_FILE = "/usr/minux-main/settings.cfg"
 local INSTALLED_DB_FILE = "/etc/apt/list/installed.db"
 local ENCRYPT_KEY_FILE = "/usr/minux-main/config/encr.conf"
@@ -562,27 +565,214 @@ local paths = {
 "/etc/minux-main",
 "/usr/minux-main",
 "/usr/minux-main/config",
-"/usr/minux-main/data",
-SETTINGS_FILE,
-ENCRYPT_KEY_FILE,
-AUTH_DIR,
-"/usr/auth-client",
-"/etc/server.sys",
-}
+	"/usr/minux-main/data",
+	SERVICE_DISABLED_FILE,
+	SERVICES_FILE,
+	SETTINGS_FILE,
+	ENCRYPT_KEY_FILE,
+	AUTH_DIR,
+	"/usr/auth-client",
+	"/etc/server.sys",
+	SERVICE_DEFINITIONS_DIR,
+	}
 for _, path in ipairs(paths) do
 seedPermissionTree(path)
 end
 end
 
 local function ensureCoreLayout()
-ensureDirectory("/var/log")
-ensureDirectory("/usr/minux-main/config")
-ensureDirectory("/usr/minux-main/data")
-ensureDirectory(AUTH_DIR)
-ensureDirectory("/usr/auth-client")
-ensureFile("/boot/autorun.ls", {})
-ensureFile("/boot/runonce.sh", {})
-ensurePermissionDefaults()
+	ensureDirectory("/var/log")
+	ensureDirectory(SERVICE_DEFINITIONS_DIR)
+	ensureDirectory("/usr/minux-main/config")
+	ensureDirectory("/usr/minux-main/data")
+	ensureDirectory(AUTH_DIR)
+	ensureDirectory("/usr/auth-client")
+	ensureFile("/boot/autorun.ls", {})
+	ensureFile("/boot/runonce.sh", {})
+	ensureFile(SERVICE_DISABLED_FILE, {})
+	ensureFile(SERVICES_FILE, {})
+	ensurePermissionDefaults()
+end
+
+local function serialiseServiceEntry(name, entry)
+	return table.concat({
+		name,
+		entry.state or "inactive",
+		entry.updatedAt or "",
+		entry.detail or "",
+	}, "\t")
+end
+
+local function readServiceStateStore()
+	local store = {}
+	if fs.exists(SERVICES_FILE) ~= true then
+		return store
+	end
+	local handle = fs.open(SERVICES_FILE, "r")
+	if handle == nil then
+		return store
+	end
+	local line = handle.readLine()
+	while line ~= nil do
+		local name, state, updatedAt, detail = string.match(line, "^([^\t]+)\t([^\t]*)\t([^\t]*)\t(.*)$")
+		if name ~= nil then
+			store[name] = {
+				state = state ~= "" and state or "inactive",
+				updatedAt = updatedAt ~= "" and updatedAt or nil,
+				detail = detail ~= "" and detail or nil,
+			}
+		end
+		line = handle.readLine()
+	end
+	handle.close()
+	return store
+end
+
+local function writeServiceStateStore(store)
+	local names = {}
+	for name in pairs(store) do
+		names[#names + 1] = name
+	end
+	table.sort(names)
+	local handle = fs.open(SERVICES_FILE, "w")
+	for _, name in ipairs(names) do
+		handle.writeLine(serialiseServiceEntry(name, store[name]))
+	end
+	handle.close()
+end
+
+local function timestampString()
+	if os.epoch ~= nil then
+		return tostring(os.epoch("utc"))
+	end
+	return tostring(os.time())
+end
+
+local function loadServiceDefinitionFile(path)
+	local ok, result = pcall(dofile, path)
+	if ok ~= true or type(result) ~= "table" then
+		return {}
+	end
+	if result.name ~= nil then
+		return { result }
+	end
+	return result
+end
+
+local function collectDeclaredServices()
+	local services = {}
+	if fs.exists(SERVICE_DEFINITIONS_DIR) == true and fs.isDir(SERVICE_DEFINITIONS_DIR) == true then
+		local files = fs.list(SERVICE_DEFINITIONS_DIR)
+		table.sort(files)
+		for _, file in ipairs(files) do
+			local path = fs.combine(SERVICE_DEFINITIONS_DIR, file)
+			if fs.isDir(path) ~= true then
+				local definitions = loadServiceDefinitionFile(path)
+				for _, definition in ipairs(definitions) do
+					if type(definition) == "table" and type(definition.name) == "string" and definition.name ~= "" then
+						services[definition.name] = definition
+					end
+				end
+			end
+		end
+	end
+	return services
+end
+
+local function collectLegacyServices()
+	local services = {}
+	local function register(definition)
+		if definition.path == nil or fs.exists(definition.path) ~= true then
+			return
+		end
+		services[definition.name] = definition
+	end
+	register({
+		name = "addons",
+		trigger = "boot",
+		kind = "oneshot",
+		path = "/boot/addon.d",
+		command = "/boot/addon.d",
+		description = "Generated boot addon hook",
+	})
+	register({
+		name = "server",
+		trigger = "boot",
+		kind = "daemon",
+		path = "/etc/server.sys",
+		command = "/etc/server.sys",
+		description = "Legacy server boot hook",
+		stopSupported = false,
+	})
+	register({
+		name = "overrides",
+		trigger = "boot",
+		kind = "oneshot",
+		path = "/boot/override.d",
+		command = "/boot/override.d",
+		description = "Boot override hook",
+	})
+	register({
+		name = "runonce",
+		trigger = "boot",
+		kind = "runonce",
+		path = "/boot/runonce.sh",
+		command = "/boot/runonce.sh",
+		description = "Boot run-once command list",
+	})
+	register({
+		name = "autorun",
+		trigger = "login",
+		kind = "oneshot",
+		path = "/boot/autorun.ls",
+		command = "/boot/autorun.ls",
+		description = "Per-login autorun hook",
+	})
+	return services
+end
+
+local function readDisabledServices()
+	local disabled = {}
+	local lines = minux.readtable(SERVICE_DISABLED_FILE)
+	if type(lines) ~= "table" then
+		return disabled
+	end
+	for _, name in ipairs(lines) do
+		disabled[name] = true
+	end
+	return disabled
+end
+
+local function mergeServiceDefinitions()
+	local services = collectLegacyServices()
+	for name, definition in pairs(collectDeclaredServices()) do
+		services[name] = definition
+	end
+	return services
+end
+
+local function buildServiceRecord(name, definition)
+	local state = readServiceStateStore()[name] or {}
+	local disabled = readDisabledServices()
+	local record = {}
+	for key, value in pairs(definition) do
+		record[key] = value
+	end
+	record.name = name
+	record.enabled = disabled[name] ~= true
+	record.state = state.state or "inactive"
+	record.detail = state.detail
+	record.updatedAt = state.updatedAt
+	record.trigger = record.trigger or "manual"
+	record.kind = record.kind or "oneshot"
+	return record
+end
+
+local function serviceSessionState()
+	if type(_G.__minuxServicesStarted) ~= "table" then
+		_G.__minuxServicesStarted = {}
+	end
+	return _G.__minuxServicesStarted
 end
 
 -- Write a single key=value line in a config file, replacing any existing entry.
@@ -622,24 +812,198 @@ tempfile.writeLine(line)
 end
 tempfile.close()
 end
-return cfgf
+	return cfgf
+end
+
+function setServiceState(name, state, detail)
+	expect(1, name, "string")
+	expect(2, state, "string")
+	expect(3, detail, "string", "nil")
+	local store = readServiceStateStore()
+	store[name] = {
+		state = state,
+		detail = detail,
+		updatedAt = timestampString(),
+	}
+	writeServiceStateStore(store)
+	return true
+end
+
+function getService(name)
+	expect(1, name, "string")
+	local definitions = mergeServiceDefinitions()
+	local definition = definitions[name]
+	if definition == nil then
+		return nil
+	end
+	return buildServiceRecord(name, definition)
+end
+
+function listServices(trigger)
+	expect(1, trigger, "string", "nil")
+	local definitions = mergeServiceDefinitions()
+	local names = {}
+	for name, definition in pairs(definitions) do
+		if trigger == nil or definition.trigger == trigger then
+			names[#names + 1] = name
+		end
+	end
+	table.sort(names)
+	local services = {}
+	for _, name in ipairs(names) do
+		services[#services + 1] = buildServiceRecord(name, definitions[name])
+	end
+	return services
+end
+
+function setServiceEnabled(name, enabled)
+	expect(1, name, "string")
+	expect(2, enabled, "boolean")
+	local service = minux.getService(name)
+	if service == nil then
+		return false, "unknown service: " .. name
+	end
+	local disabledNames = {}
+	local disabledLookup = readDisabledServices()
+	for existing in pairs(disabledLookup) do
+		if existing ~= name then
+			disabledNames[#disabledNames + 1] = existing
+		end
+	end
+	if enabled ~= true then
+		disabledNames[#disabledNames + 1] = name
+		minux.setServiceState(name, "disabled", "disabled by service command")
+	else
+		local state = minux.getService(name)
+		if state ~= nil and state.state == "disabled" then
+			minux.setServiceState(name, "inactive", "enabled")
+		end
+	end
+	table.sort(disabledNames)
+	minux.writetable(SERVICE_DISABLED_FILE, disabledNames)
+	return true
+end
+
+local function runRunOnceService(path)
+	local commands = minux.readtable(path)
+	if type(commands) ~= "table" then
+		return true
+	end
+	for _, command in ipairs(commands) do
+		if command ~= nil and command ~= "" then
+			local ok = shell.run(command)
+			if ok ~= true then
+				return false, "command failed: " .. command
+			end
+		end
+	end
+	minux.writetable(path, {})
+	return true
+end
+
+function startService(name, options)
+	expect(1, name, "string")
+	expect(2, options, "table", "nil")
+	local service = minux.getService(name)
+	if service == nil then
+		return false, "unknown service: " .. name
+	end
+	local runOptions = options or {}
+	if service.enabled ~= true and runOptions.ignoreDisabled ~= true then
+		return false, "service is disabled: " .. name
+	end
+	local startedServices = serviceSessionState()
+	if runOptions.oncePerSession == true and runOptions.force ~= true and startedServices[name] == true then
+		return true
+	end
+	minux.setServiceState(name, "starting", service.description)
+	local ok, err
+	if service.kind == "runonce" then
+		ok, err = runRunOnceService(service.command)
+	elseif service.kind == "daemon" then
+		minux.safeOpenTab(service.command)
+		ok = true
+	else
+		ok = shell.run(service.command)
+		if ok ~= true then
+			err = "command failed: " .. service.command
+		end
+	end
+	if ok == true then
+		local completedState = service.kind == "daemon" and "running" or "completed"
+		minux.setServiceState(name, completedState, service.command)
+		startedServices[name] = true
+		return true
+	end
+	minux.setServiceState(name, "failed", err)
+	return false, err
+end
+
+function stopService(name)
+	expect(1, name, "string")
+	local service = minux.getService(name)
+	if service == nil then
+		return false, "unknown service: " .. name
+	end
+	if service.stopCommand ~= nil and service.stopCommand ~= "" then
+		local ok = shell.run(service.stopCommand)
+		if ok ~= true then
+			minux.setServiceState(name, "failed", "stop failed")
+			return false, "stop command failed: " .. service.stopCommand
+		end
+		minux.setServiceState(name, "stopped", service.stopCommand)
+		return true
+	end
+	if service.kind == "daemon" then
+		return false, "service does not support stop in this environment"
+	end
+	minux.setServiceState(name, "stopped", "stopped")
+	return true
+end
+
+function restartService(name)
+	expect(1, name, "string")
+	local stopped, stopErr = minux.stopService(name)
+	if stopped ~= true and stopErr ~= nil and string.find(stopErr, "does not support stop", 1, true) ~= nil then
+		return false, stopErr
+	end
+	return minux.startService(name, {
+		force = true,
+	})
+end
+
+function runServiceTrigger(trigger)
+	expect(1, trigger, "string")
+	local services = minux.listServices(trigger)
+	for _, service in ipairs(services) do
+		if service.enabled == true then
+			local ok, err = minux.startService(service.name, {
+				ignoreDisabled = true,
+				oncePerSession = trigger == "boot",
+			})
+			if ok ~= true then
+				return false, err
+			end
+		else
+			minux.setServiceState(service.name, "disabled", "disabled")
+		end
+	end
+	return true
 end
 
 -- Apply the common "login granted" finalisation: set global credentials, run
 -- the autorun script, and optionally clear the screen.
 local function finalizeLogin(username, password, grantAdmin)
-_G.login = username
-_G.masterpass = password
+	_G.login = username
+	_G.masterpass = password
 _G.validlogin = true
-if grantAdmin == true then
-_G.admin = true
-end
-if fs.exists("/boot/autorun.ls") then
-shell.run("/boot/autorun.ls")
-end
-if minux.getconfig("clearlogin") == "enabled" then
-term.setCursorPos(1, 1)
-term.clear()
+	if grantAdmin == true then
+		_G.admin = true
+	end
+	minux.runServiceTrigger("login")
+	if minux.getconfig("clearlogin") == "enabled" then
+		term.setCursorPos(1, 1)
+		term.clear()
 end
 return true
 end

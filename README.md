@@ -18,6 +18,8 @@
 - **Debug / logging system** — `disabled`, `enabled`, `logging`, or `full` verbosity levels
 - **Network DHCP** — automatic server discovery over Rednet
 - **Linux-like file management** — built-in `mkdir`, `cp`, `mv`, and `rm` commands with CC: Tweaked-safe guards
+- **Parsed shell pipelines** — `|`, `>`, `>>`, `<`, `&&`, `||`, and `;` now execute through a shared shell parser/executor
+- **Service manager** — legacy boot/login hooks are exposed through a small `service` control layer
 - **OOP internals** — the APT manager uses a proper Lua class; all APIs are DRY-refactored
 
 ---
@@ -128,6 +130,7 @@
 | `programs`   | List all available programs                      |
 | `restart`    | Reboot the computer                              |
 | `search`     | Compatibility wrapper for substring file search  |
+| `service`    | Manage boot/login services (`list`, `status`, `enable`, …) |
 | `useradd`    | Add a new user                                   |
 | `userdel`    | Delete a user                                    |
 | `usermod`    | Manage local users (add/del/psw)                 |

@@ -212,46 +212,18 @@ end
 
 _G.shell = shell
 shell.run("/boot/network/update.sys")
-
-if fs.exists("/etc/server.sys") then
-minux.debug("Starting server.sys", "minux")
-minux.safeOpenTab("/etc/server.sys")
-end
-
-if fs.exists("/boot/addon.d") then
-minux.debug("running addons", "minux")
-shell.run("/boot/addon.d")
-end
+minux.debug("running boot services", "minux")
+minux.runServiceTrigger("boot")
 
 setCrashHandler("2", "0")
 checkCrashStage("3")
 
-minux.debug("running override.d", "minux")
-if fs.exists("/boot/override.d") then shell.run("/boot/override.d") end
 minux.debug("resetting crash handler stage 3", "minux")
 setCrashHandler("3", "0")
 
 if minux.getconfig("crashhandler") == "enabled" then
 checkCrashStage("4")
 end
-
--- Run-once list
-
-local runoncefile = "/boot/runonce.sh"
-if fs.exists(runoncefile) ~= true then
-local tmpfile = fs.open(runoncefile, "w")
-tmpfile.close()
-end
-local runoncetable = minux.readtable(runoncefile)
-if type(runoncetable) == "table" then
-minux.debug("init:executing runonce", "minux")
-for _, cmd in ipairs(runoncetable) do
-minux.debug("init:" .. cmd, "minux")
-shell.run(cmd)
-end
-end
-local tmprunonce = fs.open(runoncefile, "w")
-tmprunonce.close()
 
 -- Login
 
@@ -285,9 +257,7 @@ _G.validlogin = true
 _G.admin      = true
 _G.login      = "foo"
 _G.masterpass = "bar"
-if fs.exists("/boot/autorun.ls") == true then
-shell.run("/boot/autorun.ls")
-end
+minux.runServiceTrigger("login")
 end
 
 minux.testcolor()
