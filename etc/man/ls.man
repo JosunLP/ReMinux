@@ -8,24 +8,22 @@ ls is used to list
 folder contents.
 
 syntax: 
-'ls folderpath option'
+'ls [-a] [-l] [-R] [-d] [path...]'
 
-if no option is given, 
-it simply lists 
-folderpath by using the
-normal CC list.lua.
+If no path is given, the
+current shell directory is
+listed.
 
-options can be provided
-they do the following:
- -r: recursive, lists 
- files recursively 
- showing not only the 
- listed folder but 
- also it's sub folders
- and their contents.
+Options:
+ -a  include names
+     beginning with '.'
+ -l  long format with
+     mode and size
+ -R  recurse into
+     subdirectories
+ -d  list a directory
+     itself, not its
+     contents
 
- -a: Additional info, 
- lists the folder's 
- contents and shows 
- file size for each 
- file.
+Legacy '-r' is accepted
+as an alias for '-R'.

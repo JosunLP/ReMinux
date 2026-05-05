@@ -1,0 +1,15 @@
+find, /bin/find.sh
+alias: 'find'
+
+Walk a directory tree and print
+matching paths.
+
+Usage:
+  find [path] [-name <glob>]
+       [-type f|d]
+       [-maxdepth n]
+
+Examples:
+  find
+  find /etc -name *.db
+  find /boot -type f

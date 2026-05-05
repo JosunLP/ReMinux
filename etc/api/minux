@@ -24,6 +24,7 @@ local AUTH_DIR = "/usr/local/auth/"
 local TEMP_EDIT_FILE = "/temp/dev/removeline.tmp"
 local USERNAME_PATTERN = "^[%w][%w_-]*$"
 local USERNAME_RULE_TEXT = "username must start with a letter or digit, then may use letters, digits, '_' and '-'"
+local ioContextStack = {}
 local DEFAULT_SETTINGS = {
 { key = "network",      value = "disabled" },
 { key = "login",        value = "disabled" },
@@ -65,6 +66,154 @@ local function ensureParentDirectory(path)
 local parent = fs.getDir(path)
 if parent ~= nil and parent ~= "" then
 ensureDirectory(parent)
+end
+end
+
+local function normalisePath(path)
+if path == "" then
+return ""
+end
+return fs.combine("", path)
+end
+
+local function isHiddenName(name)
+return string.sub(name, 1, 1) == "."
+end
+
+local function toModeString(isDir, readOnly)
+if isDir == true then
+if readOnly == true then return "dr-xr-xr-x" end
+return "drwxrwxrwx"
+end
+if readOnly == true then return "-r--r--r--" end
+return "-rw-rw-rw-"
+end
+
+local function buildPathInfo(path, depth)
+local resolved = normalisePath(path)
+if fs.exists(resolved) ~= true then
+return nil
+end
+local isDir = fs.isDir(resolved)
+local readOnly = fs.isReadOnly ~= nil and fs.isReadOnly(resolved) or false
+local info = {
+path = resolved,
+name = fs.getName(resolved),
+depth = depth or 0,
+isDir = isDir,
+type = isDir and "directory" or "file",
+readOnly = readOnly,
+mode = toModeString(isDir, readOnly),
+}
+if isDir ~= true then
+info.size = fs.getSize(resolved)
+end
+if fs.getDrive ~= nil then
+local ok, drive = pcall(fs.getDrive, resolved)
+if ok == true then
+info.drive = drive
+end
+end
+if fs.attributes ~= nil then
+local ok, attrs = pcall(fs.attributes, resolved)
+if ok == true and type(attrs) == "table" then
+info.attributes = attrs
+info.created = attrs.created
+info.modified = attrs.modified
+end
+end
+return info
+end
+
+local function sortedChildren(path)
+local items = fs.list(path)
+table.sort(items, function(left, right)
+local leftLower = string.lower(left)
+local rightLower = string.lower(right)
+if leftLower == rightLower then
+return left < right
+end
+return leftLower < rightLower
+end)
+return items
+end
+
+local function globToLuaPattern(glob)
+local pattern = { "^" }
+for index = 1, #glob do
+local char = string.sub(glob, index, index)
+if char == "*" then
+table.insert(pattern, ".*")
+elseif char == "?" then
+table.insert(pattern, ".")
+elseif string.match(char, "[%^%$%(%)%%%.%[%]%+%-]") ~= nil then
+table.insert(pattern, "%" .. char)
+else
+table.insert(pattern, char)
+end
+end
+table.insert(pattern, "$")
+return table.concat(pattern)
+end
+
+local function matchesNeedle(value, needle, caseInsensitive, plain)
+if needle == nil then
+return true
+end
+if caseInsensitive == true then
+value = string.lower(value)
+needle = string.lower(needle)
+end
+if plain == true then
+return string.find(value, needle, 1, true) ~= nil
+end
+return string.find(value, needle) ~= nil
+end
+
+local function matchesEntry(entry, options)
+if options.type == "file" and entry.isDir == true then
+return false
+end
+if options.type == "directory" and entry.isDir ~= true then
+return false
+end
+if options.nameContains ~= nil and matchesNeedle(entry.name, options.nameContains, options.caseInsensitive == true, true) ~= true then
+return false
+end
+if options.pathContains ~= nil and matchesNeedle(entry.path, options.pathContains, options.caseInsensitive == true, true) ~= true then
+return false
+end
+if options.namePattern ~= nil then
+local pattern = globToLuaPattern(options.namePattern)
+local subject = options.caseInsensitive == true and string.lower(entry.name) or entry.name
+if string.match(subject, options.caseInsensitive == true and string.lower(pattern) or pattern) == nil then
+return false
+end
+end
+return true
+end
+
+local function walkEntries(startPath, options, results, depth)
+local entry = buildPathInfo(startPath, depth)
+if entry == nil then
+return
+end
+local includeRoot = options.includeRoot == true
+if entry.isDir ~= true or includeRoot == true or depth > 0 then
+if matchesEntry(entry, options) == true then
+table.insert(results, entry)
+end
+end
+if entry.isDir ~= true or options.recursive ~= true then
+return
+end
+if options.maxDepth ~= nil and depth >= options.maxDepth then
+return
+end
+for _, childName in ipairs(sortedChildren(entry.path)) do
+if options.includeHidden == true or isHiddenName(childName) ~= true then
+walkEntries(fs.combine(entry.path, childName), options, results, depth + 1)
+end
 end
 end
 
@@ -160,73 +309,168 @@ end
 
 -- Recursive file listing helpers
 
+function getIoContext()
+return ioContextStack[#ioContextStack]
+end
+
+function pushIoContext(context)
+expect(1, context, "table", "nil")
+local resolved = context or {}
+table.insert(ioContextStack, resolved)
+return resolved
+end
+
+function popIoContext()
+if #ioContextStack == 0 then
+return nil
+end
+local context = ioContextStack[#ioContextStack]
+ioContextStack[#ioContextStack] = nil
+return context
+end
+
+function withIoContext(context, callback, ...)
+expect(1, context, "table", "nil")
+expect(2, callback, "function")
+pushIoContext(context or {})
+local results = table.pack(pcall(callback, ...))
+popIoContext()
+if results[1] ~= true then
+error(results[2], 0)
+end
+return table.unpack(results, 2, results.n)
+end
+
+function readInputLines()
+local context = getIoContext()
+if type(context) ~= "table" then
+return nil
+end
+if type(context.readLines) == "function" then
+return context.readLines()
+end
+if type(context.inputLines) == "table" then
+return context.inputLines
+end
+return nil
+end
+
+function writeOutputLine(line)
+expect(1, line, "string")
+local context = getIoContext()
+if type(context) == "table" then
+if type(context.writeLine) == "function" then
+context.writeLine(line)
+return true
+end
+if type(context.outputLines) == "table" then
+table.insert(context.outputLines, line)
+return true
+end
+end
+print(line)
+return true
+end
+
+function pathInfo(path)
+expect(1, path, "string")
+return buildPathInfo(path, 0)
+end
+
+function listEntries(path, options)
+expect(1, path, "string")
+expect(2, options, "table", "nil")
+local resolved = normalisePath(path)
+if fs.exists(resolved) ~= true or fs.isDir(resolved) ~= true then
+return false
+end
+local includeHidden = type(options) == "table" and options.includeHidden == true or false
+local results = {}
+for _, childName in ipairs(sortedChildren(resolved)) do
+if includeHidden == true or isHiddenName(childName) ~= true then
+table.insert(results, buildPathInfo(fs.combine(resolved, childName), 1))
+end
+end
+return results
+end
+
+function findEntries(path, options)
+expect(1, path, "string")
+expect(2, options, "table", "nil")
+local resolved = normalisePath(path)
+if fs.exists(resolved) ~= true then
+return false
+end
+local resolvedOptions = options or {}
+if resolvedOptions.recursive == nil then
+resolvedOptions.recursive = true
+end
+if resolvedOptions.includeHidden == nil then
+resolvedOptions.includeHidden = true
+end
+local results = {}
+walkEntries(resolved, resolvedOptions, results, 0)
+return results
+end
+
 function lsr(ptn)
 expect(1, ptn, "string")
-if fs.exists(ptn) == false then return false end
-if fs.isDir(ptn) == false then return false end
-if fs.exists("/temp/ls") == false then fs.makeDir("/temp/ls") end
-if fs.exists("/temp/ls/files.ls") then fs.delete("/temp/ls/files.ls") end
-if fs.exists("/temp/ls/todo") then fs.delete("/temp/ls/todo") end
-fs.makeDir("/temp/ls/todo")
-local lsfc = 0
-minux.list(ptn, lsfc)
-local tdff = "start"
-while tdff ~= nil and fs.exists("/temp/ls/todo/") do
-local todofolderlist = fs.list("/temp/ls/todo/")
-tdff = todofolderlist[1]
-if tdff ~= nil then
-if fs.exists("/temp/ls/todo/" .. tdff) then
-local todofile = fs.open("/temp/ls/todo/" .. tdff, "r")
-local line = todofile.readLine()
-while line ~= nil do
-minux.list(line, lsfc)
-line = todofile.readLine()
+if fs.exists(ptn) == false or fs.isDir(ptn) == false then return false end
+ensureDirectory("/temp/ls")
+local entries = minux.findEntries(ptn, {
+recursive = true,
+includeHidden = true,
+type = "file",
+})
+local lines = {}
+for _, entry in ipairs(entries or {}) do
+table.insert(lines, entry.path)
 end
-todofile.close()
-fs.delete("/temp/ls/todo/" .. tdff)
+minux.writetable("/temp/ls/files.ls", lines)
+if fs.exists("/temp/ls/todo") == true then
+fs.delete("/temp/ls/todo")
 end
-else
-tdff = nil
-end
-lsfc = lsfc + 1
-end
-return minux.readtable("/temp/ls/files.ls")
+return lines
 end
 
 function list(ptn, lsfc)
 expect(1, ptn, "string")
 expect(2, lsfc, "number")
-local tempfile = fs.list(ptn)
-local fls = fs.open("/temp/ls/files.ls", "a")
-for index = 1, #tempfile do
-local fln = tempfile[index]
-if fs.isDir(ptn .. fln) then
-local folderfile = fs.open("/temp/ls/todo/" .. lsfc .. ".ls", "a")
-folderfile.writeLine(ptn .. fln .. "/")
-folderfile.close()
-elseif fs.exists(ptn .. fln) then
-fls.writeLine(ptn .. fln)
+local entries = minux.listEntries(ptn, { includeHidden = true })
+if entries == false then return false end
+ensureDirectory("/temp/ls")
+ensureDirectory("/temp/ls/todo")
+local filesHandle = fs.open("/temp/ls/files.ls", "a")
+local folderHandle = fs.open("/temp/ls/todo/" .. lsfc .. ".ls", "a")
+local items = {}
+for _, entry in ipairs(entries) do
+table.insert(items, entry.name)
+if entry.isDir == true then
+folderHandle.writeLine(entry.path .. "/")
+else
+filesHandle.writeLine(entry.path)
 end
 end
-fls.close()
-return tempfile
+filesHandle.close()
+folderHandle.close()
+return items
 end
 
 function lsa(ptn)
 expect(1, ptn, "string")
-local tempfile = fs.list(ptn)
-local fls = fs.open("/temp/ls/a.ls", "w")
-for index = 1, #tempfile do
-local fln = tempfile[index]
-if fs.isDir(ptn .. fln) then
-fls.writeLine("DIR:" .. ptn .. fln)
-elseif fs.exists(ptn .. fln) then
-fls.writeLine("File:" .. ptn .. fln .. " " .. fs.getSize(ptn .. fln) .. "b")
+local entries = minux.listEntries(ptn, { includeHidden = true })
+if entries == false then return false end
+local lines = {}
+for _, entry in ipairs(entries) do
+if entry.isDir == true then
+table.insert(lines, "DIR:" .. entry.path)
+else
+table.insert(lines, "File:" .. entry.path .. " " .. tostring(entry.size or 0) .. "b")
 end
 end
-fls.writeLine("Free space:" .. fs.getFreeSpace(ptn) .. " bytes")
-fls.close()
-return minux.readtable("/temp/ls/a.ls")
+table.insert(lines, "Free space:" .. fs.getFreeSpace(ptn) .. " bytes")
+minux.writetable("/temp/ls/a.ls", lines)
+return lines
 end
 
 -- Authentication
@@ -1196,20 +1440,23 @@ end
 
 function findfile(fln)
 expect(1, fln, "string")
-minux.lsr("/")
-local tempfile  = fs.open("/temp/ls/files.ls", "r")
-local results   = {}
-local lineNumber = 0
-local line = tempfile.readLine()
-while line ~= nil do
-lineNumber = lineNumber + 1
-if string.find(line, fln) ~= nil then
-table.insert(results, lineNumber)
+ensureDirectory("/temp/ls")
+local entries = minux.findEntries("/", {
+recursive = true,
+includeHidden = true,
+type = "file",
+pathContains = fln,
+})
+local lines = {}
+for _, entry in ipairs(entries or {}) do
+table.insert(lines, entry.path)
 end
-line = tempfile.readLine()
+minux.writetable("/temp/ls/files.ls", lines)
+if #lines == 0 then return { "noresult" } end
+local results = {}
+for index = 1, #lines do
+results[index] = index
 end
-tempfile.close()
-if #results == 0 then return { "noresult" } end
 return results
 end
 

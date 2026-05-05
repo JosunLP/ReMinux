@@ -76,9 +76,10 @@
 │   ├── man.sh             — Display manual pages
 │   ├── newtab.sh          — Open a new workspace tab
 │   ├── passwd.sh          — Change a user's password
+│   ├── find.sh            — Walk directory trees
 │   ├── programs.sh        — List available programs
 │   ├── restart.sh         — Reboot
-│   ├── search.sh          — Search for files by name
+│   ├── search.sh          — Compatibility file search wrapper
 │   ├── useradd.sh         — Add a user
 │   ├── userdel.sh         — Delete a user
 │   ├── usermod.sh         — Manage local users (add/del/psw)
@@ -117,14 +118,14 @@
 | `less`       | Scrollable file viewer (Up/Down/W/S, Ctrl to exit)|
 | `lock`       | Lock the screen until the current password is entered |
 | `login`      | Log in as another user                           |
-| `ls`         | List directory contents (`-r` recursive, `-a` detailed) |
+| `ls`         | List directory contents (`-a`, `-l`, `-R`, `-d`)       |
 | `makeboot`   | Write the net-installer to a disk drive          |
 | `man`        | Display a manual page; `man list` for all topics |
 | `newtab`     | Open a new workspace tab (advanced computers only)|
 | `passwd`     | Change a user's password                         |
 | `programs`   | List all available programs                      |
 | `restart`    | Reboot the computer                              |
-| `search`     | Search the filesystem for a filename             |
+| `search`     | Compatibility wrapper for substring file search  |
 | `useradd`    | Add a new user                                   |
 | `userdel`    | Delete a user                                    |
 | `usermod`    | Manage local users (add/del/psw)                 |
@@ -146,8 +147,9 @@
 | `env`    | Show computer environment and shell aliases      |
 | `expr`   | Evaluate an arithmetic expression (`+ - * / % ^ //`) |
 | `factor` | Print prime factors of an integer                 |
+| `find`   | Walk a directory tree (`-name`, `-type`, `-maxdepth`) |
 | `fold`   | Wrap input lines at a column width                |
-| `grep`   | Search files for a Lua pattern (`-i`, `-n`, `-v`) |
+| `grep`   | Search files or stdin (`-F`, `-i`, `-n`, `-v`, `-r`) |
 | `head`   | Print the first N lines of a file                 |
 | `id`     | Print user / host / computer-id                   |
 | `mktemp` | Create a unique file under `/tmp`                 |

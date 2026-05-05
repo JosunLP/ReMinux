@@ -27,7 +27,7 @@ shell.setAlias("workspace" , "/bin/workspace.sh")
 shell.setAlias("lock" , "/bin/lock.sh")
 shell.setAlias("bash" , "/bin/bash.sh")
 shell.setAlias("search","/bin/search.sh")
-shell.setAlias("find","/bin/search.sh")
+shell.setAlias("find","/bin/find.sh")
 -- GNU-style file and text utilities
 shell.setAlias("echo" , "/bin/echo.sh")
 shell.setAlias("pwd" , "/bin/pwd.sh")

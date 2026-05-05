@@ -1,29 +1,30 @@
--- search: find files on the filesystem by name fragment.
-local args     = { ... }
-local filename = args[1]
+local args = { ... }
+local needle = args[1]
+local startPath = args[2] or "/"
 
-if filename == nil or filename == "" then
-print("Usage: search <name>")
-return 0
-end
-
-local results = minux.findfile(filename)
-if results == nil or results[1] == nil then
-print("No results found")
-return 0
+if needle == nil or needle == "" or needle == "?" or needle == "help" then
+	print("Usage: search <name-fragment> [start-path]")
+	return 0
 end
 
-if results[1] == "noresult" then
-print("No results found")
-return 0
+local resolved = shell.resolve(startPath)
+if fs.exists(resolved) ~= true then
+	print("search: no such path: " .. resolved)
+	return 0
 end
 
-for index = 1, #results do
-local lineNumber = tonumber(results[index])
-if lineNumber ~= nil then
-local path = minux.printline("/temp/ls/files.ls", lineNumber)
-if path ~= nil and path ~= false then
-print(path)
+local results = minux.findEntries(resolved, {
+	recursive = true,
+	includeHidden = true,
+	type = "file",
+	pathContains = needle,
+})
+
+if results == false or #results == 0 then
+	print("No results found")
+	return 0
 end
-end
+
+for _, entry in ipairs(results) do
+	minux.writeOutputLine(entry.path)
 end

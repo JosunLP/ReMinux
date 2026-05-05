@@ -3,27 +3,24 @@ Executable: /bin/search.sh
 Alias: search
 
 DESCRIPTION
-  Recursively searches the
-  entire filesystem for files
+  Compatibility wrapper for the
+  old ReMinux file search.
+  Recursively searches for files
   whose path contains the given
   string fragment.
 
 USAGE
-  search <name>
+  search <name> [start-path]
 
 EXAMPLES
   search minux
   search .db
 
 NOTES
-  The search indexes the whole
-  disk starting at / using
-  minux.findfile(), which writes
-  a temporary list to
-  /temp/ls/files.ls.
-  Results are printed one per
-  line.
+  For Linux-style path walking,
+  use 'find' instead.
 
 SEE ALSO
   ls    - list a directory
-  find  - CraftOS file finder
+  find  - Linux-style recursive
+          file search

@@ -49,6 +49,7 @@ php=false
 /gbin/useradd.exe
 /gbin/userdel.exe
 /bin/search.sh
+/bin/find.sh
 /bin/bash.sh
 /bin/lock.sh
 /bin/workspace.sh
@@ -89,6 +90,7 @@ php=false
 /bin/head.sh
 /bin/tail.sh
 /bin/grep.sh
+/etc/man/find.man
 /bin/tree.sh
 /bin/df.sh
 /bin/which.sh
