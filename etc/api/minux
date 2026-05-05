@@ -18,10 +18,12 @@ red       = colors.red,       black     = colors.black,
 
 local NO_USER = "foo"
 local SETTINGS_FILE = "/usr/minux-main/settings.cfg"
+local INSTALLED_DB_FILE = "/etc/apt/list/installed.db"
 local ENCRYPT_KEY_FILE = "/usr/minux-main/config/encr.conf"
 local AUTH_DIR = "/usr/local/auth/"
 local TEMP_EDIT_FILE = "/temp/dev/removeline.tmp"
 local USERNAME_PATTERN = "^[%w][%w_-]*$"
+local USERNAME_RULE_TEXT = "username must start with a letter or digit, then may use letters, digits, '_' and '-'"
 local DEFAULT_SETTINGS = {
 { key = "network",      value = "disabled" },
 { key = "login",        value = "disabled" },
@@ -496,12 +498,12 @@ end
 end
 if minux.findline(cfl, "ui=") == false then
 local uiDefault = "workspace"
-if minux.findline("/etc/apt/list/installed.db", "menu") ~= false then
+if minux.findline(INSTALLED_DB_FILE, "menu") ~= false then
 uiDefault = "menu"
 end
 minux.insertline(cfl, "ui=" .. uiDefault)
 end
-if minux.getconfig("ui") == "menu" and minux.findline("/etc/apt/list/installed.db", "menu") == false then
+if minux.getconfig("ui") == "menu" and minux.findline(INSTALLED_DB_FILE, "menu") == false then
 minux.setconfig("ui", "workspace")
 end
 if logintype() == "network" and auth == nil then
@@ -624,7 +626,7 @@ if #username > 32 then
 return false, "username is too long"
 end
 if string.match(username, USERNAME_PATTERN) == nil then
-return false, "username must start with a letter or digit, then may use letters, digits, '_' and '-'"
+return false, USERNAME_RULE_TEXT
 end
 return true
 end
@@ -728,7 +730,7 @@ addAuditFinding(findings, "error", "Network login is enabled while networking is
 end
 end
 
-if minux.getconfig("ui") == "menu" and minux.findline("/etc/apt/list/installed.db", "menu") == false then
+if minux.getconfig("ui") == "menu" and minux.findline(INSTALLED_DB_FILE, "menu") == false then
 if repair == true then
 minux.setconfig("ui", "workspace")
 addAuditFinding(findings, "fixed", "UI fallback changed from missing 'menu' package to 'workspace'")

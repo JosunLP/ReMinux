@@ -18,7 +18,7 @@ usernames must start with
 a letter or digit and may
 then use letters, digits,
 '-' and '_'. the reserved
-guest placeholder 'foo'
+username 'foo'
 cannot be used.
 
 del : Deletes a user, 
