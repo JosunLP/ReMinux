@@ -30,6 +30,7 @@ local AUTH_DIR = "/usr/local/auth/"
 local TEMP_EDIT_FILE = "/temp/dev/removeline.tmp"
 local USERNAME_PATTERN = "^[%w][%w_-]*$"
 local USERNAME_RULE_TEXT = "username must start with a letter or digit, then may use letters, digits, '_' and '-'"
+local DEFAULT_SERVICE_ORDER = 1000
 local ioContextStack = {}
 local permissionStoreCache
 local DEFAULT_PERMISSION_RULES = {
@@ -789,7 +790,7 @@ local function buildServiceRecord(name, definition)
 	record.detail = state.detail
 	record.updatedAt = state.updatedAt
 	record.trigger = record.trigger or "manual"
-	record.order = tonumber(record.order) or 1000
+	record.order = tonumber(record.order) or DEFAULT_SERVICE_ORDER
 	record.kind = record.kind or "oneshot"
 	return record
 end

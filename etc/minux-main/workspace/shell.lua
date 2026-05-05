@@ -54,7 +54,8 @@ end
 
 local function tokenise(...)
     local sLine = table.concat({ ... }, " ")
-    return parser.tokeniseWords(sLine)
+    local words, err = parser.tokeniseWords(sLine)
+    return words, err
 end
 
 -- Execute a program using os.run, unless a shebang is present.
@@ -471,9 +472,9 @@ end
 function shell.complete(sLine)
     expect(1, sLine, "string")
     if #sLine > 0 then
-        local tWords = tokenise(sLine)
+        local tWords, err = tokenise(sLine)
         if tWords == nil then
-            return nil
+            return nil, err
         end
         local nIndex = #tWords
         if string.sub(sLine, #sLine, #sLine) == " " then
