@@ -282,6 +282,9 @@ function shell.run(...)
                 end
                 return shell.executeWithContext(commandNode.argv[1], arguments, ioContext)
             end,
+            requirePermission = function(path, operation)
+                return minux.requirePermission(path, operation)
+            end,
             resolvePath = function(path)
                 return shell.resolve(path)
             end,

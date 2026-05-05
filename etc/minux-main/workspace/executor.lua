@@ -53,6 +53,13 @@ handle.close()
 return lines
 end
 
+local function ensurePermission(runtime, path, operation)
+if runtime ~= nil and type(runtime.requirePermission) == "function" then
+return runtime.requirePermission(path, operation)
+end
+return false, "permission checker unavailable for " .. tostring(operation) .. ": " .. tostring(path)
+end
+
 local function attachInput(context, lines)
 local inputContext = newInputContext(lines)
 context.inputLines = inputContext.inputLines
@@ -97,7 +104,12 @@ context.flush = flushRawBuffer
 return context
 end
 
-local function attachFileOutput(context, path, append)
+local function attachFileOutput(context, runtime, path, append)
+local operation = fs.exists(path) and "write" or "create"
+local permitted, permissionErr = ensurePermission(runtime, path, operation)
+if permitted ~= true then
+return nil, permissionErr
+end
 local handle = fs.open(path, append == true and "a" or "w")
 if handle == nil then
 return nil, "cannot open output: " .. path
@@ -139,6 +151,10 @@ local function applyRedirects(command, runtime, baseContext, outputSpec)
 	end
 
 if inputPath ~= nil then
+local permitted, permissionErr = ensurePermission(runtime, inputPath, "read")
+if permitted ~= true then
+return nil, permissionErr
+end
 local lines, err = readFileLines(inputPath)
 if lines == nil then
 return nil, err
@@ -147,7 +163,7 @@ attachInput(context, lines)
 end
 
 if outputRedirect ~= nil then
-return attachFileOutput(context, outputRedirect.target, outputRedirect.op == ">>")
+return attachFileOutput(context, runtime, outputRedirect.target, outputRedirect.op == ">>")
 end
 if outputSpec ~= nil and outputSpec.kind == "pipe" then
 attachBufferedOutput(context, outputSpec.lines)

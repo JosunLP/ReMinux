@@ -23,10 +23,10 @@ read()
 return false
 end
 
-local result = minux.login(username, password)
+local result, err = minux.login(username, password)
 if result == true then
-print("Access granted")
-minux.testcolor()
+	print("Access granted")
+	minux.testcolor()
 else
-print("Access denied")
+	print("Access denied" .. (err ~= nil and err ~= "" and ": " .. err or ""))
 end

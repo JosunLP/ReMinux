@@ -1379,9 +1379,10 @@ end
 function login(username, password)
 expect(1, username, "string")
 expect(2, password, "string")
-if minux.validateUsername(username) ~= true then
+local validUsername, validationErrMsg = minux.validateUsername(username)
+if validUsername ~= true then
 minux.debug("login:invalid username", "login")
-return false
+return false, validationErrMsg
 end
 local authtype = logintype()
 
