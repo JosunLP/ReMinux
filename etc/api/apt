@@ -3,6 +3,7 @@
 local AptManager = {}
 AptManager.__index = AptManager
 
+local APT_ERROR_PACKAGE_NOT_FOUND = 105
 local VERSION_LESS = -1
 local VERSION_EQUAL = 0
 local VERSION_GREATER = 1
@@ -431,7 +432,7 @@ self.latestReleaseTag = cachedTag
 return cachedTag, cachedStatus
 end
 
-self.latestReleaseStatus = nil
+self.latestReleaseStatus = "error"
 self.latestReleaseTag = nil
 local bestTag = nil
 for page = 1, self.releaseApiMaxPages do
@@ -994,7 +995,7 @@ if sourceError ~= nil then
 return sourceError
 end
 if availableVersion == nil then
-return 105
+return APT_ERROR_PACKAGE_NOT_FOUND
 end
 if manager:shouldUpdatePackage(installedVersion, availableVersion, false) ~= true then
 return true
