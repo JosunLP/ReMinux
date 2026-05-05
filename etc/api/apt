@@ -547,10 +547,7 @@ end
 return self:parseOfficialSourceRef(source) ~= nil
 end
 
-function AptManager:shouldPreferOfficialReleaseSource(packageSource, sources)
-if packageSource ~= nil then
-return self:isStableOfficialSource(packageSource)
-end
+function AptManager:shouldPreferOfficialReleaseSource(sources)
 if #sources == 0 then
 return true
 end
@@ -569,11 +566,11 @@ end
 return sawStableSource
 end
 
-function AptManager:getPreferredSources(packname, sources, packageSource)
+function AptManager:getPreferredSources(packname, configuredSources, packageSource)
 local preferred = {}
 local useOfficialSource = false
 if self:isRepositoryPackage(packname) == true then
-useOfficialSource = self:shouldPreferOfficialReleaseSource(packageSource, sources)
+useOfficialSource = self:shouldPreferOfficialReleaseSource(configuredSources)
 end
 if useOfficialSource == true then
 local officialSource = self:getDefaultReMinuxSource()
@@ -581,8 +578,11 @@ if officialSource ~= nil then
 table.insert(preferred, officialSource)
 end
 end
-for index = 1, #sources do
-table.insert(preferred, sources[index])
+for index = 1, #configuredSources do
+table.insert(preferred, configuredSources[index])
+end
+if packageSource ~= nil then
+table.insert(preferred, packageSource)
 end
 return self:dedupeSources(preferred)
 end
@@ -656,7 +656,6 @@ if fs.exists(packdb) then
 minux.debug("package.db file found", "apt")
 if packageSource ~= nil then
 minux.debug("apt-source:"..packageSource, "apt")
-table.insert(sources, packageSource)
 end
 end
 
@@ -1066,9 +1065,13 @@ if sourceError ~= nil then
 info.error = sourceError
 return info
 end
+if source == nil or availableVersion == nil then
+info.error = APT_ERROR_PACKAGE_NOT_FOUND
+return info
+end
 info.source = source
 info.availableVersion = availableVersion
-if info.repositoryPackage == true and manager:isOfficialReMinuxSource(source) == true then
+if info.repositoryPackage == true and manager:shouldPreferOfficialReleaseSource(manager:readLines(manager.sourceListPath)) == true and manager:isStableOfficialSource(source) == true then
 local latestTag = manager:getLatestReleaseTag()
 info.releaseTag = latestTag
 end
