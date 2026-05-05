@@ -1,23 +1,26 @@
--- dhcp client program
--- exception if we are the dhcp ourself!
+-- DHCP client: discover and record the Minux server address via Rednet.
+
+-- Skip if this computer is the DHCP server itself.
 if fs.exists("/etc/dhcp-server/dhcp-server.sys") then
-	_G.server = "[US!]"
-	return 0
-elseif _G.modemside == "NONE" then
-	_G.server = "[none]"
-	return 0
+_G.server = "[US!]"
+return 0
 end
--- in case of network clutter, we should wait for a few replies
+if _G.modemside == "NONE" then
+_G.server = "[none]"
+return 0
+end
+
+-- Broadcast a request; collect up to 3 replies to handle network clutter.
 rednet.broadcast("DHCP-REQ")
-netcounter = 0
+local netcounter = 0
 _G.server = "[none]"
 while netcounter ~= 3 do
-	client, data = rednet.receive(2)
-	netcounter = netcounter + 1
-	if data == "DHCP-ACK" then 
-		_G.server = client 
-		netcounter = 3
-	else
-		rednet.broadcast("DHCP-REQ")
-	end
+local client, data = rednet.receive(2)
+netcounter = netcounter + 1
+if data == "DHCP-ACK" then
+_G.server = client
+netcounter = 3
+else
+rednet.broadcast("DHCP-REQ")
+end
 end

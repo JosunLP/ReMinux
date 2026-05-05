@@ -1,0 +1,23 @@
+programs - list available programs
+Executable: /bin/programs.sh
+Alias: programs
+
+DESCRIPTION
+  Lists all programs available
+  in /bin, /rom/programs, and
+  /rom/programs/fun on a single
+  line.
+
+USAGE
+  programs
+
+NOTES
+  The output is written to
+  /temp/ls/programs.ls and
+  then printed. This replaces
+  the default CraftOS 'programs'
+  command with one that includes
+  Minux's own /bin directory.
+
+SEE ALSO
+  ls - list directory contents

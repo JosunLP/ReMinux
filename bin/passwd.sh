@@ -1,23 +1,36 @@
--- searches for user type and then tries to change pass
-args = {...}
+-- passwd: change a user's password.
+local args        = { ... }
 local newusername = args[1]
 local newpassword = args[2]
--- error catching
-print("Reset user password")
-if newusername == nil or newusername == "" then print("useradd:invalid input") return false end
-authtype = minux.logintype()
-print("Username:"..newusername)
-if newpassword == nil then
-	write("Password:")
-	newpassword = read("*")
-end
-if authtype == "disabled" then print("no login system in use") return false end
 
--- now we can run the function
+if newusername == nil or newusername == "" then
+print("Usage: passwd <username> [newpassword]")
+return false
+end
+
+print("Reset user password")
+print("Username: " .. newusername)
+
+if newpassword == nil or newpassword == "" then
+write("New password: ")
+newpassword = read("*")
+end
+
+if newpassword == nil or newpassword == "" then
+print("Invalid input, aborting")
+return false
+end
+
+local authtype = minux.logintype()
+if authtype == "disabled" then
+print("No login system in use")
+return false
+end
+
 if authtype == "network" then
-	auth.setpass(newusername , newpassword)
+auth.setpass(newusername, newpassword)
 elseif authtype == "local" then
-	os.run({} , "/bin/usermod.sh" , "psw" ,  newusername , newpassword)
+os.run({}, "/bin/usermod.sh", "psw", newusername, newpassword)
 else
-	print("login disabled or broken")
+print("Login type unknown or broken")
 end

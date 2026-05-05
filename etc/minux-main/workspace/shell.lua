@@ -524,7 +524,7 @@ else
 	term.clear()
 	term.setCursorPos(1,1)
     -- do we print welcome screen?
-    if minux.getconfig("welcome") == "enabled" and term.isColor then
+    if minux.getconfig("welcome") == "enabled" and term.isColor() then
         minux.debug("welcome screen compatible system","minux")
         local findline = minux.getconfig("welcome")
         if findline == "enabled" then
@@ -603,7 +603,7 @@ else
             minux.debug(result, "minux")
             minux.debug("splitting character", "minux")
             -- we split the commands
-            separateCmds = {}
+            local separateCmds = {}
             while string.find(result, "&&") do
                 table.insert(	separateCmds, string.sub(result, 1, string.find(result, "&&")-2)	)
                 result = string.sub(	result, string.find(result, "&&")+3, #result	)
@@ -616,7 +616,7 @@ else
             local didrun = true
             while separateCmds[cmdcounter] ~= nil and didrun ~= false do
                 didrun = false
-                minux.debug("running."..separateCmds[cmdcounter])
+                minux.debug("running."..separateCmds[cmdcounter], "minux")
                 local properend = shell.run(separateCmds[cmdcounter])
                 if properend == true then didrun = true end
                 cmdcounter = cmdcounter + 1

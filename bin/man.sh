@@ -1,22 +1,22 @@
--- manual loader
+-- man: display a manual page using the less viewer.
+local args    = { ... }
+local appname = args[1]
 
-args = {...}
-appname = args[1]
-
-
--- we catch invalid data
 if appname == "list" then
-	shell.run("ls /etc/man/")
-	return 0
-elseif appname == "" or appname == nil then
-	print("no app given, try 'man list'")
-	return 0
-elseif fs.exists("/etc/man/"..appname..".man") == false then
-	print("I have no manuals on this topic, this is what i have:")
-	shell.run("ls /etc/man/")
-	return 0
+shell.run("ls /etc/man/")
+return 0
 end
 
--- we open and display the manual
+if appname == nil or appname == "" then
+print("No topic given. Try 'man list'")
+return 0
+end
 
-shell.run("edit /etc/man/"..appname..".man")
+local manpath = "/etc/man/" .. appname .. ".man"
+if fs.exists(manpath) == false then
+print("No manual for '" .. appname .. "'. Available pages:")
+shell.run("ls /etc/man/")
+return 0
+end
+
+shell.run("/bin/less.sh " .. manpath)

@@ -1,0 +1,33 @@
+passwd - change a user password
+Executable: /bin/passwd.sh
+Alias: passwd
+
+DESCRIPTION
+  Changes the password of an
+  existing user account.
+
+USAGE
+  passwd <username> [newpassword]
+
+  If the new password is not
+  given on the command line,
+  the program will prompt for
+  it (input is masked).
+
+EXAMPLES
+  passwd root
+  passwd alice s3cr3t
+
+NOTES
+  Requires the login system to
+  be set to 'local' or 'network'.
+  For network auth the change is
+  forwarded to the AUTH server.
+  For local auth usermod is
+  called internally.
+
+SEE ALSO
+  usermod  - full user management
+  useradd  - add a new user
+  userdel  - delete a user
+  login    - log in as a user

@@ -1,124 +1,98 @@
--- apt controller script, this script makes it easy for users to run the apt system
+-- apt controller script
 
-args = {...}
+local args = { ... }
 local command = args[1]
-local pkn = args[2]
-local rebuild = false
+local packageName = args[2]
 
--- we translate aliases
-if command == "install" then command = "-i" end
-if command == "remove" then command = "-r" end
-if command == "update" then command = "-u" end
-if command == "update-forced" then command = "-U" end
-if command == "setsource" then command = "-s" end
-if command == "clearsource" then command = "-c" end
-if command == "setupdate" then command = "-a" end
-if command == "list-installed" then command = "-l" end
-if command == "list-available" then command = "-la" end
-if command == "list-source" then command = "-ls" end
+local commandAliases = {
+install = "-i",
+remove = "-r",
+update = "-u",
+["update-forced"] = "-U",
+setsource = "-s",
+clearsource = "-c",
+setupdate = "-a",
+["list-installed"] = "-l",
+["list-available"] = "-la",
+["list-source"] = "-ls",
+}
 
+if commandAliases[command] ~= nil then
+command = commandAliases[command]
+end
 
--- now we translate to the correct subprogram
-if command == "-i" and _G.admin == true and pkn ~= nil then
-	if apt.checkinstall(pkn) == true then
-		print("Already installed:"..pkn)
-		return true
-	end
-	local temp = apt.install(pkn)
-	if temp == true then
-		print("package installed:"..pkn)
-		rebuild = true
-	else
-		print("install failed:"..pkn.."E:"..temp)
-	end
-elseif command == "-i" and pkn == "auth-client" then
-	if apt.checkinstall(pkn) == true then
-		print("Already installed:"..pkn)
-		return 0
-	end
-	local temp = apt.install(pkn)
-	if temp == true then
-		rebuild = true
-		print("package installed:"..pkn)
-	else
-		print("install failed:"..pkn)
-	end
-elseif command == "-r" and _G.admin == true and pkn ~= nil then
-	if apt.checkinstall(pkn) == true then
-		local temp = apt.uninstall(pkn)
-		if temp == false then
-			print("removal failed:"..pkn)
-		else
-			print("package removed:"..pkn)
-			rebuild = true
-		end
-	else
-		print("not installed:"..pkn)
-	end
-elseif command == "-u" and pkn == nil then
-	local temp = apt.update()
-	rebuild = true
-	if temp == true then
-		print("update complete")
-	else
-		print("update failed")
-	end
-elseif command == "-U" then
-	local temp = apt.update("-f")
-	rebuild = true
-	if temp == true then
-		print("update complete")
-	else
-		print("update failed")
-	end
-elseif command == "-u" then
-	local temp = apt.update(pkn)
-	rebuild = true
-	if temp == true then
-		print("update complete")
-	else
-		print("update failed")
-	end
-elseif command == "-s" and _G.admin == true and pkn ~= nil then
-	minux.debug("apt:addsource:"..pkn)
-	local temp = apt.addsource(pkn)
-	if temp == false then
-		print("source not added")
-	else
-		print("source added")
-	end
-elseif command == "-c" and _G.admin == true and pkn ~= nil then
-	temp = apt.clearsource(pkn)
-	if temp == true then
-		print("source removed")
-	else
-		print("source not removed")
-	end
-elseif command == "-a" and _G.admin == true and pkn ~= nil then
-	minux.config("update",pkn)
-elseif command == "-ls" then
-	shell.run("/bin/less.sh /usr/apt/source.ls")
-elseif command == "-la" then
-	if pkn == "--update" then apt.softlist() end
-	if fs.exists("/temp/apt/programs.ls") ~= true then apt.softlist() end
-	shell.run("/bin/less.sh /temp/apt/programs.ls")
-elseif command == "-l" then
-	shell.run("/bin/less.sh /etc/apt/list/installed.db")
-elseif command == nil and apt.checkinstall("menu") == true then
-	shell.run("/etc/minux-main/menu/soft.sys")
+local function printResult(success, successMessage, failureMessage)
+if success == true then
+print(successMessage)
 else
-	print("Invalid input or access denied, use 'man apt'")
+print(failureMessage)
+end
+return success
 end
 
-if rebuild == true then
-	minux.debug("apt:init:reloadAPI","minux")
-	print("rebuilding boot addon")
-	apt.bootbuild()
-	print("rebuilding boot alias")
-	apt.aliasbuild()
-	print("re-loading alias")
-	shell.run("/boot/alias.ls")
-	print("re-loading bootaddon")
-	shell.run("/boot/addon.d")
+local function runInstall(targetPackage)
+if apt.checkinstall(targetPackage) == true then
+print("Already installed: "..targetPackage)
+return true
 end
-print("Apt:Operation complete.")
+
+local result = apt.install(targetPackage)
+if result == true then
+print("Package installed: "..targetPackage)
+return true
+end
+
+print("Install failed: "..targetPackage.." E:"..tostring(result))
+return false
+end
+
+local function runUninstall(targetPackage)
+if apt.checkinstall(targetPackage) ~= true then
+print("Not installed: "..targetPackage)
+return false
+end
+
+return printResult(
+apt.uninstall(targetPackage),
+"Package removed: "..targetPackage,
+"Removal failed: "..targetPackage
+)
+end
+
+local function runUpdate(targetPackage)
+local result = apt.update(targetPackage)
+return printResult(result == true, "Update complete", "Update failed")
+end
+
+if command == "-i" and packageName ~= nil and (_G.admin == true or packageName == "auth-client") then
+runInstall(packageName)
+elseif command == "-r" and packageName ~= nil and _G.admin == true then
+runUninstall(packageName)
+elseif command == "-u" and packageName == nil then
+runUpdate()
+elseif command == "-U" then
+runUpdate("-f")
+elseif command == "-u" then
+runUpdate(packageName)
+elseif command == "-s" and packageName ~= nil and _G.admin == true then
+printResult(apt.addsource(packageName), "Source added", "Source not added")
+elseif command == "-c" and packageName ~= nil and _G.admin == true then
+printResult(apt.clearsource(packageName), "Source removed", "Source not removed")
+elseif command == "-a" and packageName ~= nil and _G.admin == true then
+minux.config("update", packageName)
+elseif command == "-ls" then
+shell.run("/bin/less.sh /usr/apt/source.ls")
+elseif command == "-la" then
+if packageName == "--update" or fs.exists("/temp/apt/programs.ls") ~= true then
+apt.softlist()
+end
+shell.run("/bin/less.sh /temp/apt/programs.ls")
+elseif command == "-l" then
+shell.run("/bin/less.sh /etc/apt/list/installed.db")
+elseif command == nil and apt.checkinstall("menu") == true then
+shell.run("/etc/minux-main/menu/soft.sys")
+else
+print("Invalid input or access denied, use 'man apt'")
+end
+
+print("Apt: operation complete.")

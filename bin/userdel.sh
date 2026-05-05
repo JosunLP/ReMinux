@@ -1,22 +1,22 @@
--- searches for user type and then tries to delete
-args = {...}
+-- userdel: remove a user from the current auth system.
+local args        = { ... }
 local newusername = args[1]
-local newpassword = args[2]
--- error catching
-if newusername == nil or newusername == "" then print("userdel:invalid input") return 0 end
 
--- first find out what type of network we have and if we have auth-client
-if fs.exists("/bin/auth-client.sh") then
-	authexist = true
+if newusername == nil or newusername == "" then
+print("Usage: userdel <username>")
+return 0
 end
-authtype = minux.logintype()
-if authtype == "disabled" then print("no login system in use") return 0 end
 
--- now we can run the function
+local authtype = minux.logintype()
+if authtype == "disabled" then
+print("No login system in use")
+return 0
+end
+
 if authtype == "network" then
-	auth.userdel(newusername , newpassword)
+auth.userdel(newusername)
 elseif authtype == "local" then
-	os.run({} , "/bin/usermod.sh" , "del" ,  newusername)
+os.run({}, "/bin/usermod.sh", "del", newusername)
 else
-	print("login disabled or broken")
+print("Login type unknown or broken")
 end

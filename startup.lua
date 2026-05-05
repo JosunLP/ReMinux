@@ -1,11 +1,21 @@
--- Minux Bootloader
+-- Minux bootloader
 shell.run("clear")
-if fs.exists("/os/version.txt") then
-	temp = fs.open("/os/version.txt","r")
-	_G.version = temp.read()
-	temp.close()
-else
-	_G.version = "Unknown"
+
+-- Determine the installed version from the package manifest.
+local VERSION_DB = "/etc/apt/list/minux-main.db"
+if fs.exists(VERSION_DB) then
+local temp = fs.open(VERSION_DB, "r")
+local line = temp.readLine()
+while line ~= nil do
+if string.find(line, "version=") == 1 then
+_G.version = string.sub(line, 9)
+break
 end
-print("Starting Minux Version:".._G.version)
+line = temp.readLine()
+end
+temp.close()
+end
+if _G.version == nil then _G.version = "Unknown" end
+
+print("Starting Minux version: " .. _G.version)
 shell.run("/boot/init.sys")

@@ -1,81 +1,99 @@
-args = {...}
-action = args[1]
-etc1 = args[2]
-etc2 = args[3]
-etc3 = args[4]
+-- user management tool (local auth only)
+local args = { ... }
+local action   = args[1]
+local username = args[2]
+local newpass  = args[3]
 
-if _G.admin ~= true then 
-	print("Access denied!")
-	return 0 
+if _G.admin ~= true then
+print("Access denied!")
+return 0
 end
 
 if fs.exists("/usr/minux-main/settings.cfg") == false then
-	print("configuration files missing, run 'login set local/network'")
+print("Configuration files missing, run 'config login local'")
+return 0
+end
+
+local authtype = minux.getconfig("login")
+if authtype ~= "local" then
+print("Authentication type is not set to local")
+print("Use 'auth-client' to manage networked users")
+print("Use 'apt -i auth-client' to install said package")
+return 0
+end
+
+-- Read the encryption key from disk; returns nil when encryption is off.
+local function readEncryptKey()
+local keyPath = "/usr/minux-main/config/encr.conf"
+if fs.exists(keyPath) then
+local keyfile = fs.open(keyPath, "r")
+local key = tonumber(keyfile.readLine())
+keyfile.close()
+return key
+end
+return nil
+end
+
+-- Write a password to a user file, encrypting it when applicable.
+local function writeUserFile(path, password)
+local key = readEncryptKey()
+if key ~= nil then
+password = minux.encrypt(password, key)
+end
+local file = fs.open(path, "w")
+file.write(password)
+file.close()
+end
+
+local userPath = "/usr/local/auth/" .. (username or "") .. ".usr"
+
+if action == "?" or action == "help" then
+print("usermod - local user management")
+print("Usage: usermod <action> <username> [password]")
+print("  add  <username> <password>  - create a new user")
+print("  del  <username>             - delete a user")
+print("  psw  <username> <password>  - reset a user's password")
+
+elseif action == "add" then
+if username == nil or newpass == nil then
+print("Usage: usermod add <username> <password>")
+return 0
+end
+if fs.exists(userPath) then
+print("This user already exists")
+return 0
+end
+writeUserFile(userPath, newpass)
+print("User added!")
+
+elseif action == "del" then
+if username == nil then
+print("Usage: usermod del <username>")
+return 0
+end
+if fs.exists(userPath) == false then
+print("This user does not exist")
+return 0
+end
+if username == "root" then
+print("You cannot delete the root user")
+return 0
+end
+fs.delete(userPath)
+print("User removed!")
+
+elseif action == "psw" then
+if username == nil or newpass == nil then
+print("Usage: usermod psw <username> <password>")
+return 0
+end
+if fs.exists(userPath) == false then
+print("This user does not exist")
+return 0
+end
+writeUserFile(userPath, newpass)
+print("User modified")
+
 else
-	local authtype = minux.getconfig("login")
-	if authtype == "local" then
-		if action == "?" or action == "help" then
-			print("/bin/usermod.sh")
-			print("usage: 'usermod action arg1 arg2'")
-			print("eg: usermod add testuser testpassword")
-			print("eg2: usermod del testuser")
-			print("eg3: usermod psw testuser testpass")
-			print("options:")
-			print("add, del, resetpass")
-			return 0
-		elseif action == "add" then
-			if fs.exists("/usr/local/auth/"..etc1..".usr") then
-				print("this user already exists")
-				return 0
-			else
-				file = fs.open("/usr/local/auth/"..etc1..".usr" , "w")
-				local encrypt = minux.getconfig("encrypt")
-				if encrypt == true then
-					local keyfile = fs.open("/usr/minux-main/config/encr.conf","r")
-					local tempkey = keyfile.readLine()
-					local key = tonumber(tempkey)
-					keyfile.close()
-					etc2 = minux.encrypt(etc2, key)
-				end
-				file.write(etc2)
-				file.close()
-				print("user added!")
-			end
-		elseif action == "del" then
-			if fs.exists("/usr/local/auth/"..etc1..".usr") == false then
-				print("this user does not exists")
-				return 0
-			elseif etc1 == "root" then
-				print("you cannot delete root")
-			else
-				file = fs.delete("/usr/local/auth/"..etc1..".usr")
-				print("user removed!")
-			end
-		elseif action == "psw" then
-			if fs.exists("/usr/local/auth/"..etc1..".usr") == false then
-				print("this user does not exists")
-				return 0
-			else 
-				file = fs.open("/usr/local/auth/"..etc1..".usr" , "w")
-				local encrypt = minux.getconfig("encrypt")
-				if encrypt == true then
-					local keyfile = fs.open("/usr/minux-main/config/encr.conf","r")
-					local tempkey = keyfile.readLine()
-					local key = tonumber(tempkey)
-					keyfile.close()
-					etc2 = minux.encrypt(etc2,key)
-				end
-				file.write(etc2)
-				file.close()
-				print("user modified")
-			end
-		else
-			print("invalid data, use 'usermod ?'")
-			return 0
-		end
-	else
-	print("authentication type is not set to local")
-	print("use 'auth-client' to manage networked users")
-	print("use 'apt -i auth-client' to install said package")
-	end
+print("Unknown action, use 'usermod ?'")
 end
