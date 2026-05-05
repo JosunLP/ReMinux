@@ -105,6 +105,15 @@ local MODE_COMMAND = "COMMAND"
 local MODE_SEARCH  = "SEARCH"
 local MODE_VISUAL  = "VISUAL"
 
+-- ESC key code lookup.  CC: Tweaked (Minecraft 1.13+) exposes ESC as
+-- `keys.escape` (GLFW code 256).  Older ComputerCraft builds running on
+-- LWJGL 2 reported ESC as raw code 1.  We accept either at runtime so the
+-- editor stays usable across the whole range of ComputerCraft versions.
+local function isEscapeKey(code)
+        if keys.escape ~= nil and code == keys.escape then return true end
+        return code == 1
+end
+
 function Editor.new(filename)
         local termW, termH = term.getSize()
         local self = setmetatable({
@@ -513,21 +522,25 @@ function Editor:yankLine()
         self:setMessage("Line yanked.", colors.lime)
 end
 
-function Editor:paste(after)
-        if self.yankBuffer == nil or self.yankBuffer == "" and self.yankIsLine == false then
+function Editor:paste(pasteAfter)
+        -- An empty character-wise yank means "nothing to paste"; an empty
+        -- line-wise yank, however, is the correct way to paste a blank
+        -- line and matches Vim's behaviour, so it must be allowed through.
+        local bufferEmpty = self.yankBuffer == nil or self.yankBuffer == ""
+        if bufferEmpty and self.yankIsLine == false then
                 self:setMessage("Yank buffer is empty.", colors.yellow)
                 return
         end
         self:snapshot()
         if self.yankIsLine then
-                local insertAt = after and self.cursor.row + 1 or self.cursor.row
+                local insertAt = pasteAfter and self.cursor.row + 1 or self.cursor.row
                 table.insert(self.lines, insertAt, self.yankBuffer)
                 self.cursor.row = insertAt
                 self.cursor.col = 1
         else
                 local row  = self.cursor.row
                 local line = self:line(row)
-                local col  = after and self.cursor.col + 1 or self.cursor.col
+                local col  = pasteAfter and self.cursor.col + 1 or self.cursor.col
                 col = clamp(col, 1, #line + 1)
                 self:setLine(row, line:sub(1, col - 1) .. self.yankBuffer .. line:sub(col))
                 self.cursor.col = col + #self.yankBuffer - 1
@@ -838,9 +851,15 @@ function Editor:handleNormal(event, key)
                 elseif char == "G" then self:moveFileEnd()
                 elseif char == "g" then self.pendingOp = "g"
                 elseif char == "i" then self.mode = MODE_INSERT
-                elseif char == "I" then self:moveLineStart() self.mode = MODE_INSERT
-                elseif char == "a" then self.cursor.col = self.cursor.col + 1 self.mode = MODE_INSERT
-                elseif char == "A" then self:moveLineEnd() self.mode = MODE_INSERT
+                elseif char == "I" then
+                        self:moveLineStart()
+                        self.mode = MODE_INSERT
+                elseif char == "a" then
+                        self.cursor.col = self.cursor.col + 1
+                        self.mode = MODE_INSERT
+                elseif char == "A" then
+                        self:moveLineEnd()
+                        self.mode = MODE_INSERT
                 elseif char == "o" then self:openLineBelow()
                 elseif char == "O" then self:openLineAbove()
                 elseif char == "x" then self:deleteCharUnderCursor()
@@ -1008,9 +1027,7 @@ function Editor:run()
 
                         if param == keys.leftCtrl or param == keys.rightCtrl then
                                 -- nothing
-                        elseif param == 1 -- ESC keycode in CC: Tweaked
-                                        or (keys.escape ~= nil and param == keys.escape)
-                                        or (keys.esc ~= nil and param == keys.esc) then
+                        elseif isEscapeKey(param) then
                                 if self.mode == MODE_INSERT or self.mode == MODE_VISUAL then
                                         self.mode = MODE_NORMAL
                                         self.visualAnchor = nil

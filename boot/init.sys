@@ -120,6 +120,8 @@ if term.isColor() then term.setTextColor(colors.white) end
 
 if fs.exists("/boot/alias.ls") then
 shell.run("/boot/alias.ls")
+else
+minux.debug("/boot/alias.ls missing - skipping (will be rebuilt by sanity check)", "minux")
 end
 
 -- Sanity check (update the same status line once complete)

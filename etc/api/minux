@@ -999,6 +999,8 @@ function crypt(message, shift)
 expect(1, message, "string")
 expect(2, shift, "number")
 -- Caesar shift over the 26-letter alphabet and the 10 decimal digits.
+-- 97 ('a') and 65 ('A') are the ASCII offsets used to map the input byte
+-- into the 0..25 range before the modulo, then back to a printable byte.
 -- Lua's % operator returns a non-negative remainder for a positive divisor,
 -- so negative shifts (used by decrypt) are handled correctly.
 local result = {}
