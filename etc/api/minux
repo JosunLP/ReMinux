@@ -287,8 +287,7 @@ mode = isDir == true and 755 or 644,
 }
 end
 
-local function permissionEntryForPath(path, isDir, store)
-store = store or readPermissionStore()
+local function permissionEntryFromStore(path, isDir, store)
 local entry = store[normalisePath(path)]
 if entry ~= nil then
 return {
@@ -300,27 +299,43 @@ end
 return defaultPermissionEntry(path, isDir)
 end
 
-local function setPermissionEntry(path, entry, store, skipWrite)
-store = store or readPermissionStore()
+local function permissionEntryForPath(path, isDir)
+return permissionEntryFromStore(path, isDir, readPermissionStore())
+end
+
+local function setPermissionEntryInStore(path, entry, store)
 store[normalisePath(path)] = {
 owner = entry.owner,
 group = entry.group,
 mode = parseModeValue(entry.mode) or 644,
 }
-if skipWrite ~= true then
-writePermissionStore(store)
-end
 return store[normalisePath(path)]
 end
 
-local function registerPathMetadata(path, isDir, entry, store, skipWrite)
+local function setPermissionEntry(path, entry)
+local store = readPermissionStore()
+local result = setPermissionEntryInStore(path, entry, store)
+writePermissionStore(store)
+return result
+end
+
+local function registerPathMetadataInStore(path, isDir, entry, store)
 if fs.exists(path) ~= true and entry == nil then
 return false
 end
 local resolved = normalisePath(path)
-local metadata = entry or permissionEntryForPath(resolved, isDir == true, store)
+local metadata = entry or permissionEntryFromStore(resolved, isDir == true, store)
 metadata.mode = parseModeValue(metadata.mode) or ((isDir == true) and 755 or 644)
-setPermissionEntry(resolved, metadata, store, skipWrite)
+setPermissionEntryInStore(resolved, metadata, store)
+return metadata
+end
+
+local function registerPathMetadata(path, isDir, entry)
+local store = readPermissionStore()
+local metadata = registerPathMetadataInStore(path, isDir, entry, store)
+if metadata ~= false then
+writePermissionStore(store)
+end
 return metadata
 end
 
@@ -549,7 +564,7 @@ local function seedPermissionTree(path, recursive, store)
 if fs.exists(path) ~= true then
 return
 end
-registerPathMetadata(path, fs.isDir(path), nil, store, true)
+registerPathMetadataInStore(path, fs.isDir(path), nil, store)
 if recursive == true and fs.isDir(path) == true and minux ~= nil and type(minux.findEntries) == "function" then
 local entries = minux.findEntries(path, {
 recursive = true,
@@ -557,7 +572,7 @@ includeRoot = false,
 includeHidden = true,
 })
 for _, entry in ipairs(entries or {}) do
-registerPathMetadata(entry.path, entry.isDir, nil, store, true)
+registerPathMetadataInStore(entry.path, entry.isDir, nil, store)
 end
 end
 end

@@ -81,7 +81,7 @@ local function executeProgram(remainingRecursion, path, args, ioContext)
         -- Load the specified hashbang program instead
         local hashbangArgs, tokeniseErr = tokenise(contents:sub(3))
         if hashbangArgs == nil then
-            printError("Invalid hashbang in " .. path .. ": " .. tostring(tokeniseErr or "parse error"))
+            printError("Invalid hashbang in " .. path .. ": " .. (tokeniseErr or "parse error"))
             return false
         end
         local originalHashbangPath = table.remove(hashbangArgs, 1)
