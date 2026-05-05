@@ -40,6 +40,19 @@ local baseRead = read
 local baseWrite = write
 local basePrint = print
 
+local function isSuccessfulProgramResult(result)
+    if result == nil or result == true then
+        return true
+    end
+    if result == false then
+        return false
+    end
+    if type(result) == "number" then
+        return result == 0
+    end
+    return true
+end
+
 -- Colours
 local promptColour, textColour, bgColour
 if term.isColour() then
@@ -169,16 +182,18 @@ local function executeProgram(remainingRecursion, path, args, ioContext)
     if ioContext ~= nil and minux ~= nil and type(minux.pushIoContext) == "function" then
         minux.pushIoContext(ioContext)
     end
-    local ok, err, co = exception.try(func, table.unpack(args, 1, args.n))
+    local ok, result, co = exception.try(func, table.unpack(args, 1, args.n))
     if ioContext ~= nil and minux ~= nil and type(minux.popIoContext) == "function" then
         minux.popIoContext()
     end
 
-    if ok then return true end
+    if ok then
+        return isSuccessfulProgramResult(result)
+    end
 
-    if err and err ~= "" then
-        printError(err)
-        exception.report(err, co)
+    if result and result ~= "" then
+        printError(result)
+        exception.report(result, co)
     end
 
     return false
