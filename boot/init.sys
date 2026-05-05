@@ -6,14 +6,14 @@ local cursorhor, cursorver = term.getCursorPos()
 -- Crash handler helpers
 
 local function getCrashHandler(stage)
-local path = "/temp/minux/boot/fail" .. stage .. ".tmp"
-if fs.exists(path) then
-local tempfile = fs.open(path, "r")
-local value = tempfile.readLine()
-tempfile.close()
-return value
-end
-return 0
+	local path = "/temp/minux/boot/fail" .. stage .. ".tmp"
+	if fs.exists(path) then
+		local tempfile = fs.open(path, "r")
+		local value = tonumber(tempfile.readLine()) or 0
+		tempfile.close()
+		return value
+	end
+	return 0
 end
 
 local function setCrashHandler(stage, value)
@@ -27,13 +27,13 @@ end
 local function repairShell(stage)
 term.clear()
 term.setCursorPos(1, 1)
-if stage == "1" or stage == 1 then
+if stage == 1 then
 print("Kernel panic")
 else
 print("Minux-V:" .. _G.version .. " Init fail")
 end
 print("Init stage:" .. stage)
-if stage == 4 or stage == "4" then
+if stage == 4 then
 print(" ")
 print("Causes:")
 print("1) your UI or bootup program is broken")
@@ -74,13 +74,13 @@ end
 -- Check and advance a crash-handler stage; call the repair shell if the
 -- machine is stuck at a failing stage.
 local function checkCrashStage(stage)
-crashstage = getCrashHandler(stage)
-if crashstage == "2" or crashstage == 2 then
-setCrashHandler(stage, "0")
-repairShell(stage)
-else
-setCrashHandler(stage, crashstage + 1)
-end
+	crashstage = getCrashHandler(stage)
+	if crashstage >= 2 then
+		setCrashHandler(stage, "0")
+		repairShell(stage)
+	else
+		setCrashHandler(stage, tostring(crashstage + 1))
+	end
 end
 
 -- Boot header

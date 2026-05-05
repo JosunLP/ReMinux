@@ -16,6 +16,7 @@ brown     = colors.brown,     green     = colors.green,
 red       = colors.red,       black     = colors.black,
 }
 
+local NO_USER = "foo"
 local SETTINGS_FILE = "/usr/minux-main/settings.cfg"
 local ENCRYPT_KEY_FILE = "/usr/minux-main/config/encr.conf"
 local AUTH_DIR = "/usr/local/auth/"
@@ -53,7 +54,7 @@ end
 -- Resolve the settings file path for the current user (falls back to global).
 local function resolveSettingsFile()
 local cfgf = SETTINGS_FILE
-if _G.login ~= nil and _G.login ~= "foo" then
+if _G.login ~= nil and _G.login ~= NO_USER then
 local userCfg = "/home/" .. _G.login .. "/minux-config/minux.cfg"
 if fs.exists(userCfg) then
 cfgf = userCfg
@@ -481,7 +482,7 @@ write("please enter the root password:")
 local newpass = read("*")
 write("please re-enter the root password:")
 local newpass2 = read("*")
-if newpass ~= nil and newpass ~= "" and newpass == newpass2 then
+if newpass ~= "" and newpass == newpass2 then
 minux.debug("login:creating user", "minux")
 local key = readEncryptKey()
 if key ~= nil then
@@ -1019,7 +1020,8 @@ end
 function decrypt(text, key)
 expect(1, text, "string")
 expect(2, key, "number")
-return minux.crypt(text, -key)
+-- Decryption reverses the shift by negating the key.
+	return minux.crypt(text, -key)
 end
 
 -- Table utilities
