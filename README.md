@@ -217,6 +217,7 @@ apt -ls               # List active sources
 ```
 
 For the built-in `minux-main` package, ReMinux now prefers the repository's latest GitHub Release as the update source and only falls back to the `main` branch when no release is available.
+Official release tags are expected to follow `vX.Y.Z` or `X.Y.Z-suffix` style versioning.
 
 ---
 

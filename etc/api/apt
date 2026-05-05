@@ -15,6 +15,8 @@ mapCacheDirectory = "/temp/apt/map/",
 githubRepo = "JosunLP/ReMinux",
 githubDefaultRef = "main",
 githubApiBase = "https://api.github.com/repos/JosunLP/ReMinux/",
+releaseCachePath = "/temp/apt/github-release.db",
+releaseCacheTtl = 3600,
 latestReleaseResolved = false,
 latestReleaseTag = nil,
 legacySources = {
@@ -150,37 +152,100 @@ end
 return nil
 end
 
+function AptManager:getCurrentEpochSeconds()
+if os.epoch == nil then
+return nil
+end
+return math.floor(os.epoch("utc") / 1000)
+end
+
+function AptManager:isReleaseTag(tag)
+return type(tag) == "string" and string.match(tag, "^v?%d+%.%d+%.%d+[%w%._%-]*$") ~= nil
+end
+
+function AptManager:isOfficialRef(ref)
+return ref == self.githubDefaultRef or self:isReleaseTag(ref)
+end
+
+function AptManager:readLatestReleaseCache()
+local now = self:getCurrentEpochSeconds()
+if now == nil or fs.exists(self.releaseCachePath) == false then
+return false, nil
+end
+
+local file = fs.open(self.releaseCachePath, "r")
+local cachedAt = tonumber(file.readLine())
+local cachedTag = file.readLine()
+file.close()
+if cachedAt == nil then
+return false, nil
+end
+if now - cachedAt > self.releaseCacheTtl then
+return false, nil
+end
+if cachedTag == "NONE" then
+return true, nil
+end
+if self:isReleaseTag(cachedTag) then
+return true, cachedTag
+end
+return false, nil
+end
+
+function AptManager:writeLatestReleaseCache(tag)
+local now = self:getCurrentEpochSeconds()
+if now == nil then
+return
+end
+self:ensureParentDirectory(self.releaseCachePath)
+local file = fs.open(self.releaseCachePath, "w")
+file.writeLine(now)
+file.writeLine(tag or "NONE")
+file.close()
+end
+
 function AptManager:getLatestReleaseTag()
 if self.latestReleaseResolved == true then
 return self.latestReleaseTag
 end
+
+local cacheFound, cachedTag = self:readLatestReleaseCache()
+if cacheFound == true then
 self.latestReleaseResolved = true
+self.latestReleaseTag = cachedTag
+return cachedTag
+end
 
 local body = self:readRemoteText(self.githubApiBase.."releases/latest", {
 ["User-Agent"] = "ReMinux",
 Accept = "application/vnd.github+json",
 })
 if body == nil then
+self.latestReleaseResolved = true
 self.latestReleaseTag = nil
+self:writeLatestReleaseCache(nil)
 return nil
 end
 
 local decoder = self:getJsonDecoder()
-if decoder ~= nil then
+if decoder == nil then
+self.latestReleaseResolved = true
+self.latestReleaseTag = nil
+self:writeLatestReleaseCache(nil)
+return nil
+end
+
 local ok, data = pcall(decoder, body)
-if ok == true and type(data) == "table" and type(data.tag_name) == "string" and data.tag_name ~= "" then
+if ok == true and type(data) == "table" and self:isReleaseTag(data.tag_name) then
+self.latestReleaseResolved = true
 self.latestReleaseTag = data.tag_name
+self:writeLatestReleaseCache(data.tag_name)
 return data.tag_name
 end
-end
 
-local tag = string.match(body, [["tag_name"%s*:%s*"([^"]+)"]])
-if tag ~= nil and tag ~= "" then
-self.latestReleaseTag = tag
-return tag
-end
-
+self.latestReleaseResolved = true
 self.latestReleaseTag = nil
+self:writeLatestReleaseCache(nil)
 return nil
 end
 
@@ -209,6 +274,22 @@ end
 return unique
 end
 
+function AptManager:escapePattern(text)
+return string.gsub(text, "([%(%)%.%%%+%-%*%?%[%]%^%$])", "%%%1")
+end
+
+function AptManager:parseOfficialSourceRef(source)
+source = self:normalizeSource(source)
+if type(source) ~= "string" or source == "" then
+return nil
+end
+local ref = string.match(source, "^https://raw%.githubusercontent%.com/"..self:escapePattern(self.githubRepo).."/([^/]+)/etc/apt/?$")
+if self:isOfficialRef(ref) then
+return ref
+end
+return nil
+end
+
 function AptManager:isOfficialReMinuxSource(source)
 source = self:normalizeSource(source)
 if type(source) ~= "string" or source == "" then
@@ -219,16 +300,22 @@ if source == self:normalizeSource(self.legacySources[index]) then
 return true
 end
 end
-return string.match(source, "^https://raw%.githubusercontent%.com/"..self.githubRepo.."/.-/etc/apt/?$") ~= nil
+return self:parseOfficialSourceRef(source) ~= nil
 end
 
 function AptManager:getPreferredSources(packname, sources)
 local preferred = {}
-local useOfficialSource = packname == "minux-main" and #sources == 0
+local useOfficialSource = false
+if packname == "minux-main" then
+if #sources == 0 then
+useOfficialSource = true
+else
 for index = 1, #sources do
-if packname == "minux-main" and self:isOfficialReMinuxSource(sources[index]) then
+if self:isOfficialReMinuxSource(sources[index]) then
 useOfficialSource = true
 break
+end
+end
 end
 end
 if useOfficialSource == true then
@@ -355,7 +442,8 @@ local updated = {}
 local removed = false
 
 for index = 1, #sources do
-if removed == false and self:normalizeSource(sources[index]) == source then
+local nextSource = self:normalizeSource(sources[index])
+if removed == false and nextSource == source then
 removed = true
 else
 table.insert(updated, sources[index])
@@ -515,7 +603,7 @@ manager:ensureDirectory(manager.mapCacheDirectory)
 local downloadSource = manager:joinSourcePath(packageSource, "repository/"..packname..".map")
 local isPhp = minux.findline(manifestPath, "php=true")
 if isPhp ~= false and isPhp ~= nil then
-downloadSource = manager:joinSourcePath(packageSource, "repository/map.php?id="..packname.."&type=map&type=clean")
+downloadSource = packageSource.."repository/map.php?id="..packname.."&type=map&clean=true"
 end
 
 local mapPath = manager.mapCacheDirectory..packname..".map"

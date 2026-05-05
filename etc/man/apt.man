@@ -84,9 +84,11 @@ programs are installed
 on the machine, in case 
 of corruption.
 
-/etc/apt/list - also
-stores the installed
-manifest versions.
+/etc/apt/list - keeps
+the installed package
+manifests, including
+the version metadata
+used for update checks.
 changing these files 
 will alter the known
 version and trigger an 

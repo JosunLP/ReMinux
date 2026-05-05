@@ -209,6 +209,10 @@ local function decodeJson(body)
         return data
 end
 
+local function isReleaseTag(tag)
+        return type(tag) == "string" and tag:match("^v?%d+%.%d+%.%d+[%w%._%-]*$") ~= nil
+end
+
 local function fetchLatestReleaseTag(repo)
         local body = httpFetch(GITHUB_API_BASE .. repo .. "/releases/latest", {
                 ["User-Agent"] = "ReMinux",
@@ -217,13 +221,8 @@ local function fetchLatestReleaseTag(repo)
         if body == nil then return nil end
 
         local data = decodeJson(body)
-        if data ~= nil and type(data.tag_name) == "string" and data.tag_name ~= "" then
+        if data ~= nil and isReleaseTag(data.tag_name) then
                 return data.tag_name
-        end
-
-        local tag = body:match([["tag_name"%s*:%s*"([^"]+)"]])
-        if tag ~= nil and tag ~= "" then
-                return tag
         end
         return nil
 end
