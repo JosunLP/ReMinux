@@ -1020,8 +1020,9 @@ end
 function decrypt(text, key)
 expect(1, text, "string")
 expect(2, key, "number")
--- Decryption reverses the shift by negating the key.
-	return minux.crypt(text, -key)
+-- Decryption reverses the Caesar shift by negating the key.
+local reverseShift = -key
+return minux.crypt(text, reverseShift)
 end
 
 -- Table utilities

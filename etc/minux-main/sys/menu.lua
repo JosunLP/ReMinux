@@ -47,10 +47,9 @@ function menuOptions(title, tChoices, tActions, nSelection, description, tDescri
 		for nLine = baseDraw, #tChoices do 
 			local sLine = ""
 			local mX, mY = term.getCursorPos()
-			local pLine = false
-			if nSelection == nLine then
+			local pLine = (nSelection == nLine)
+			if pLine then
 				sLine = ">"
-				pLine = true
 			end
 			sLine = sLine .." "..tChoices[nLine] 
 			if pLine == true and mY < termY - 2 then
