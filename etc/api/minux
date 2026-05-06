@@ -947,6 +947,16 @@ local function runRunOnceService(path)
 	return true
 end
 
+local function isSuccessfulServiceLaunchResult(result)
+	if result == nil or result == false then
+		return false
+	end
+	if type(result) == "number" then
+		return result > 0
+	end
+	return result == true
+end
+
 function startService(name, options)
 	expect(1, name, "string")
 	expect(2, options, "table", "nil")
@@ -967,8 +977,11 @@ function startService(name, options)
 	if service.kind == "runonce" then
 		ok, err = runRunOnceService(service.command)
 	elseif service.kind == "daemon" then
-		minux.safeOpenTab(service.command)
-		ok = true
+		local launchResult = minux.safeOpenTab(service.command)
+		ok = isSuccessfulServiceLaunchResult(launchResult)
+		if ok ~= true then
+			err = "command failed: " .. service.command
+		end
 	else
 		ok = shell.run(service.command)
 		if ok ~= true then
