@@ -1059,9 +1059,9 @@ local function finalizeLogin(username, password, grantAdmin, sessionOwner, sessi
 	_G.masterpass = password
 	_G.validlogin = true
 	_G.admin = (grantAdmin == true)
-	_G.owner = sessionOwner ~= nil and sessionOwner or false
-	_G.ownergroup = sessionOwnerGroup ~= nil and sessionOwnerGroup or false
-	_G.authserver = sessionAuthserver ~= nil and sessionAuthserver or false
+	_G.owner = sessionOwner
+	_G.ownergroup = sessionOwnerGroup
+	_G.authserver = sessionAuthserver
 	minux.runServiceTrigger("login")
 	if minux.getconfig("clearlogin") == "enabled" then
 		term.setCursorPos(1, 1)
@@ -1459,7 +1459,7 @@ end
 			if isRoot then
 				minux.debug("login:admin", "login")
 			end
-			return finalizeLogin(username, password, isRoot, isRoot and true or false, false, false)
+			return finalizeLogin(username, password, isRoot, isRoot, false, false)
 else
 minux.debug("login:denied:U-" .. username, "login")
 minux.debug("login:denied", "minux")
