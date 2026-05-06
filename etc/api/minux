@@ -1672,7 +1672,10 @@ end
 end
 
 function sanitycheck()
-apt.verifyconfig()
+local _, configError = apt.verifyconfig()
+if configError == 104 then
+error("APT config repair failed")
+end
 ensureCoreLayout()
 local cfl = SETTINGS_FILE
 if fs.exists(cfl) == false then

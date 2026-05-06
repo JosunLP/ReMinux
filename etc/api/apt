@@ -119,9 +119,12 @@ end
 
 function AptManager:writeLines(path, lines)
 self:ensureParentDirectory(path)
-self:deleteIfExists(path)
+local tempPath = path..".tmp"
+local backupPath = path..".bak"
+self:deleteIfExists(tempPath)
+self:deleteIfExists(backupPath)
 
-local file = fs.open(path, "w")
+local file = fs.open(tempPath, "w")
 if file == nil then
 minux.debug("writeLines:E:open failed: "..path, "apt")
 return false
@@ -130,6 +133,24 @@ for index = 1, #lines do
 file.writeLine(lines[index])
 end
 file.close()
+if fs.exists(path) == true then
+local movedOld, moveOldError = pcall(fs.move, path, backupPath)
+if movedOld ~= true then
+self:deleteIfExists(tempPath)
+minux.debug("writeLines:E:backup failed: "..path..":"..tostring(moveOldError), "apt")
+return false
+end
+end
+local movedNew, moveNewError = pcall(fs.move, tempPath, path)
+if movedNew ~= true then
+if fs.exists(backupPath) == true then
+pcall(fs.move, backupPath, path)
+end
+self:deleteIfExists(tempPath)
+minux.debug("writeLines:E:replace failed: "..path..":"..tostring(moveNewError), "apt")
+return false
+end
+self:deleteIfExists(backupPath)
 return true
 end
 
@@ -851,7 +872,7 @@ end
 end
 
 if repairFailed == true then
-return nil
+return false, APT_ERROR_CONFIG_INVALID
 end
 
 if repairedConfig == true then
@@ -871,8 +892,8 @@ if manager:isPackageAccessAllowed(packname) ~= true then
 minux.debug("APT:Access denied", "apt")
 return 100
 end
-local configStatus = verifyconfig()
-if configStatus == nil then
+local configStatus, configError = verifyconfig()
+if configError == APT_ERROR_CONFIG_INVALID then
 return APT_ERROR_CONFIG_INVALID
 end
 if configStatus == true then
@@ -1039,8 +1060,8 @@ end
 function uninstall(packname)
 expect(1, packname, "string")
 minux.debug("removing pack:"..packname, "apt")
-local configStatus = verifyconfig()
-if configStatus == nil then
+local configStatus, configError = verifyconfig()
+if configError == APT_ERROR_CONFIG_INVALID then
 return false, APT_ERROR_CONFIG_INVALID
 end
 if configStatus == true then
@@ -1074,7 +1095,12 @@ data = temp.readLine()
 end
 local hasValidManifestPath = listStart and data ~= nil and isValidManifestFilePath(data)
 if hasValidManifestPath and not fs.isDir(data) then
-fs.delete(data)
+if fs.exists(data) == true then
+local deletedPath, deleteError = pcall(fs.delete, data)
+if deletedPath ~= true then
+minux.debug("uninstall:E:manifest delete failed: "..data..":"..tostring(deleteError), "apt")
+end
+end
 elseif hasValidManifestPath and fs.isDir(data) then
 minux.debug("uninstall:E:manifest directory ignored: "..data, "apt")
 elseif listStart == true and data ~= nil and string.sub(data, 1, 1) == "[" then
@@ -1113,7 +1139,8 @@ end
 
 function update(packname)
 expect(1, packname, "string", "nil")
-if verifyconfig() == nil then
+local _, configError = verifyconfig()
+if configError == APT_ERROR_CONFIG_INVALID then
 return APT_ERROR_CONFIG_INVALID
 end
 
@@ -1211,8 +1238,8 @@ releaseTracking = false,
 repositoryPackage = manager:isRepositoryPackage(packname),
 }
 
-local configStatus = verifyconfig()
-if configStatus == nil then
+local configStatus, configError = verifyconfig()
+if configError == APT_ERROR_CONFIG_INVALID then
 info.error = APT_ERROR_CONFIG_INVALID
 return info
 end

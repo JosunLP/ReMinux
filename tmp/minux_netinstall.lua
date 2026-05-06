@@ -173,11 +173,22 @@ end
 
 local function writeFile(filepath, content)
         ensureParent(filepath)
-        if fs.exists(filepath) then fs.delete(filepath) end
-        local handle = fs.open(filepath, "w")
+        local tempPath = filepath .. ".tmp"
+        local backupPath = filepath .. ".bak"
+        if fs.exists(tempPath) then fs.delete(tempPath) end
+        if fs.exists(backupPath) then fs.delete(backupPath) end
+        local handle = fs.open(tempPath, "w")
         if handle == nil then error("failed to open " .. filepath .. " for writing") end
         handle.write(content)
         handle.close()
+        if fs.exists(filepath) then fs.move(filepath, backupPath) end
+        local replaced, replaceError = pcall(fs.move, tempPath, filepath)
+        if replaced ~= true then
+                if fs.exists(backupPath) then pcall(fs.move, backupPath, filepath) end
+                if fs.exists(tempPath) then fs.delete(tempPath) end
+                error("failed to replace " .. filepath .. ": " .. tostring(replaceError))
+        end
+        if fs.exists(backupPath) then fs.delete(backupPath) end
 end
 
 ------------------------------------------------------------
