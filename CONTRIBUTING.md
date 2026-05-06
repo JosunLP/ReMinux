@@ -57,7 +57,7 @@ Thank you for taking the time to contribute! The guidelines below keep the codeb
 ## Pull request checklist
 
 - [ ] All changed Lua files pass `luac5.1 -p`
-- [ ] CraftOS-PC smoke test passes when the runtime or boot flow changed
+- [ ] CraftOS-PC smoke test passes when the runtime or boot flow changes
 - [ ] No new global variable leaks in `bin/` scripts
 - [ ] Manual page added or updated if a command changed
 - [ ] Commit messages are in the imperative mood ("Add …", "Fix …", "Remove …")

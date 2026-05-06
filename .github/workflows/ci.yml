@@ -118,7 +118,9 @@ jobs:
             "$craftos_release_url/sha256-hashes.txt"
           (
             cd "$RUNNER_TEMP/craftos-pc"
-            grep '  CraftOS-PC.x86_64.AppImage$' sha256-hashes.txt | sha256sum --check --strict
+            awk 'NF == 2 && $2 == "CraftOS-PC.x86_64.AppImage" { print; count++ } END { exit count == 1 ? 0 : 1 }' \
+              sha256-hashes.txt > CraftOS-PC.x86_64.AppImage.sha256
+            sha256sum --check --strict CraftOS-PC.x86_64.AppImage.sha256
           )
           chmod +x "$RUNNER_TEMP/craftos-pc/CraftOS-PC.x86_64.AppImage"
           (
