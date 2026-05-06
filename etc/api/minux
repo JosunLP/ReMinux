@@ -1506,8 +1506,8 @@ return restorePreviousSessionAndFail()
 end
 
 minux.debug("login:checking for ownership", "minux")
-	_G.owner      = nil
-	_G.ownergroup = nil
+	_G.owner      = false
+	_G.ownergroup = false
 if fs.exists("/usr/auth-client/owner.cfg") then
 minux.debug("login:owner file found, running check", "minux")
 auth.checkowner()
