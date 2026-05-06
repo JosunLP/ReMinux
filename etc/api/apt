@@ -828,8 +828,9 @@ end
 
 local manager = AptManager.new()
 
--- Returns true when one or more config files were repaired, false otherwise.
--- On unrecoverable repair failure, returns false, APT_ERROR_CONFIG_INVALID.
+-- Returns true when one or more config files were repaired.
+-- Returns false when no repair was needed.
+-- Returns false, APT_ERROR_CONFIG_INVALID on unrecoverable repair failure.
 function verifyconfig()
 local repairedConfig = false
 local repairFailed = false
