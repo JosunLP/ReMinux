@@ -289,7 +289,7 @@ if updateOk and generatedOk and firstrunMarked then
 print("Installation verified, rebooting.")
 os.reboot()
 else
-minux.debug("firstrun verification failed; continuing without reboot after delay", "minux")
+minux.debug("first-run verification failed; continuing without reboot after delay", "minux")
 if term.isColor() then term.setTextColor(colors.red) end
 print("Post-install verification failed.")
 if term.isColor() then term.setTextColor(colors.white) end
