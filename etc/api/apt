@@ -805,10 +805,14 @@ local manager = AptManager.new()
 function verifyconfig()
 local repairedConfig = false
 local repairFailed = false
-
-local installedListUnreadable = fs.exists(manager.installedListPath) == false
-	or fs.isDir(manager.installedListPath) == true
-	or type(manager:readLines(manager.installedListPath)) ~= "table"
+local installedListUnreadable = false
+if fs.exists(manager.installedListPath) == false then
+installedListUnreadable = true
+elseif fs.isDir(manager.installedListPath) == true then
+installedListUnreadable = true
+elseif type(manager:readLines(manager.installedListPath)) ~= "table" then
+installedListUnreadable = true
+end
 
 if installedListUnreadable == true then
 minux.debug("ERROR:104:Installed.db missing or corrupt", "apt")
@@ -820,9 +824,14 @@ repairedConfig = true
 end
 end
 
-local sourceListUnreadable = fs.exists(manager.sourceListPath) ~= true
-	or fs.isDir(manager.sourceListPath) == true
-	or type(manager:readLines(manager.sourceListPath)) ~= "table"
+local sourceListUnreadable = false
+if fs.exists(manager.sourceListPath) ~= true then
+sourceListUnreadable = true
+elseif fs.isDir(manager.sourceListPath) == true then
+sourceListUnreadable = true
+elseif type(manager:readLines(manager.sourceListPath)) ~= "table" then
+sourceListUnreadable = true
+end
 
 if sourceListUnreadable == true then
 minux.debug("ERROR:104:source missing or corrupt", "apt")
