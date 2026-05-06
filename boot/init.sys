@@ -285,7 +285,7 @@ else
 minux.debug("firstrun:write failed: "..firstrunFile, "minux")
 end
 end
-if updateOk == true and generatedOk == true and firstrunMarked == true then
+if updateOk and generatedOk and firstrunMarked then
 print("Installation verified, rebooting.")
 os.reboot()
 else
