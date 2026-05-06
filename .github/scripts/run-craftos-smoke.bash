@@ -25,6 +25,7 @@ mkdir -p "$disk_root"
 
 mkdir -p "$disk_root/etc/apt/list" "$disk_root/usr/minux-main/data"
 cp "$disk_root/etc/apt/manifest/minux-main.db" "$disk_root/etc/apt/list/minux-main.db"
+# Skip the first-run updater so the smoke test exercises the checked-out tree only.
 printf 'done\n' > "$disk_root/usr/minux-main/data/firstrun.db"
 cat > "$disk_root/usr/minux-main/settings.cfg" <<'CFG'
 login=disabled
@@ -74,7 +75,10 @@ end
 local initput = nil"""
 
 if target not in source:
-    raise SystemExit("Failed to patch boot/init.sys for CraftOS-PC smoke testing")
+    raise SystemExit(
+        "Failed to patch boot/init.sys: the expected interactive boot prompt block was not found. "
+        "The boot flow likely changed and the CraftOS-PC smoke test needs updating."
+    )
 
 path.write_text(source.replace(target, replacement, 1))
 PY

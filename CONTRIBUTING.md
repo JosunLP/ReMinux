@@ -18,7 +18,7 @@ Thank you for taking the time to contribute! The guidelines below keep the codeb
    Install with `sudo apt-get install lua5.1` if it is not available.
 4. When you have CraftOS-PC available locally, run the runtime smoke test:
    ```bash
-   CRAFTOS_PC_BIN=/path/to/CraftOS-PC ./.github/scripts/run-craftos-smoke.bash
+   CRAFTOS_PC_BIN=/path/to/craftos-pc/squashfs-root/AppRun ./.github/scripts/run-craftos-smoke.bash
    ```
 5. Open a pull request against `main`.
 

@@ -86,10 +86,10 @@ jobs:
            mapfile -t filelist < <(awk '$0 == "[filelist]" { found = 1; next } found && $0 ~ /^\[/ { exit } found && $0 != "" { print }' \
              etc/apt/manifest/minux-main.db | sort)
 
-            if ! diff -u <(printf '%s\n' "${filelist[@]}") <(printf '%s\n' "${package_payload[@]}"); then
-              echo "minux-main.db [filelist] does not match the packaged repository files"
-              exit 1
-            fi
+           if ! diff -u <(printf '%s\n' "${filelist[@]}") <(printf '%s\n' "${package_payload[@]}"); then
+             echo "minux-main.db [filelist] does not match the packaged repository files"
+             exit 1
+           fi
 
   craftos-smoke:
     name: CraftOS-PC smoke test
