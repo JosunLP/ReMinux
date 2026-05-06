@@ -1161,8 +1161,6 @@ end
 
 function packageinfo(packname)
 expect(1, packname, "string", "nil")
-verifyconfig()
-
 if packname == nil then
 packname = "minux-main"
 end
@@ -1178,6 +1176,12 @@ releaseStatus = "disabled",
 releaseTracking = false,
 repositoryPackage = manager:isRepositoryPackage(packname),
 }
+
+local configStatus = verifyconfig()
+if configStatus == nil then
+info.error = 104
+return info
+end
 
 local installedManifest = manager.manifestDirectory..packname..".db"
 if fs.exists(installedManifest) then

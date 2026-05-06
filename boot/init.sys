@@ -271,6 +271,7 @@ print("First run detected, verifying installation.")
 print("This process may take a while.")
 local updateOk = apt.update("-f")
 local generatedOk = false
+local firstrunMarked = false
 if updateOk == true then
 generatedOk = apt.rebuildgenerated()
 end
@@ -279,9 +280,12 @@ local tmpfile = fs.open(firstrunFile, "w")
 if tmpfile ~= nil then
 tmpfile.writeLine("done")
 tmpfile.close()
+firstrunMarked = true
 else
 minux.debug("firstrun:write failed: "..firstrunFile, "minux")
 end
+end
+if updateOk == true and generatedOk == true and firstrunMarked == true then
 print("Installation verified, rebooting.")
 os.reboot()
 else
