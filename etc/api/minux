@@ -1054,13 +1054,14 @@ end
 
 -- Apply the common "login granted" finalisation: set global credentials, run
 -- the autorun script, and optionally clear the screen.
-local function finalizeLogin(username, password, grantAdmin)
+local function finalizeLogin(username, password, grantAdmin, sessionOwner, sessionOwnerGroup, sessionAuthserver)
 	_G.login = username
 	_G.masterpass = password
-_G.validlogin = true
-	if grantAdmin == true then
-		_G.admin = true
-	end
+	_G.validlogin = true
+	_G.admin = (grantAdmin == true)
+	_G.owner = sessionOwner ~= nil and sessionOwner or false
+	_G.ownergroup = sessionOwnerGroup ~= nil and sessionOwnerGroup or false
+	_G.authserver = sessionAuthserver ~= nil and sessionAuthserver or false
 	minux.runServiceTrigger("login")
 	if minux.getconfig("clearlogin") == "enabled" then
 		term.setCursorPos(1, 1)
@@ -1407,15 +1408,18 @@ minux.debug("login:valid login detected", "minux")
 wasvalid = true
 savedAdmin = _G.admin
 savedLogin = _G.login
-savedPass  = _G.masterpass
-savedOwner = _G.owner
-savedOwnerGroup = _G.ownergroup
-savedAuthserver = _G.authserver
-end
-_G.admin      = false
-_G.login      = false
-_G.masterpass = false
-_G.validlogin = false
+	savedPass  = _G.masterpass
+	savedOwner = _G.owner
+	savedOwnerGroup = _G.ownergroup
+	savedAuthserver = _G.authserver
+	end
+	_G.admin      = false
+	_G.login      = false
+	_G.masterpass = false
+	_G.validlogin = false
+	_G.owner      = false
+	_G.ownergroup = false
+	_G.authserver = false
 
 local function restorePreviousSessionAndFail()
 if wasvalid == true then
@@ -1448,15 +1452,14 @@ file.close()
 if key ~= nil then
 storedPass = minux.decrypt(storedPass, key)
 end
-minux.debug("login:reading user file", "minux")
-if password == storedPass then
-minux.debug("login:granted:U-" .. username, "login")
-local isRoot = (username == "root")
-if isRoot then
-_G.owner = true
-minux.debug("login:admin", "login")
-end
-return finalizeLogin(username, password, isRoot)
+		minux.debug("login:reading user file", "minux")
+		if password == storedPass then
+			minux.debug("login:granted:U-" .. username, "login")
+			local isRoot = (username == "root")
+			if isRoot then
+				minux.debug("login:admin", "login")
+			end
+			return finalizeLogin(username, password, isRoot, isRoot and true or false, false, false)
 else
 minux.debug("login:denied:U-" .. username, "login")
 minux.debug("login:denied", "minux")
@@ -1545,41 +1548,41 @@ local response = netlib.getstring(_G.authserver, 1)
 minux.debug("login:processing response", "minux")
 if response == "accept" then
 minux.debug("login:credentials accepted", "minux")
-if _G.owner ~= false then
-if _G.owner == username then
-minux.debug("login:user=owner:ADMIN granted:" .. username, "login")
-return finalizeLogin(username, password, true)
-elseif _G.ownergroup ~= false then
-minux.debug("login:groupname=true", "minux")
-auth.checkgroup(_G.ownergroup, username)
-if _G.isgroupmember == true then
-minux.debug("login:user=groupmember:USER granted:" .. username, "login")
-return finalizeLogin(username, password, false)
-else
-minux.debug("login:auth-denied:" .. username, "login")
-minux.debug("login:user~=groupmember:denied", "minux")
-end
-end
-else
-minux.debug("login:nogroup:USER granted:" .. username, "login")
-return finalizeLogin(username, password, false)
-end
-elseif response == "admin" then
-minux.debug("login:granted-admin:" .. username, "login")
-return finalizeLogin(username, password, true)
-else
-minux.debug("login:denied", "login")
-end
+		if _G.owner ~= false then
+			if _G.owner == username then
+				minux.debug("login:user=owner:ADMIN granted:" .. username, "login")
+				return finalizeLogin(username, password, true, _G.owner, _G.ownergroup, _G.authserver)
+			elseif _G.ownergroup ~= false then
+				minux.debug("login:groupname=true", "minux")
+				auth.checkgroup(_G.ownergroup, username)
+				if _G.isgroupmember == true then
+					minux.debug("login:user=groupmember:USER granted:" .. username, "login")
+					return finalizeLogin(username, password, false, _G.owner, _G.ownergroup, _G.authserver)
+				else
+					minux.debug("login:auth-denied:" .. username, "login")
+					minux.debug("login:user~=groupmember:denied", "minux")
+				end
+			end
+		else
+			minux.debug("login:nogroup:USER granted:" .. username, "login")
+			return finalizeLogin(username, password, false, _G.owner, _G.ownergroup, _G.authserver)
+		end
+	elseif response == "admin" then
+		minux.debug("login:granted-admin:" .. username, "login")
+		return finalizeLogin(username, password, true, _G.owner, _G.ownergroup, _G.authserver)
+	else
+		minux.debug("login:denied", "login")
+	end
 
-if _G.admin == true then
-minux.debug("login:ADMIN:" .. username, "minux")
-return finalizeLogin(username, password, true)
-elseif _G.validlogin == true then
-minux.debug("login:USER:" .. username, "minux")
-return finalizeLogin(username, password, false)
-else
-minux.debug("login:DENIED:" .. username, "minux")
-end
+	if _G.admin == true then
+		minux.debug("login:ADMIN:" .. username, "minux")
+		return finalizeLogin(username, password, true, _G.owner, _G.ownergroup, _G.authserver)
+	elseif _G.validlogin == true then
+		minux.debug("login:USER:" .. username, "minux")
+		return finalizeLogin(username, password, false, _G.owner, _G.ownergroup, _G.authserver)
+	else
+		minux.debug("login:DENIED:" .. username, "minux")
+	end
 end
 
 -- Restore the previous session if login failed.
