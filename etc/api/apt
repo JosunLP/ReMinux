@@ -1234,9 +1234,10 @@ if packname == nil then
 packname = "minux-main"
 end
 
+local configStatus, configError = verifyconfig()
 local info = {
 package = packname,
-installed = apt.checkinstall(packname),
+installed = false,
 installedVersion = nil,
 availableVersion = nil,
 source = nil,
@@ -1246,11 +1247,11 @@ releaseTracking = false,
 repositoryPackage = manager:isRepositoryPackage(packname),
 }
 
-local configStatus, configError = verifyconfig()
 if configError == APT_ERROR_CONFIG_INVALID then
 info.error = APT_ERROR_CONFIG_INVALID
 return info
 end
+info.installed = apt.checkinstall(packname)
 
 local installedManifest = manager.manifestDirectory..packname..".db"
 if fs.exists(installedManifest) then
@@ -1412,7 +1413,7 @@ local wroteDiagnostic = manager:writeLines(manager.programListPath, {
 if wroteDiagnostic ~= true then
 return false
 end
-return false
+return APT_ERROR_CONFIG_INVALID
 end
 local lines = {}
 for index = 1, #sources do
