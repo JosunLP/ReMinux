@@ -680,7 +680,7 @@ function AptManager:findSources(packname)
 local sources = self:readLines(self.sourceListPath)
 if type(sources) ~= "table" then
 minux.debug("source list unreadable:"..self.sourceListPath, "apt")
-return nil, 104
+return nil, APT_ERROR_CONFIG_INVALID
 end
 for index = 1, #sources do
 minux.debug("apt-source:"..sources[index], "apt")
