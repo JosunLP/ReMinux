@@ -1447,8 +1447,16 @@ local userFile = AUTH_DIR .. username .. ".usr"
 if fs.exists(userFile) then
 minux.debug("login:u-" .. username, "minux")
 local file = fs.open(userFile, "r")
+if file == nil then
+minux.debug("login:E:211:userfile unreadable:" .. userFile, "minux")
+return restorePreviousSessionAndFail()
+end
 local storedPass = file.readLine()
 file.close()
+if storedPass == nil or storedPass == "" then
+minux.debug("login:E:212:userfile empty:" .. userFile, "minux")
+return restorePreviousSessionAndFail()
+end
 if key ~= nil then
 storedPass = minux.decrypt(storedPass, key)
 end
