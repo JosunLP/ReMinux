@@ -1728,7 +1728,13 @@ sleep(1)
 else
 file.write(newpass)
 file.close()
-if fs.exists(AUTH_DIR .. "root.usr") ~= true then
+local verifyFile = fs.open(AUTH_DIR .. "root.usr", "r")
+local verifyPass = nil
+if verifyFile ~= nil then
+verifyPass = verifyFile.readAll()
+verifyFile.close()
+end
+if verifyPass ~= newpass then
 minux.debug("login:rootcreate:verification failed", "minux")
 print("could not verify root user file, try again")
 sleep(1)
