@@ -806,7 +806,11 @@ function verifyconfig()
 local repairedConfig = false
 local repairFailed = false
 
-if fs.exists(manager.installedListPath) == false then
+local installedListUnreadable = fs.exists(manager.installedListPath) == false
+	or fs.isDir(manager.installedListPath) == true
+	or type(manager:readLines(manager.installedListPath)) ~= "table"
+
+if installedListUnreadable == true then
 minux.debug("ERROR:104:Installed.db missing or corrupt", "apt")
 if not manager:writeLines(manager.installedListPath, { "minux-main" }) then
 minux.debug("ERROR:104:Installed.db repair failed", "apt")
@@ -816,7 +820,11 @@ repairedConfig = true
 end
 end
 
-if fs.exists(manager.sourceListPath) ~= true then
+local sourceListUnreadable = fs.exists(manager.sourceListPath) ~= true
+	or fs.isDir(manager.sourceListPath) == true
+	or type(manager:readLines(manager.sourceListPath)) ~= "table"
+
+if sourceListUnreadable == true then
 minux.debug("ERROR:104:source missing or corrupt", "apt")
 if not manager:writeLines(manager.sourceListPath, manager:getPresetSources("stable")) then
 minux.debug("ERROR:104:source repair failed", "apt")
@@ -1117,7 +1125,7 @@ minux.debug("reading installed.db", "apt")
 local installedPackages = manager:readLines(manager.installedListPath)
 if type(installedPackages) ~= "table" then
 minux.debug("update:installed list unreadable:"..manager.installedListPath, "apt")
-return false
+return APT_ERROR_CONFIG_INVALID
 end
 local updateFailed = false
 for index = 1, #installedPackages do

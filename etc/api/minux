@@ -1601,22 +1601,31 @@ masterpass = _G.masterpass,
 admin      = _G.admin,
 validlogin = _G.validlogin,
 owner      = _G.owner,
+ownergroup = _G.ownergroup,
+authserver = _G.authserver,
 }
+local function restoreSavedSession()
+_G.login = saved.login
+_G.masterpass = saved.masterpass
+_G.admin = saved.admin
+_G.validlogin = saved.validlogin
+_G.owner = saved.owner
+_G.ownergroup = saved.ownergroup
+_G.authserver = saved.authserver
+end
 local loginResult = minux.login(username, password)
 if loginResult == false then
 minux.debug("login denied")
+restoreSavedSession()
 return false
 end
 minux.debug("checkuser:building return table")
 local returntable = {
 _G.login, _G.masterpass, _G.admin, _G.validlogin, _G.owner,
+_G.ownergroup, _G.authserver,
 }
 minux.debug("checkuser:resetting credentials")
-_G.login      = saved.login
-_G.masterpass = saved.masterpass
-_G.admin      = saved.admin
-_G.validlogin = saved.validlogin
-_G.owner      = saved.owner
+restoreSavedSession()
 return returntable
 end
 
