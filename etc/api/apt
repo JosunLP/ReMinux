@@ -1344,7 +1344,7 @@ local wroteDiagnostic = manager:writeLines(manager.programListPath, {
 if wroteDiagnostic ~= true then
 return false
 end
-return APT_ERROR_CONFIG_INVALID
+return false
 end
 local lines = {}
 for index = 1, #sources do
