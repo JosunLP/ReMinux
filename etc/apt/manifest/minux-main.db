@@ -4,6 +4,7 @@ version=3.0.0
 author=minux-team
 php=false
 [filelist]
+/startup
 /startup.lua
 /boot/init.sys
 /boot/network/dhcp.sys
