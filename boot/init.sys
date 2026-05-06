@@ -280,7 +280,7 @@ if tmpfile ~= nil then
 tmpfile.writeLine("done")
 tmpfile.close()
 else
-minux.debug("firstrun:write failed:"..firstrunFile, "minux")
+minux.debug("firstrun:write failed: "..firstrunFile, "minux")
 end
 print("Installation verified, rebooting.")
 os.reboot()

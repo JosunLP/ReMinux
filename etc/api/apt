@@ -122,7 +122,7 @@ self:deleteIfExists(path)
 
 local file = fs.open(path, "w")
 if file == nil then
-minux.debug("writeLines:E:open failed:"..path, "apt")
+minux.debug("writeLines:E:open failed: "..path, "apt")
 return false
 end
 for index = 1, #lines do
