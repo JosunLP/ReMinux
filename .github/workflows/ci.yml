@@ -109,9 +109,17 @@ jobs:
         run: |
           set -euo pipefail
           mkdir -p "$RUNNER_TEMP/craftos-pc"
+          craftos_release_url="https://github.com/MCJack123/craftos2/releases/download/${CRAFTOS_PC_VERSION}"
           curl --fail --show-error --location --retry 3 --retry-delay 2 \
             -o "$RUNNER_TEMP/craftos-pc/CraftOS-PC.x86_64.AppImage" \
-            "https://github.com/MCJack123/craftos2/releases/download/${CRAFTOS_PC_VERSION}/CraftOS-PC.x86_64.AppImage"
+            "$craftos_release_url/CraftOS-PC.x86_64.AppImage"
+          curl --fail --show-error --location --retry 3 --retry-delay 2 \
+            -o "$RUNNER_TEMP/craftos-pc/sha256-hashes.txt" \
+            "$craftos_release_url/sha256-hashes.txt"
+          (
+            cd "$RUNNER_TEMP/craftos-pc"
+            grep '  CraftOS-PC.x86_64.AppImage$' sha256-hashes.txt | sha256sum --check --strict
+          )
           chmod +x "$RUNNER_TEMP/craftos-pc/CraftOS-PC.x86_64.AppImage"
           (
             cd "$RUNNER_TEMP/craftos-pc"
