@@ -816,7 +816,7 @@ local file = fs.open(path, "r")
 if file == nil then
 return true
 end
-file.close()
+file:close()
 return false
 end
 
