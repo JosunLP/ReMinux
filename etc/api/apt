@@ -997,10 +997,10 @@ local data = temp.readLine()
 while data ~= nil do
 if data == "[filelist]" then
 listStart = true
+elseif listStart == true and string.sub(data, 1, 1) == "/" and string.find(data, "..", 1, true) == nil and data ~= "/" then
+fs.delete(data)
 elseif listStart == true and string.sub(data, 1, 1) == "[" then
 listStart = false
-elseif listStart == true and string.sub(data, 1, 1) == "/" and string.find(data, "..", 1, true) == nil then
-fs.delete(data)
 end
 data = temp.readLine()
 end
