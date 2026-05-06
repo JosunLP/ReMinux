@@ -205,9 +205,6 @@ local firstupdate = false
 local firstrunFile = "/usr/minux-main/data/firstrun.db"
 if fs.exists(firstrunFile) == false then
 firstupdate = true
-local tmpfile = fs.open(firstrunFile, "w")
-tmpfile.writeLine("done")
-tmpfile.close()
 end
 
 _G.shell = shell
@@ -278,6 +275,13 @@ if updateOk == true then
 generatedOk = apt.rebuildgenerated()
 end
 if updateOk == true and generatedOk == true then
+local tmpfile = fs.open(firstrunFile, "w")
+if tmpfile ~= nil then
+tmpfile.writeLine("done")
+tmpfile.close()
+else
+minux.debug("firstrun:write failed:"..firstrunFile, "minux")
+end
 print("Installation verified, rebooting.")
 os.reboot()
 else

@@ -122,6 +122,7 @@ self:deleteIfExists(path)
 
 local file = fs.open(path, "w")
 if file == nil then
+minux.debug("writeLines:E:open failed:"..path, "apt")
 return false
 end
 for index = 1, #lines do
@@ -770,7 +771,7 @@ if type(sources) ~= "table" then
 return false
 end
 table.insert(sources, source)
-self:writeLines(self.sourceListPath, self:dedupeSources(sources))
+return self:writeLines(self.sourceListPath, self:dedupeSources(sources))
 end
 
 function AptManager:removeSource(source)
@@ -792,10 +793,10 @@ end
 end
 
 if removed == true then
-self:writeLines(self.sourceListPath, updated)
+return self:writeLines(self.sourceListPath, updated)
 end
 
-return removed
+return false
 end
 
 local manager = AptManager.new()
@@ -1276,8 +1277,7 @@ end
 local preset = manager:getPresetSources(source)
 if preset ~= nil then
 minux.debug("resetting sources to preset:"..source, "apt")
-manager:writeLines(manager.sourceListPath, preset)
-return true
+return manager:writeLines(manager.sourceListPath, preset)
 end
 
 minux.debug("touching APT repo:"..source, "apt")
@@ -1295,9 +1295,11 @@ return false
 end
 
 	minux.debug("Adding source", "apt")
+if manager:appendSource(source) == true then
 print("Verification succeeded, apt source added")
-manager:appendSource(source)
 return true
+end
+return false
 end
 
 function clearsource(source)
