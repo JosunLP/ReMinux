@@ -4,6 +4,7 @@ set -euo pipefail
 SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd -- "$SCRIPT_DIR/../.." && pwd)"
 CRAFTOS_PC_BIN="${CRAFTOS_PC_BIN:-${1:-}}"
+SMOKE_TEST_TIMEOUT="${SMOKE_TEST_TIMEOUT:-60}"
 
 if [ -z "$CRAFTOS_PC_BIN" ]; then
   echo "Set CRAFTOS_PC_BIN or pass the CraftOS-PC executable path as the first argument." >&2
@@ -79,7 +80,7 @@ path.write_text(source.replace(target, replacement, 1))
 PY
 
 set +e
-SDL_AUDIODRIVER=dummy timeout 60s "$CRAFTOS_PC_BIN" --headless "-c=$disk_root" --script "$SCRIPT_DIR/craftos-smoke.lua" >"$log_file" 2>&1
+SDL_AUDIODRIVER=dummy timeout "${SMOKE_TEST_TIMEOUT}s" "$CRAFTOS_PC_BIN" --headless "-c=$disk_root" --script "$SCRIPT_DIR/craftos-smoke.lua" >"$log_file" 2>&1
 status=$?
 set -e
 
