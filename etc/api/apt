@@ -805,12 +805,23 @@ local manager = AptManager.new()
 function verifyconfig()
 local repairedConfig = false
 local repairFailed = false
+local function isUnreadableConfigPath(path)
+if fs.exists(path) ~= true then
+return true
+end
+if fs.isDir(path) == true then
+return true
+end
+local file = fs.open(path, "r")
+if file == nil then
+return true
+end
+file.close()
+return false
+end
+
 local installedListUnreadable = false
-if fs.exists(manager.installedListPath) == false then
-installedListUnreadable = true
-elseif fs.isDir(manager.installedListPath) == true then
-installedListUnreadable = true
-elseif type(manager:readLines(manager.installedListPath)) ~= "table" then
+if isUnreadableConfigPath(manager.installedListPath) == true then
 installedListUnreadable = true
 end
 
@@ -825,11 +836,7 @@ end
 end
 
 local sourceListUnreadable = false
-if fs.exists(manager.sourceListPath) ~= true then
-sourceListUnreadable = true
-elseif fs.isDir(manager.sourceListPath) == true then
-sourceListUnreadable = true
-elseif type(manager:readLines(manager.sourceListPath)) ~= "table" then
+if isUnreadableConfigPath(manager.sourceListPath) == true then
 sourceListUnreadable = true
 end
 
