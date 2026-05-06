@@ -802,21 +802,34 @@ end
 local manager = AptManager.new()
 
 function verifyconfig()
+local repairedConfig = false
+local repairFailed = false
+
 if fs.exists(manager.installedListPath) == false then
 minux.debug("ERROR:104:Installed.db missing or corrupt", "apt")
 if not manager:writeLines(manager.installedListPath, { "minux-main" }) then
 minux.debug("ERROR:104:Installed.db repair failed", "apt")
-return nil
+repairFailed = true
+else
+repairedConfig = true
 end
-return true
 end
 
 if fs.exists(manager.sourceListPath) ~= true then
 minux.debug("ERROR:104:source missing or corrupt", "apt")
 if not manager:writeLines(manager.sourceListPath, manager:getPresetSources("stable")) then
 minux.debug("ERROR:104:source repair failed", "apt")
+repairFailed = true
+else
+repairedConfig = true
+end
+end
+
+if repairFailed == true then
 return nil
 end
+
+if repairedConfig == true then
 return true
 end
 
