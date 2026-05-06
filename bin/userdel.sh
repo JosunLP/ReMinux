@@ -2,6 +2,20 @@
 local args        = { ... }
 local newusername = args[1]
 
+local function runUsermod(action, username)
+local program, loadErr = loadfile("/bin/usermod.sh")
+if program == nil then
+print("Cannot load user manager: " .. tostring(loadErr))
+return false
+end
+local ok, result = pcall(program, action, username)
+if ok ~= true then
+print("User deletion failed: " .. tostring(result))
+return false
+end
+return result == true
+end
+
 if newusername == nil or newusername == "" then
 print("Usage: userdel <username>")
 return false
@@ -21,7 +35,7 @@ end
 local ok = auth.userdel(newusername)
 return ok ~= false
 elseif authtype == "local" then
-return os.run({}, "/bin/usermod.sh", "del", newusername)
+return runUsermod("del", newusername)
 else
 print("Login type unknown or broken")
 return false

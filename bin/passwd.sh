@@ -3,6 +3,20 @@ local args        = { ... }
 local newusername = args[1]
 local newpassword = args[2]
 
+local function runUsermod(action, username, password)
+local program, loadErr = loadfile("/bin/usermod.sh")
+if program == nil then
+print("Cannot load user manager: " .. tostring(loadErr))
+return false
+end
+local ok, result = pcall(program, action, username, password)
+if ok ~= true then
+print("Password change failed: " .. tostring(result))
+return false
+end
+return result == true
+end
+
 if newusername == nil or newusername == "" then
 print("Usage: passwd <username> [newpassword]")
 return false
@@ -35,7 +49,7 @@ end
 local ok = auth.setpass(newusername, newpassword)
 return ok ~= false
 elseif authtype == "local" then
-return os.run({}, "/bin/usermod.sh", "psw", newusername, newpassword)
+return runUsermod("psw", newusername, newpassword)
 else
 print("Login type unknown or broken")
 return false
