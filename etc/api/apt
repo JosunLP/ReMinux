@@ -1039,7 +1039,13 @@ end
 function uninstall(packname)
 expect(1, packname, "string")
 minux.debug("removing pack:"..packname, "apt")
-verifyconfig()
+local configStatus = verifyconfig()
+if configStatus == nil then
+return APT_ERROR_CONFIG_INVALID
+end
+if configStatus == true then
+minux.debug("apt:uninstall file was rebuilt!", "apt")
+end
 if manager:isPackageAccessAllowed(packname) ~= true then
 minux.debug("APT:Access denied", "apt")
 return false

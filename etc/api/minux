@@ -1413,13 +1413,13 @@ savedLogin = _G.login
 	savedOwnerGroup = _G.ownergroup
 	savedAuthserver = _G.authserver
 	end
-	_G.admin      = false
-	_G.login      = false
-	_G.masterpass = false
+	_G.admin      = nil
+	_G.login      = nil
+	_G.masterpass = nil
 	_G.validlogin = false
-	_G.owner      = false
-	_G.ownergroup = false
-	_G.authserver = false
+	_G.owner      = nil
+	_G.ownergroup = nil
+	_G.authserver = nil
 
 local function restorePreviousSessionAndFail()
 if wasvalid == true then
@@ -1506,8 +1506,8 @@ return restorePreviousSessionAndFail()
 end
 
 minux.debug("login:checking for ownership", "minux")
-_G.owner      = false
-_G.ownergroup = false
+	_G.owner      = nil
+	_G.ownergroup = nil
 if fs.exists("/usr/auth-client/owner.cfg") then
 minux.debug("login:owner file found, running check", "minux")
 auth.checkowner()
