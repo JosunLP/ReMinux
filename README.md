@@ -14,8 +14,12 @@
 - **Configurable UI** — choose between `workspace`, `menu`, `prompt`, or plain `craftos` as your shell
 - **Peripheral auto-detection** — modems, monitors, printers, and speakers are detected on boot
 - **Crash handler** — a staged watchdog prevents boot loops and offers a repair shell
+- **Self-healing diagnostics** — `doctor` audits core OS state and can recreate missing runtime files
 - **Debug / logging system** — `disabled`, `enabled`, `logging`, or `full` verbosity levels
 - **Network DHCP** — automatic server discovery over Rednet
+- **Linux-like file management** — built-in `mkdir`, `cp`, `mv`, and `rm` commands with CC: Tweaked-safe guards
+- **Parsed shell pipelines** — `|`, `>`, `>>`, `<`, `&&`, `||`, and `;` now execute through a shared shell parser/executor
+- **Service manager** — legacy boot/login hooks are exposed through a small `service` control layer
 - **OOP internals** — the APT manager uses a proper Lua class; all APIs are DRY-refactored
 
 ---
@@ -74,9 +78,12 @@
 │   ├── man.sh             — Display manual pages
 │   ├── newtab.sh          — Open a new workspace tab
 │   ├── passwd.sh          — Change a user's password
+│   ├── find.sh            — Walk directory trees
+│   ├── chmod.sh           — Change permission metadata
+│   ├── chown.sh           — Change ownership metadata
 │   ├── programs.sh        — List available programs
 │   ├── restart.sh         — Reboot
-│   ├── search.sh          — Search for files by name
+│   ├── search.sh          — Compatibility file search wrapper
 │   ├── useradd.sh         — Add a user
 │   ├── userdel.sh         — Delete a user
 │   ├── usermod.sh         — Manage local users (add/del/psw)
@@ -109,19 +116,21 @@
 | `bash`       | Open the ReMinux shell; `bash setcolor …` for theme|
 | `cat`        | Print a file; `cat file p` to page               |
 | `config`     | Change system settings (login, ui, debug, …)     |
+| `doctor`     | Audit and repair missing core system state       |
 | `edit`       | Open the text editor                             |
 | `halt`       | Shut down the computer                           |
 | `less`       | Scrollable file viewer (Up/Down/W/S, Ctrl to exit)|
 | `lock`       | Lock the screen until the current password is entered |
 | `login`      | Log in as another user                           |
-| `ls`         | List directory contents (`-r` recursive, `-a` detailed) |
+| `ls`         | List directory contents (`-a`, `-l`, `-R`, `-d`)       |
 | `makeboot`   | Write the net-installer to a disk drive          |
 | `man`        | Display a manual page; `man list` for all topics |
 | `newtab`     | Open a new workspace tab (advanced computers only)|
 | `passwd`     | Change a user's password                         |
 | `programs`   | List all available programs                      |
 | `restart`    | Reboot the computer                              |
-| `search`     | Search the filesystem for a filename             |
+| `search`     | Compatibility wrapper for substring file search  |
+| `service`    | Manage boot/login services (`list`, `status`, `enable`, …) |
 | `useradd`    | Add a new user                                   |
 | `userdel`    | Delete a user                                    |
 | `usermod`    | Manage local users (add/del/psw)                 |
@@ -134,6 +143,9 @@
 | `basename` / `dirname` / `realpath` | Path component utilities       |
 | `cal`    | Print a monthly calendar                          |
 | `clear`  | Clear the terminal                                |
+| `cp`     | Copy files or directories                         |
+| `chmod`  | Change permission metadata (`chmod 755 file`)     |
+| `chown`  | Change owner/group metadata (`user[:group]`)      |
 | `cut`    | Extract characters or fields from each line       |
 | `date`   | Print the in-game day and time                    |
 | `df`     | Report free / used disk space                     |
@@ -142,18 +154,22 @@
 | `env`    | Show computer environment and shell aliases      |
 | `expr`   | Evaluate an arithmetic expression (`+ - * / % ^ //`) |
 | `factor` | Print prime factors of an integer                 |
+| `find`   | Walk a directory tree (`-name`, `-type`, `-maxdepth`) |
 | `fold`   | Wrap input lines at a column width                |
-| `grep`   | Search files for a Lua pattern (`-i`, `-n`, `-v`) |
+| `grep`   | Search files or stdin (`-F`, `-i`, `-n`, `-v`, `-r`) |
 | `head`   | Print the first N lines of a file                 |
 | `id`     | Print user / host / computer-id                   |
 | `mktemp` | Create a unique file under `/tmp`                 |
+| `mkdir`  | Create one or more directories                    |
+| `mv`     | Move or rename files and directories              |
 | `nl`     | Number the lines of a file                        |
 | `printf` | Print formatted output (Lua `string.format`)      |
 | `pwd`    | Print the current working directory               |
 | `rev`    | Reverse the characters of every line              |
+| `rm`     | Remove files; `-r` also removes directories       |
 | `seq`    | Generate a sequence of integers                   |
 | `sort`   | Sort lines (`-r`, `-n`, `-u`)                     |
-| `stat`   | Print file metadata (size, type, drive, times)    |
+| `stat`   | Print file metadata (owner, group, mode, times)   |
 | `tac`    | Print a file in reverse order                     |
 | `tail`   | Print the last N lines of a file                  |
 | `touch`  | Create empty files / ensure they exist            |
@@ -232,10 +248,12 @@ ReMinux is designed for **CC: Tweaked** and uses only APIs that are present and 
 | `http.get`, `http.checkURL` | ✅ Stable   |
 | `peripheral`, `rednet`| ✅ Stable          |
 | `os.loadAPI()`        | ⚠️ Deprecated but retained for compatibility |
-| `shell.openTab()`     | ✅ Advanced computers only |
+| `shell.openTab()`     | ✅ Available in shell environments with multishell/tab support |
 | `window.create()`     | ✅ Stable          |
 
 > **Note:** `os.loadAPI()` is deprecated in CC: Tweaked in favour of `require()`. ReMinux retains it for backwards compatibility with older package scripts but new internal code uses explicit table returns where possible.
+>
+> **Compatibility guards:** ReMinux now checks optional CC: Tweaked capabilities more defensively. If HTTP is disabled in the CC: Tweaked config, network downloads fail gracefully, and when `shell.openTab()` is unavailable the system falls back to single-shell execution instead of assuming tab support.
 
 ---
 

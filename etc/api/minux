@@ -17,10 +17,49 @@ red       = colors.red,       black     = colors.black,
 }
 
 local NO_USER = "foo"
+local ROOT_USER = "root"
+local ROOT_GROUP = "root"
+local PERMISSIONS_FILE = "/usr/minux-main/data/permissions.db"
+local SERVICES_FILE = "/usr/minux-main/data/services.db"
+local SERVICE_DISABLED_FILE = "/usr/minux-main/data/services-disabled.db"
+local SERVICE_DEFINITIONS_DIR = "/etc/minux-main/services"
 local SETTINGS_FILE = "/usr/minux-main/settings.cfg"
+local INSTALLED_DB_FILE = "/etc/apt/list/installed.db"
 local ENCRYPT_KEY_FILE = "/usr/minux-main/config/encr.conf"
 local AUTH_DIR = "/usr/local/auth/"
 local TEMP_EDIT_FILE = "/temp/dev/removeline.tmp"
+local USERNAME_PATTERN = "^[%w][%w_-]*$"
+local USERNAME_RULE_TEXT = "username must start with a letter or digit, then may use letters, digits, '_' and '-'"
+local basePrint = print
+-- Built-in services use low explicit order values, so 1000 keeps undeclared
+-- services after them while still allowing custom services to insert earlier.
+local DEFAULT_SERVICE_ORDER = 1000
+local ioContextStack = {}
+local permissionStoreCache
+local DEFAULT_PERMISSION_RULES = {
+{ prefix = "/boot", owner = ROOT_USER, group = ROOT_GROUP, dirMode = 755, fileMode = 755 },
+{ prefix = "/bin", owner = ROOT_USER, group = ROOT_GROUP, dirMode = 755, fileMode = 755 },
+{ prefix = "/gbin", owner = ROOT_USER, group = ROOT_GROUP, dirMode = 755, fileMode = 755 },
+{ prefix = "/etc/apt", owner = ROOT_USER, group = ROOT_GROUP, dirMode = 755, fileMode = 644 },
+{ prefix = "/etc/api", owner = ROOT_USER, group = ROOT_GROUP, dirMode = 755, fileMode = 644 },
+{ prefix = "/etc/minux-main", owner = ROOT_USER, group = ROOT_GROUP, dirMode = 755, fileMode = 644 },
+{ prefix = "/usr/minux-main/config", owner = ROOT_USER, group = ROOT_GROUP, dirMode = 700, fileMode = 600 },
+{ prefix = "/usr/minux-main/settings.cfg", owner = ROOT_USER, group = ROOT_GROUP, fileMode = 600 },
+{ prefix = "/usr/minux-main/data", owner = ROOT_USER, group = ROOT_GROUP, dirMode = 755, fileMode = 644 },
+{ prefix = "/usr/local/auth", owner = ROOT_USER, group = ROOT_GROUP, dirMode = 700, fileMode = 600 },
+{ prefix = "/usr/auth-client", owner = ROOT_USER, group = ROOT_GROUP, dirMode = 700, fileMode = 600 },
+{ prefix = "/etc/server.sys", owner = ROOT_USER, group = ROOT_GROUP, fileMode = 700 },
+}
+local DEFAULT_SETTINGS = {
+{ key = "network",      value = "disabled" },
+{ key = "login",        value = "disabled" },
+{ key = "debug",        value = "disabled" },
+{ key = "mapcleanup",   value = "enabled" },
+{ key = "welcome",      value = "enabled" },
+{ key = "update",       value = "disabled" },
+{ key = "crashhandler", value = "enabled" },
+{ key = "clearlogin",   value = "enabled" },
+}
 
 local function resolveColor(name, default)
 return COLOR_NAMES[name] or default
@@ -28,6 +67,31 @@ end
 
 local function requireAdminOrOwner()
 return _G.admin == true or _G.owner == _G.login
+end
+
+local function isSystemOwner()
+if _G.admin == true then
+return true
+end
+if _G.owner == true then
+return true
+end
+return _G.owner ~= nil and _G.owner ~= false and _G.owner == _G.login
+end
+
+local function currentUser()
+local user = _G.login
+if user == nil or user == false or user == "" or user == NO_USER then
+return NO_USER
+end
+return user
+end
+
+local function defaultGroupForUser(user)
+if user == nil or user == "" or user == ROOT_USER then
+return ROOT_GROUP
+end
+return user
 end
 
 -- Read the encryption key from disk. Returns the numeric key, or nil if
@@ -40,6 +104,720 @@ keyfile.close()
 return key
 end
 return nil
+end
+
+local function ensureDirectory(path)
+if path ~= nil and path ~= "" and fs.exists(path) == false then
+fs.makeDir(path)
+end
+end
+
+local function ensureParentDirectory(path)
+local parent = fs.getDir(path)
+if parent ~= nil and parent ~= "" then
+ensureDirectory(parent)
+end
+end
+
+local function normalisePath(path)
+if path == "" then
+return ""
+end
+return fs.combine("", path)
+end
+
+local function pathMatchesPrefix(path, prefix)
+path = normalisePath(path)
+prefix = normalisePath(prefix)
+if path == prefix then
+return true
+end
+return string.sub(path, 1, #prefix + 1) == prefix .. "/"
+end
+
+local function isHiddenName(name)
+return string.sub(name, 1, 1) == "."
+end
+
+local function parseModeValue(mode)
+if type(mode) == "number" then
+if mode < 0 or mode > 777 then
+return nil
+end
+local digits = string.format("%03d", mode)
+if string.match(digits, "^[0-7][0-7][0-7]$") == nil then
+return nil
+end
+return tonumber(digits)
+elseif type(mode) == "string" then
+local digits = string.match(mode, "^0?([0-7][0-7][0-7])$")
+if digits == nil then
+return nil
+end
+return tonumber(digits)
+end
+return nil
+end
+
+local function permissionsFromDigit(digit)
+return {
+read = math.floor(digit / 4) % 2 == 1,
+write = math.floor(digit / 2) % 2 == 1,
+execute = digit % 2 == 1,
+}
+end
+
+local function permissionsFromMode(mode)
+mode = parseModeValue(mode) or 644
+local ownerDigit = math.floor(mode / 100)
+local groupDigit = math.floor(mode / 10) % 10
+local otherDigit = mode % 10
+return {
+owner = permissionsFromDigit(ownerDigit),
+group = permissionsFromDigit(groupDigit),
+other = permissionsFromDigit(otherDigit),
+}
+end
+
+local function permissionTriplet(bits)
+return (bits.read and "r" or "-")
+.. (bits.write and "w" or "-")
+.. (bits.execute and "x" or "-")
+end
+
+local function toModeString(isDir, mode)
+local permissions = permissionsFromMode(mode)
+return (isDir == true and "d" or "-")
+.. permissionTriplet(permissions.owner)
+.. permissionTriplet(permissions.group)
+.. permissionTriplet(permissions.other)
+end
+
+local function encodePermissionEntry(path, entry)
+return table.concat({
+normalisePath(path),
+entry.owner,
+entry.group,
+string.format("%03d", entry.mode),
+}, "\t")
+end
+
+local function readPermissionStore()
+if permissionStoreCache ~= nil then
+return permissionStoreCache
+end
+local store = {}
+if fs.exists(PERMISSIONS_FILE) ~= true then
+permissionStoreCache = store
+return store
+end
+local handle = fs.open(PERMISSIONS_FILE, "r")
+if handle == nil then
+permissionStoreCache = store
+return store
+end
+local line = handle.readLine()
+while line ~= nil do
+local path, owner, group, mode = string.match(line, "^(.-)\t([^\t]+)\t([^\t]+)\t([0-7][0-7][0-7])$")
+if path ~= nil then
+store[normalisePath(path)] = {
+owner = owner,
+group = group,
+mode = tonumber(mode),
+}
+end
+line = handle.readLine()
+end
+handle.close()
+permissionStoreCache = store
+return store
+end
+
+local function writePermissionStore(store)
+ensureParentDirectory(PERMISSIONS_FILE)
+local paths = {}
+for path in pairs(store) do
+paths[#paths + 1] = path
+end
+table.sort(paths)
+local handle = fs.open(PERMISSIONS_FILE, "w")
+for _, path in ipairs(paths) do
+handle.writeLine(encodePermissionEntry(path, store[path]))
+end
+handle.close()
+permissionStoreCache = store
+end
+
+local function getPermissionRule(path)
+path = normalisePath(path)
+for _, rule in ipairs(DEFAULT_PERMISSION_RULES) do
+if pathMatchesPrefix(path, rule.prefix) then
+return rule
+end
+end
+return nil
+end
+
+local function defaultPermissionEntry(path, isDir)
+path = normalisePath(path)
+local rule = getPermissionRule(path)
+if rule ~= nil then
+return {
+owner = rule.owner or ROOT_USER,
+group = rule.group or ROOT_GROUP,
+mode = parseModeValue(isDir == true and rule.dirMode or rule.fileMode)
+or parseModeValue(isDir == true and rule.fileMode or rule.dirMode)
+or (isDir == true and 755 or 644),
+}
+end
+if pathMatchesPrefix(path, "/home/") then
+local segments = {}
+for segment in string.gmatch(path, "[^/]+") do
+segments[#segments + 1] = segment
+end
+local owner = segments[2] or currentUser()
+return {
+owner = owner,
+group = defaultGroupForUser(owner),
+mode = isDir == true and 755 or 644,
+}
+end
+local owner = currentUser()
+return {
+owner = owner,
+group = defaultGroupForUser(owner),
+mode = isDir == true and 755 or 644,
+}
+end
+
+local function permissionEntryFromStore(path, isDir, store)
+local entry = store[normalisePath(path)]
+if entry ~= nil then
+return {
+owner = entry.owner,
+group = entry.group,
+mode = parseModeValue(entry.mode) or (isDir == true and 755 or 644),
+}
+end
+return defaultPermissionEntry(path, isDir)
+end
+
+local function permissionEntryForPath(path, isDir)
+return permissionEntryFromStore(path, isDir, readPermissionStore())
+end
+
+local function setPermissionEntryInStore(path, entry, store)
+store[normalisePath(path)] = {
+owner = entry.owner,
+group = entry.group,
+mode = parseModeValue(entry.mode) or 644,
+}
+return store[normalisePath(path)]
+end
+
+local function setPermissionEntry(path, entry)
+local store = readPermissionStore()
+local result = setPermissionEntryInStore(path, entry, store)
+writePermissionStore(store)
+return result
+end
+
+local function registerPathMetadataInStore(path, isDir, entry, store)
+if fs.exists(path) ~= true and entry == nil then
+return false
+end
+local resolved = normalisePath(path)
+local metadata = entry or permissionEntryFromStore(resolved, isDir == true, store)
+metadata.mode = parseModeValue(metadata.mode) or ((isDir == true) and 755 or 644)
+setPermissionEntryInStore(resolved, metadata, store)
+return metadata
+end
+
+local function registerPathMetadata(path, isDir, entry)
+local store = readPermissionStore()
+local metadata = registerPathMetadataInStore(path, isDir, entry, store)
+if metadata ~= false then
+writePermissionStore(store)
+end
+return metadata
+end
+
+local function removePathMetadata(path)
+local store = readPermissionStore()
+local changed = false
+path = normalisePath(path)
+for key in pairs(store) do
+if pathMatchesPrefix(key, path) then
+store[key] = nil
+changed = true
+end
+end
+if changed == true then
+writePermissionStore(store)
+end
+return changed
+end
+
+local function renamePathMetadata(source, destination)
+local store = readPermissionStore()
+local updated = {}
+local removed = false
+source = normalisePath(source)
+destination = normalisePath(destination)
+for key, entry in pairs(store) do
+if pathMatchesPrefix(key, source) then
+local suffix = string.sub(key, #source + 1)
+updated[destination .. suffix] = {
+owner = entry.owner,
+group = entry.group,
+mode = entry.mode,
+}
+store[key] = nil
+removed = true
+end
+end
+for key, entry in pairs(updated) do
+store[key] = entry
+end
+if removed == true then
+writePermissionStore(store)
+end
+return removed
+end
+
+local function principalPermissions(entry)
+local permissions = permissionsFromMode(entry.mode)
+local user = currentUser()
+local group = defaultGroupForUser(user)
+if isSystemOwner() == true then
+return { read = true, write = true, execute = true }
+end
+if entry.owner == user then
+return permissions.owner
+end
+if entry.group == group then
+return permissions.group
+end
+return permissions.other
+end
+
+local function buildPathInfo(path, depth)
+local resolved = normalisePath(path)
+if fs.exists(resolved) ~= true then
+return nil
+end
+local isDir = fs.isDir(resolved)
+local readOnly = fs.isReadOnly ~= nil and fs.isReadOnly(resolved) or false
+local metadata = permissionEntryForPath(resolved, isDir)
+local mode = parseModeValue(metadata.mode) or (isDir == true and 755 or 644)
+if readOnly == true then
+mode = isDir == true and 555 or 444
+end
+local info = {
+path = resolved,
+name = fs.getName(resolved),
+depth = depth or 0,
+isDir = isDir,
+type = isDir and "directory" or "file",
+readOnly = readOnly,
+owner = metadata.owner,
+group = metadata.group,
+uid = metadata.owner == ROOT_USER and 0 or nil,
+gid = metadata.group == ROOT_GROUP and 0 or nil,
+modeOctal = mode,
+modeOctalString = string.format("%03d", mode),
+permissions = permissionsFromMode(mode),
+mode = toModeString(isDir, mode),
+}
+if isDir ~= true then
+info.size = fs.getSize(resolved)
+end
+if fs.getDrive ~= nil then
+local ok, drive = pcall(fs.getDrive, resolved)
+if ok == true then
+info.drive = drive
+end
+end
+if fs.attributes ~= nil then
+local ok, attrs = pcall(fs.attributes, resolved)
+if ok == true and type(attrs) == "table" then
+info.attributes = attrs
+info.created = attrs.created
+info.modified = attrs.modified
+end
+end
+return info
+end
+
+local function sortedChildren(path)
+local items = fs.list(path)
+table.sort(items, function(left, right)
+local leftLower = string.lower(left)
+local rightLower = string.lower(right)
+if leftLower == rightLower then
+return left < right
+end
+return leftLower < rightLower
+end)
+return items
+end
+
+local function globToLuaPattern(glob)
+local pattern = { "^" }
+for index = 1, #glob do
+local char = string.sub(glob, index, index)
+if char == "*" then
+table.insert(pattern, ".*")
+elseif char == "?" then
+table.insert(pattern, ".")
+elseif string.match(char, "[%^%$%(%)%%%.%[%]%+%-]") ~= nil then
+table.insert(pattern, "%" .. char)
+else
+table.insert(pattern, char)
+end
+end
+table.insert(pattern, "$")
+return table.concat(pattern)
+end
+
+local function matchesNeedle(value, needle, caseInsensitive, plain)
+if needle == nil then
+return true
+end
+if caseInsensitive == true then
+value = string.lower(value)
+needle = string.lower(needle)
+end
+if plain == true then
+return string.find(value, needle, 1, true) ~= nil
+end
+return string.find(value, needle) ~= nil
+end
+
+local function matchesEntry(entry, options)
+if options.type == "file" and entry.isDir == true then
+return false
+end
+if options.type == "directory" and entry.isDir ~= true then
+return false
+end
+if options.nameContains ~= nil and matchesNeedle(entry.name, options.nameContains, options.caseInsensitive == true, true) ~= true then
+return false
+end
+if options.pathContains ~= nil and matchesNeedle(entry.path, options.pathContains, options.caseInsensitive == true, true) ~= true then
+return false
+end
+if options.namePattern ~= nil then
+local pattern = globToLuaPattern(options.namePattern)
+local subject = options.caseInsensitive == true and string.lower(entry.name) or entry.name
+if string.match(subject, options.caseInsensitive == true and string.lower(pattern) or pattern) == nil then
+return false
+end
+end
+return true
+end
+
+local function walkEntries(startPath, options, results, depth)
+local entry = buildPathInfo(startPath, depth)
+if entry == nil then
+return
+end
+local includeRoot = options.includeRoot == true
+if entry.isDir ~= true or includeRoot == true or depth > 0 then
+if matchesEntry(entry, options) == true then
+table.insert(results, entry)
+end
+end
+if entry.isDir ~= true or options.recursive ~= true then
+return
+end
+if options.maxDepth ~= nil and depth >= options.maxDepth then
+return
+end
+for _, childName in ipairs(sortedChildren(entry.path)) do
+if options.includeHidden == true or isHiddenName(childName) ~= true then
+walkEntries(fs.combine(entry.path, childName), options, results, depth + 1)
+end
+end
+end
+
+local function ensureFile(path, defaultLines)
+if fs.exists(path) == true then
+return false
+end
+ensureParentDirectory(path)
+local tempfile = fs.open(path, "w")
+if defaultLines ~= nil then
+for _, line in ipairs(defaultLines) do
+tempfile.writeLine(line)
+end
+end
+tempfile.close()
+return true
+end
+
+local function addAuditFinding(findings, level, message)
+table.insert(findings, {
+level = level,
+message = message,
+})
+end
+
+local function seedPermissionTree(path, recursive, store)
+if fs.exists(path) ~= true then
+return
+end
+registerPathMetadataInStore(path, fs.isDir(path), nil, store)
+if recursive == true and fs.isDir(path) == true and minux ~= nil and type(minux.findEntries) == "function" then
+local entries = minux.findEntries(path, {
+recursive = true,
+includeRoot = false,
+includeHidden = true,
+})
+for _, entry in ipairs(entries or {}) do
+registerPathMetadataInStore(entry.path, entry.isDir, nil, store)
+end
+end
+end
+
+local function ensurePermissionDefaults()
+local created = ensureFile(PERMISSIONS_FILE, {})
+if created == true then
+permissionStoreCache = nil
+end
+local store = readPermissionStore()
+local isFirstTimeInit = next(store) == nil
+local paths = {
+"/boot",
+"/boot/autorun.ls",
+"/boot/runonce.sh",
+"/bin",
+"/gbin",
+"/etc",
+"/etc/apt",
+"/etc/api",
+"/etc/minux-main",
+"/usr/minux-main",
+"/usr/minux-main/config",
+	"/usr/minux-main/data",
+	SERVICE_DISABLED_FILE,
+	SERVICES_FILE,
+	SETTINGS_FILE,
+	ENCRYPT_KEY_FILE,
+	AUTH_DIR,
+	"/usr/auth-client",
+	"/etc/server.sys",
+	SERVICE_DEFINITIONS_DIR,
+	}
+for _, path in ipairs(paths) do
+	seedPermissionTree(path, isFirstTimeInit, store)
+end
+writePermissionStore(store)
+end
+
+local function ensureCoreLayout()
+	ensureDirectory("/var/log")
+	ensureDirectory(SERVICE_DEFINITIONS_DIR)
+	ensureDirectory("/usr/minux-main/config")
+	ensureDirectory("/usr/minux-main/data")
+	ensureDirectory(AUTH_DIR)
+	ensureDirectory("/usr/auth-client")
+	ensureFile("/boot/autorun.ls", {})
+	ensureFile("/boot/runonce.sh", {})
+	ensureFile(SERVICE_DISABLED_FILE, {})
+	ensureFile(SERVICES_FILE, {})
+	ensurePermissionDefaults()
+end
+
+local function serialiseServiceEntry(name, entry)
+	return table.concat({
+		name,
+		entry.state or "inactive",
+		entry.updatedAt or "",
+		entry.detail or "",
+	}, "\t")
+end
+
+local function readServiceStateStore()
+	local store = {}
+	if fs.exists(SERVICES_FILE) ~= true then
+		return store
+	end
+	local handle = fs.open(SERVICES_FILE, "r")
+	if handle == nil then
+		return store
+	end
+	local line = handle.readLine()
+	while line ~= nil do
+		local name, state, updatedAt, detail = string.match(line, "^([^\t]+)\t([^\t]*)\t([^\t]*)\t(.*)$")
+		if name ~= nil then
+			store[name] = {
+				state = state ~= "" and state or "inactive",
+				updatedAt = updatedAt ~= "" and updatedAt or nil,
+				detail = detail ~= "" and detail or nil,
+			}
+		end
+		line = handle.readLine()
+	end
+	handle.close()
+	return store
+end
+
+local function writeServiceStateStore(store)
+	local names = {}
+	for name in pairs(store) do
+		names[#names + 1] = name
+	end
+	table.sort(names)
+	local handle = fs.open(SERVICES_FILE, "w")
+	for _, name in ipairs(names) do
+		handle.writeLine(serialiseServiceEntry(name, store[name]))
+	end
+	handle.close()
+end
+
+local function timestampString()
+	if os.epoch ~= nil then
+		return tostring(os.epoch("utc"))
+	end
+	return tostring(os.time())
+end
+
+local function loadServiceDefinitionFile(path)
+	local ok, result = pcall(dofile, path)
+	if ok ~= true or type(result) ~= "table" then
+		return {}
+	end
+	if result.name ~= nil then
+		return { result }
+	end
+	return result
+end
+
+local function collectDeclaredServices()
+	local services = {}
+	if fs.exists(SERVICE_DEFINITIONS_DIR) == true and fs.isDir(SERVICE_DEFINITIONS_DIR) == true then
+		local files = fs.list(SERVICE_DEFINITIONS_DIR)
+		table.sort(files)
+		for _, file in ipairs(files) do
+			local path = fs.combine(SERVICE_DEFINITIONS_DIR, file)
+			if fs.isDir(path) ~= true then
+				local definitions = loadServiceDefinitionFile(path)
+				for _, definition in ipairs(definitions) do
+					if type(definition) == "table" and type(definition.name) == "string" and definition.name ~= "" then
+						services[definition.name] = definition
+					end
+				end
+			end
+		end
+	end
+	return services
+end
+
+local function collectLegacyServices()
+	local services = {}
+	local function register(definition)
+		if definition.path == nil or fs.exists(definition.path) ~= true then
+			return
+		end
+		services[definition.name] = definition
+	end
+	register({
+		name = "addons",
+		trigger = "boot",
+		phase = "early",
+		order = 20,
+		kind = "oneshot",
+		path = "/boot/addon.d",
+		command = "/boot/addon.d",
+		description = "Generated boot addon hook",
+	})
+	register({
+		name = "server",
+		trigger = "boot",
+		phase = "early",
+		order = 10,
+		kind = "daemon",
+		path = "/etc/server.sys",
+		command = "/etc/server.sys",
+		description = "Legacy server boot hook",
+		stopSupported = false,
+	})
+	register({
+		name = "overrides",
+		trigger = "boot",
+		phase = "override",
+		order = 30,
+		kind = "oneshot",
+		path = "/boot/override.d",
+		command = "/boot/override.d",
+		description = "Boot override hook",
+	})
+	register({
+		name = "runonce",
+		trigger = "boot",
+		phase = "runonce",
+		order = 40,
+		kind = "runonce",
+		path = "/boot/runonce.sh",
+		command = "/boot/runonce.sh",
+		description = "Boot run-once command list",
+	})
+	register({
+		name = "autorun",
+		trigger = "login",
+		order = 10,
+		kind = "oneshot",
+		path = "/boot/autorun.ls",
+		command = "/boot/autorun.ls",
+		description = "Per-login autorun hook",
+	})
+	return services
+end
+
+local function readDisabledServices()
+	local disabled = {}
+	local lines = minux.readtable(SERVICE_DISABLED_FILE)
+	if type(lines) ~= "table" then
+		return disabled
+	end
+	for _, name in ipairs(lines) do
+		disabled[name] = true
+	end
+	return disabled
+end
+
+local function mergeServiceDefinitions()
+	local services = collectLegacyServices()
+	for name, definition in pairs(collectDeclaredServices()) do
+		services[name] = definition
+	end
+	return services
+end
+
+local function buildServiceRecord(name, definition)
+	local state = readServiceStateStore()[name] or {}
+	local disabled = readDisabledServices()
+	local record = {}
+	for key, value in pairs(definition) do
+		record[key] = value
+	end
+	record.name = name
+	record.enabled = disabled[name] ~= true
+	record.state = state.state or "inactive"
+	record.detail = state.detail
+	record.updatedAt = state.updatedAt
+	record.trigger = record.trigger or "manual"
+	record.order = tonumber(record.order) or DEFAULT_SERVICE_ORDER
+	record.kind = record.kind or "oneshot"
+	return record
+end
+
+local function serviceSessionState()
+	if type(_G.__minuxServicesStarted) ~= "table" then
+		_G.__minuxServicesStarted = {}
+	end
+	return _G.__minuxServicesStarted
 end
 
 -- Write a single key=value line in a config file, replacing any existing entry.
@@ -79,95 +857,530 @@ tempfile.writeLine(line)
 end
 tempfile.close()
 end
-return cfgf
+	return cfgf
+end
+
+function setServiceState(name, state, detail)
+	expect(1, name, "string")
+	expect(2, state, "string")
+	expect(3, detail, "string", "nil")
+	local store = readServiceStateStore()
+	store[name] = {
+		state = state,
+		detail = detail,
+		updatedAt = timestampString(),
+	}
+	writeServiceStateStore(store)
+	return true
+end
+
+function getService(name)
+	expect(1, name, "string")
+	local definitions = mergeServiceDefinitions()
+	local definition = definitions[name]
+	if definition == nil then
+		return nil
+	end
+	return buildServiceRecord(name, definition)
+end
+
+function listServices(trigger)
+	expect(1, trigger, "string", "nil")
+	local definitions = mergeServiceDefinitions()
+	local services = {}
+	for name, definition in pairs(definitions) do
+		if trigger == nil or definition.trigger == trigger then
+			services[#services + 1] = buildServiceRecord(name, definition)
+		end
+	end
+	table.sort(services, function(left, right)
+		if left.order == right.order then
+			return left.name < right.name
+		end
+		return left.order < right.order
+	end)
+	return services
+end
+
+function setServiceEnabled(name, enabled)
+	expect(1, name, "string")
+	expect(2, enabled, "boolean")
+	local service = minux.getService(name)
+	if service == nil then
+		return false, "unknown service: " .. name
+	end
+	local disabledNames = {}
+	local disabledLookup = readDisabledServices()
+	for existing in pairs(disabledLookup) do
+		if existing ~= name then
+			disabledNames[#disabledNames + 1] = existing
+		end
+	end
+	if enabled ~= true then
+		disabledNames[#disabledNames + 1] = name
+		minux.setServiceState(name, "disabled", "disabled by service command")
+	else
+		local state = minux.getService(name)
+		if state ~= nil and state.state == "disabled" then
+			minux.setServiceState(name, "inactive", "enabled")
+		end
+	end
+	table.sort(disabledNames)
+	minux.writetable(SERVICE_DISABLED_FILE, disabledNames)
+	return true
+end
+
+local function runRunOnceService(path)
+	local commands = minux.readtable(path)
+	if type(commands) ~= "table" then
+		return true
+	end
+	for _, command in ipairs(commands) do
+		if command ~= nil and command ~= "" then
+			local ok = shell.run(command)
+			if ok ~= true then
+				return false, "command failed: " .. command
+			end
+		end
+	end
+	minux.writetable(path, {})
+	return true
+end
+
+local function isSuccessfulServiceLaunchResult(result)
+	if result == nil or result == false then
+		return false
+	end
+	if type(result) == "number" then
+		return result > 0
+	end
+	return result == true
+end
+
+function startService(name, options)
+	expect(1, name, "string")
+	expect(2, options, "table", "nil")
+	local service = minux.getService(name)
+	if service == nil then
+		return false, "unknown service: " .. name
+	end
+	local runOptions = options or {}
+	if service.enabled ~= true and runOptions.ignoreDisabled ~= true then
+		return false, "service is disabled: " .. name
+	end
+	local startedServices = serviceSessionState()
+	if runOptions.oncePerSession == true and runOptions.force ~= true and startedServices[name] == true then
+		return true
+	end
+	minux.setServiceState(name, "starting", service.description)
+	local ok, err
+	if service.kind == "runonce" then
+		ok, err = runRunOnceService(service.command)
+	elseif service.kind == "daemon" then
+		local launchResult = minux.safeOpenTab(service.command)
+		ok = isSuccessfulServiceLaunchResult(launchResult)
+		if ok ~= true then
+			err = "command failed: " .. service.command
+		end
+	else
+		ok = shell.run(service.command)
+		if ok ~= true then
+			err = "command failed: " .. service.command
+		end
+	end
+	if ok == true then
+		local completedState = service.kind == "daemon" and "running" or "completed"
+		minux.setServiceState(name, completedState, service.command)
+		startedServices[name] = true
+		return true
+	end
+	minux.setServiceState(name, "failed", err)
+	return false, err
+end
+
+function stopService(name)
+	expect(1, name, "string")
+	local service = minux.getService(name)
+	if service == nil then
+		return false, "unknown service: " .. name
+	end
+	if service.stopCommand ~= nil and service.stopCommand ~= "" then
+		local ok = shell.run(service.stopCommand)
+		if ok ~= true then
+			minux.setServiceState(name, "failed", "stop failed")
+			return false, "stop command failed: " .. service.stopCommand
+		end
+		minux.setServiceState(name, "stopped", service.stopCommand)
+		return true
+	end
+	if service.kind == "daemon" then
+		return false, "service does not support stop in this environment"
+	end
+	minux.setServiceState(name, "stopped", "stopped")
+	return true
+end
+
+function restartService(name)
+	expect(1, name, "string")
+	local stopped, stopErr = minux.stopService(name)
+	if stopped ~= true and stopErr ~= nil and string.find(stopErr, "does not support stop", 1, true) ~= nil then
+		return false, stopErr
+	end
+	return minux.startService(name, {
+		force = true,
+	})
+end
+
+function runServiceTrigger(trigger, phase)
+	expect(1, trigger, "string")
+	expect(2, phase, "string", "nil")
+	local services = minux.listServices(trigger)
+	for _, service in ipairs(services) do
+		local phaseMatches = phase == nil or service.phase == phase
+		if phaseMatches == true and service.enabled == true then
+			local ok, err = minux.startService(service.name, {
+				ignoreDisabled = true,
+				oncePerSession = trigger == "boot",
+			})
+			if ok ~= true then
+				return false, err
+			end
+		elseif phaseMatches == true then
+			minux.setServiceState(service.name, "disabled", "disabled")
+		end
+	end
+	return true
 end
 
 -- Apply the common "login granted" finalisation: set global credentials, run
 -- the autorun script, and optionally clear the screen.
 local function finalizeLogin(username, password, grantAdmin)
-_G.login = username
-_G.masterpass = password
+	_G.login = username
+	_G.masterpass = password
 _G.validlogin = true
-if grantAdmin == true then
-_G.admin = true
-end
-shell.run("/boot/autorun.ls")
-if minux.getconfig("clearlogin") == "enabled" then
-term.setCursorPos(1, 1)
-term.clear()
+	if grantAdmin == true then
+		_G.admin = true
+	end
+	minux.runServiceTrigger("login")
+	if minux.getconfig("clearlogin") == "enabled" then
+		term.setCursorPos(1, 1)
+		term.clear()
 end
 return true
 end
 
 -- Recursive file listing helpers
 
+function getIoContext()
+return ioContextStack[#ioContextStack]
+end
+
+function pushIoContext(context)
+expect(1, context, "table", "nil")
+local resolved = context or {}
+table.insert(ioContextStack, resolved)
+return resolved
+end
+
+function popIoContext()
+if #ioContextStack == 0 then
+return nil
+end
+local context = ioContextStack[#ioContextStack]
+ioContextStack[#ioContextStack] = nil
+return context
+end
+
+function withIoContext(context, callback, ...)
+expect(1, context, "table", "nil")
+expect(2, callback, "function")
+pushIoContext(context or {})
+local results = table.pack(pcall(callback, ...))
+popIoContext()
+if results[1] ~= true then
+error(results[2], 0)
+end
+return table.unpack(results, 2, results.n)
+end
+
+function readInputLines()
+local context = getIoContext()
+if type(context) ~= "table" then
+return nil
+end
+if type(context.readLines) == "function" then
+return context.readLines()
+end
+if type(context.inputLines) == "table" then
+return context.inputLines
+end
+return nil
+end
+
+function writeOutputLine(line)
+expect(1, line, "string")
+local context = getIoContext()
+if type(context) == "table" then
+if type(context.writeLine) == "function" then
+context.writeLine(line)
+return true
+end
+if type(context.outputLines) == "table" then
+table.insert(context.outputLines, line)
+return true
+end
+end
+basePrint(line)
+return true
+end
+
+function pathInfo(path)
+expect(1, path, "string")
+return buildPathInfo(path, 0)
+end
+
+function permissionInfo(path)
+expect(1, path, "string")
+local resolved = normalisePath(path)
+local exists = fs.exists(resolved) == true
+local isDir = exists == true and fs.isDir(resolved) or false
+local entry = permissionEntryForPath(resolved, isDir)
+local mode = parseModeValue(entry.mode) or (isDir == true and 755 or 644)
+return {
+path = resolved,
+owner = entry.owner,
+group = entry.group,
+modeOctal = mode,
+modeOctalString = string.format("%03d", mode),
+permissions = permissionsFromMode(mode),
+mode = toModeString(isDir, mode),
+}
+end
+
+function requirePermission(path, operation)
+expect(1, path, "string")
+expect(2, operation, "string")
+local resolved = normalisePath(path)
+local info
+if operation == "create" and fs.exists(resolved) ~= true then
+local parent = fs.getDir(resolved)
+if parent == nil or parent == "" then
+parent = "/"
+end
+if fs.exists(parent) ~= true then
+return false, "parent directory does not exist: " .. parent
+end
+info = buildPathInfo(parent, 0)
+else
+info = buildPathInfo(resolved, 0)
+if info == nil then
+return false, "path does not exist: " .. resolved
+end
+end
+if isSystemOwner() == true then
+return true
+end
+if info.readOnly == true and (operation == "write" or operation == "create" or operation == "delete" or operation == "own") then
+return false, "access denied: " .. resolved
+end
+if operation == "own" then
+return false, "permission denied: " .. resolved
+end
+local permissions = principalPermissions({
+owner = info.owner,
+group = info.group,
+mode = info.modeOctal,
+})
+if operation == "read" and permissions.read ~= true then
+return false, "permission denied: " .. resolved
+elseif (operation == "write" or operation == "create" or operation == "delete") and permissions.write ~= true then
+return false, "permission denied: " .. resolved
+elseif operation == "execute" and permissions.execute ~= true then
+return false, "permission denied: " .. resolved
+end
+return true
+end
+
+function chmod(path, mode)
+expect(1, path, "string")
+expect(2, mode, "string", "number")
+local resolved = normalisePath(path)
+local info = buildPathInfo(resolved, 0)
+if info == nil then
+return false, "path does not exist: " .. resolved
+end
+local parsedMode = parseModeValue(mode)
+if parsedMode == nil then
+return false, "invalid mode: " .. tostring(mode)
+end
+if isSystemOwner() ~= true and info.owner ~= currentUser() then
+return false, "permission denied: " .. resolved
+end
+if info.readOnly == true then
+return false, "access denied: " .. resolved
+end
+registerPathMetadata(resolved, info.isDir, {
+owner = info.owner,
+group = info.group,
+mode = parsedMode,
+})
+return true
+end
+
+function chown(path, owner, group)
+expect(1, path, "string")
+expect(2, owner, "string")
+expect(3, group, "string", "nil")
+local resolved = normalisePath(path)
+local info = buildPathInfo(resolved, 0)
+if info == nil then
+return false, "path does not exist: " .. resolved
+end
+local ok, reason = minux.validateUsername(owner)
+if ok ~= true then
+return false, reason
+end
+local targetGroup = group
+if targetGroup == nil or targetGroup == "" then
+targetGroup = defaultGroupForUser(owner)
+end
+if isSystemOwner() ~= true then
+return false, "permission denied: " .. resolved
+end
+if info.readOnly == true then
+return false, "access denied: " .. resolved
+end
+registerPathMetadata(resolved, info.isDir, {
+owner = owner,
+group = targetGroup,
+mode = info.modeOctal,
+})
+return true
+end
+
+function touchPath(path)
+expect(1, path, "string")
+local resolved = normalisePath(path)
+if fs.isDir(resolved) == true then
+return false, "is a directory: " .. resolved
+end
+if fs.exists(resolved) == true then
+return true
+end
+local parent = fs.getDir(resolved)
+if parent ~= nil and parent ~= "" and fs.exists(parent) ~= true then
+local ok, err = minux.makeDirectory(parent, true)
+if ok ~= true then
+return false, err
+end
+end
+local ok, err = minux.requirePermission(resolved, "create")
+if ok ~= true then
+return false, err
+end
+local handle = fs.open(resolved, "w")
+if handle == nil then
+return false, "cannot create file: " .. resolved
+end
+handle.close()
+registerPathMetadata(resolved, false)
+return true
+end
+
+function listEntries(path, options)
+expect(1, path, "string")
+expect(2, options, "table", "nil")
+local resolved = normalisePath(path)
+if fs.exists(resolved) ~= true or fs.isDir(resolved) ~= true then
+return false
+end
+local includeHidden = type(options) == "table" and options.includeHidden == true or false
+local results = {}
+for _, childName in ipairs(sortedChildren(resolved)) do
+if includeHidden == true or isHiddenName(childName) ~= true then
+table.insert(results, buildPathInfo(fs.combine(resolved, childName), 1))
+end
+end
+return results
+end
+
+function findEntries(path, options)
+expect(1, path, "string")
+expect(2, options, "table", "nil")
+local resolved = normalisePath(path)
+if fs.exists(resolved) ~= true then
+return false
+end
+local resolvedOptions = options or {}
+if resolvedOptions.recursive == nil then
+resolvedOptions.recursive = true
+end
+if resolvedOptions.includeHidden == nil then
+resolvedOptions.includeHidden = true
+end
+local results = {}
+walkEntries(resolved, resolvedOptions, results, 0)
+return results
+end
+
 function lsr(ptn)
 expect(1, ptn, "string")
-if fs.exists(ptn) == false then return false end
-if fs.isDir(ptn) == false then return false end
-if fs.exists("/temp/ls") == false then fs.makeDir("/temp/ls") end
-if fs.exists("/temp/ls/files.ls") then fs.delete("/temp/ls/files.ls") end
-if fs.exists("/temp/ls/todo") then fs.delete("/temp/ls/todo") end
-fs.makeDir("/temp/ls/todo")
-local lsfc = 0
-minux.list(ptn, lsfc)
-local tdff = "start"
-while tdff ~= nil and fs.exists("/temp/ls/todo/") do
-local todofolderlist = fs.list("/temp/ls/todo/")
-tdff = todofolderlist[1]
-if tdff ~= nil then
-if fs.exists("/temp/ls/todo/" .. tdff) then
-local todofile = fs.open("/temp/ls/todo/" .. tdff, "r")
-local line = todofile.readLine()
-while line ~= nil do
-minux.list(line, lsfc)
-line = todofile.readLine()
+if fs.exists(ptn) == false or fs.isDir(ptn) == false then return false end
+ensureDirectory("/temp/ls")
+local entries = minux.findEntries(ptn, {
+recursive = true,
+includeHidden = true,
+type = "file",
+})
+local lines = {}
+for _, entry in ipairs(entries or {}) do
+table.insert(lines, entry.path)
 end
-todofile.close()
-fs.delete("/temp/ls/todo/" .. tdff)
+minux.writetable("/temp/ls/files.ls", lines)
+if fs.exists("/temp/ls/todo") == true then
+fs.delete("/temp/ls/todo")
 end
-else
-tdff = nil
-end
-lsfc = lsfc + 1
-end
-return minux.readtable("/temp/ls/files.ls")
+return lines
 end
 
 function list(ptn, lsfc)
 expect(1, ptn, "string")
 expect(2, lsfc, "number")
-local tempfile = fs.list(ptn)
-local fls = fs.open("/temp/ls/files.ls", "a")
-for index = 1, #tempfile do
-local fln = tempfile[index]
-if fs.isDir(ptn .. fln) then
-local folderfile = fs.open("/temp/ls/todo/" .. lsfc .. ".ls", "a")
-folderfile.writeLine(ptn .. fln .. "/")
-folderfile.close()
-elseif fs.exists(ptn .. fln) then
-fls.writeLine(ptn .. fln)
+local entries = minux.listEntries(ptn, { includeHidden = true })
+if entries == false then return false end
+ensureDirectory("/temp/ls")
+ensureDirectory("/temp/ls/todo")
+local filesHandle = fs.open("/temp/ls/files.ls", "a")
+local folderHandle = fs.open("/temp/ls/todo/" .. lsfc .. ".ls", "a")
+local items = {}
+for _, entry in ipairs(entries) do
+table.insert(items, entry.name)
+if entry.isDir == true then
+folderHandle.writeLine(entry.path .. "/")
+else
+filesHandle.writeLine(entry.path)
 end
 end
-fls.close()
-return tempfile
+filesHandle.close()
+folderHandle.close()
+return items
 end
 
 function lsa(ptn)
 expect(1, ptn, "string")
-local tempfile = fs.list(ptn)
-local fls = fs.open("/temp/ls/a.ls", "w")
-for index = 1, #tempfile do
-local fln = tempfile[index]
-if fs.isDir(ptn .. fln) then
-fls.writeLine("DIR:" .. ptn .. fln)
-elseif fs.exists(ptn .. fln) then
-fls.writeLine("File:" .. ptn .. fln .. " " .. fs.getSize(ptn .. fln) .. "b")
+local entries = minux.listEntries(ptn, { includeHidden = true })
+if entries == false then return false end
+local lines = {}
+for _, entry in ipairs(entries) do
+if entry.isDir == true then
+table.insert(lines, "DIR:" .. entry.path)
+else
+table.insert(lines, "File:" .. entry.path .. " " .. tostring(entry.size or 0) .. "b")
 end
 end
-fls.writeLine("Free space:" .. fs.getFreeSpace(ptn) .. " bytes")
-fls.close()
-return minux.readtable("/temp/ls/a.ls")
+table.insert(lines, "Free space:" .. fs.getFreeSpace(ptn) .. " bytes")
+minux.writetable("/temp/ls/a.ls", lines)
+return lines
 end
 
 -- Authentication
@@ -179,6 +1392,11 @@ end
 function login(username, password)
 expect(1, username, "string")
 expect(2, password, "string")
+local validUsername, validationErrMsg = minux.validateUsername(username)
+if validUsername ~= true then
+minux.debug("login:invalid username", "login")
+return false, validationErrMsg
+end
 local authtype = logintype()
 
 -- Preserve existing session so it can be restored on failure.
@@ -419,6 +1637,7 @@ end
 
 function sanitycheck()
 apt.verifyconfig()
+ensureCoreLayout()
 local cfl = SETTINGS_FILE
 if fs.exists(cfl) == false then
 minux.debug("generating settings file", "minux")
@@ -427,28 +1646,19 @@ tempfile.writeLine("login=disabled")
 tempfile.close()
 end
 -- Ensure all required keys exist.
-local defaults = {
-{ "network=",      "network=disabled" },
-{ "login=",        "login=disabled" },
-{ "debug=",        "debug=disabled" },
-{ "mapcleanup=",   "mapcleanup=enabled" },
-{ "welcome=",      "welcome=enabled" },
-{ "update=",       "update=disabled" },
-{ "crashhandler=", "crashhandler=enabled" },
-}
-for _, entry in ipairs(defaults) do
-if minux.findline(cfl, entry[1]) == false then
-minux.insertline(cfl, entry[2])
+for _, entry in ipairs(DEFAULT_SETTINGS) do
+if minux.findline(cfl, entry.key .. "=") == false then
+minux.insertline(cfl, entry.key .. "=" .. entry.value)
 end
 end
 if minux.findline(cfl, "ui=") == false then
 local uiDefault = "workspace"
-if minux.findline("/etc/apt/list/installed", "menu") ~= false then
+if minux.findline(INSTALLED_DB_FILE, "menu") ~= false then
 uiDefault = "menu"
 end
 minux.insertline(cfl, "ui=" .. uiDefault)
 end
-if minux.getconfig("ui") == "menu" and minux.findline("/etc/apt/list/installed.db", "menu") == false then
+if minux.getconfig("ui") == "menu" and minux.findline(INSTALLED_DB_FILE, "menu") == false then
 minux.setconfig("ui", "workspace")
 end
 if logintype() == "network" and auth == nil then
@@ -541,6 +1751,352 @@ end
 
 -- Config read/write
 
+function hasHttpSupport()
+return http ~= nil
+and type(http.get) == "function"
+and type(http.checkURL) == "function"
+end
+
+function canOpenTabs()
+return shell ~= nil and type(shell.openTab) == "function"
+end
+
+function safeOpenTab(program, ...)
+expect(1, program, "string")
+if minux.canOpenTabs() == true then
+return shell.openTab(program, ...)
+end
+return shell.run(program, ...)
+end
+
+-- Validate a local username. Returns true when valid, otherwise false and a
+-- user-readable error message describing the first failed rule.
+function validateUsername(username)
+expect(1, username, "string")
+if username == "" then
+return false, "username is required"
+end
+if username == NO_USER then
+return false, "username is reserved"
+end
+if #username > 32 then
+return false, "username is too long"
+end
+if string.match(username, USERNAME_PATTERN) == nil then
+return false, USERNAME_RULE_TEXT
+end
+return true
+end
+
+local function isPathWithin(path, root)
+if path == root then
+return true
+end
+return string.sub(path, 1, #root + 1) == root .. "/"
+end
+
+local function nearestExistingAncestor(path)
+local candidate = normalisePath(path)
+while candidate ~= nil and candidate ~= "" and fs.exists(candidate) ~= true do
+local parent = fs.getDir(candidate)
+if parent == candidate then
+break
+end
+candidate = parent
+end
+if candidate == nil or candidate == "" then
+candidate = "/"
+end
+return candidate
+end
+
+local function copyMetadataTree(source, destination)
+local entries = minux.findEntries(source, {
+recursive = true,
+includeRoot = true,
+includeHidden = true,
+})
+for _, entry in ipairs(entries or {}) do
+local suffix = string.sub(entry.path, #source + 1)
+local targetPath = destination .. suffix
+registerPathMetadata(targetPath, entry.isDir, {
+owner = entry.owner,
+group = entry.group,
+mode = entry.modeOctal,
+})
+end
+end
+
+function expandPathPattern(pathPattern)
+expect(1, pathPattern, "string")
+local matches = fs.find(pathPattern)
+table.sort(matches)
+if #matches == 0 then
+return false, "no matching files: " .. pathPattern
+end
+return matches
+end
+
+function makeDirectory(path, allowExisting)
+expect(1, path, "string")
+expect(2, allowExisting, "boolean", "nil")
+path = normalisePath(path)
+if path == "" then
+return false, "path is required"
+end
+if fs.exists(path) == true then
+if fs.isDir(path) == true and allowExisting == true then
+return true
+end
+if fs.isDir(path) == true then
+return false, "directory already exists: " .. path
+end
+return false, "destination exists: " .. path
+end
+if fs.isReadOnly(path) == true then
+return false, "access denied: " .. path
+end
+local anchor = nearestExistingAncestor(path)
+local permitted, permissionErr = minux.requirePermission(anchor, "write")
+if permitted ~= true then
+return false, permissionErr
+end
+local ok, err = pcall(fs.makeDir, path)
+if ok ~= true then
+return false, tostring(err):gsub("^pcall: ", "")
+end
+registerPathMetadata(path, true)
+return true
+end
+
+function copyPath(source, destination)
+expect(1, source, "string")
+expect(2, destination, "string")
+source = normalisePath(source)
+destination = normalisePath(destination)
+if fs.exists(source) ~= true then
+return false, "source does not exist: " .. source
+end
+if fs.exists(destination) == true then
+return false, "destination exists: " .. destination
+end
+if fs.isReadOnly(destination) == true then
+return false, "destination is read-only: " .. destination
+end
+if fs.isDir(source) == true and isPathWithin(destination, source) == true then
+return false, "cannot copy a directory into itself: " .. destination
+end
+local canRead, readErr = minux.requirePermission(source, "read")
+if canRead ~= true then
+return false, readErr
+end
+local parent = fs.getDir(destination)
+if parent ~= nil and parent ~= "" and fs.exists(parent) ~= true then
+return false, "parent directory does not exist: " .. parent
+end
+local canWrite, writeErr = minux.requirePermission(destination, "create")
+if canWrite ~= true then
+return false, writeErr
+end
+local freeSpace = fs.getFreeSpace(destination)
+local size = fs.getSize(source)
+if type(freeSpace) == "number" and type(size) == "number" and freeSpace < size then
+return false, "not enough space for: " .. destination
+end
+local ok, err = pcall(fs.copy, source, destination)
+if ok ~= true then
+return false, tostring(err):gsub("^pcall: ", "")
+end
+copyMetadataTree(source, destination)
+return true
+end
+
+function movePath(source, destination)
+expect(1, source, "string")
+expect(2, destination, "string")
+source = normalisePath(source)
+destination = normalisePath(destination)
+if fs.exists(source) ~= true then
+return false, "source does not exist: " .. source
+end
+if fs.exists(destination) == true then
+return false, "destination exists: " .. destination
+end
+if fs.isReadOnly(destination) == true then
+return false, "destination is read-only: " .. destination
+end
+if fs.isDriveRoot ~= nil and fs.isDriveRoot(source) == true then
+return false, "cannot move mount: " .. source
+end
+if fs.isReadOnly(source) == true then
+return false, "cannot move read-only path: " .. source
+end
+if fs.isDir(source) == true and isPathWithin(destination, source) == true then
+return false, "cannot move a directory into itself: " .. destination
+end
+local canRead, readErr = minux.requirePermission(source, "read")
+if canRead ~= true then
+return false, readErr
+end
+local canDelete, deleteErr = minux.requirePermission(source, "delete")
+if canDelete ~= true then
+return false, deleteErr
+end
+local parent = fs.getDir(destination)
+if parent ~= nil and parent ~= "" and fs.exists(parent) ~= true then
+return false, "parent directory does not exist: " .. parent
+end
+local canCreate, createErr = minux.requirePermission(destination, "create")
+if canCreate ~= true then
+return false, createErr
+end
+local ok, err = pcall(fs.move, source, destination)
+if ok ~= true then
+return false, tostring(err):gsub("^pcall: ", "")
+end
+renamePathMetadata(source, destination)
+return true
+end
+
+function deletePath(path, recursive)
+expect(1, path, "string")
+expect(2, recursive, "boolean", "nil")
+path = normalisePath(path)
+if fs.exists(path) ~= true then
+return false, "path does not exist: " .. path
+end
+if fs.isDir(path) == true and recursive ~= true then
+return false, "is a directory: " .. path
+end
+if fs.isDriveRoot ~= nil and fs.isDriveRoot(path) == true then
+return false, "cannot delete mount: " .. path
+end
+if fs.isReadOnly(path) == true then
+return false, "cannot delete read-only path: " .. path
+end
+local canDelete, deleteErr = minux.requirePermission(path, "delete")
+if canDelete ~= true then
+return false, deleteErr
+end
+local ok, err = pcall(fs.delete, path)
+if ok ~= true then
+return false, tostring(err):gsub("^pcall: ", "")
+end
+removePathMetadata(path)
+return true
+end
+
+function doctor(repair)
+expect(1, repair, "boolean", "nil")
+repair = repair == true
+local findings = {}
+local function missingDir(path, label)
+if fs.exists(path) == true then
+addAuditFinding(findings, "ok", label .. " is present")
+elseif repair == true then
+ensureDirectory(path)
+addAuditFinding(findings, "fixed", label .. " was created")
+else
+addAuditFinding(findings, "error", label .. " is missing")
+end
+end
+local function missingFile(path, label, defaultLines)
+if fs.exists(path) == true then
+addAuditFinding(findings, "ok", label .. " is present")
+elseif repair == true then
+ensureFile(path, defaultLines)
+addAuditFinding(findings, "fixed", label .. " was created")
+else
+addAuditFinding(findings, "error", label .. " is missing")
+end
+end
+
+missingDir("/var/log", "Log directory /var/log")
+missingDir("/usr/minux-main/config", "System config directory /usr/minux-main/config")
+missingDir("/usr/minux-main/data", "System data directory /usr/minux-main/data")
+missingFile(SETTINGS_FILE, "System settings file " .. SETTINGS_FILE, { "login=disabled" })
+if os ~= nil and type(os.loadAPI) == "function" then
+addAuditFinding(findings, "ok", "CC: Tweaked API os.loadAPI is available")
+else
+addAuditFinding(findings, "warning", "CC: Tweaked API os.loadAPI is missing (deprecated upstream)")
+end
+if window ~= nil and type(window.create) == "function" then
+addAuditFinding(findings, "ok", "CC: Tweaked window.create is available")
+else
+addAuditFinding(findings, "error", "CC: Tweaked window.create is missing")
+end
+if paintutils ~= nil then
+addAuditFinding(findings, "ok", "CC: Tweaked paintutils API is available")
+else
+addAuditFinding(findings, "error", "CC: Tweaked paintutils API is missing")
+end
+if minux.hasHttpSupport() == true then
+addAuditFinding(findings, "ok", "CC: Tweaked HTTP API is available")
+else
+addAuditFinding(findings, "warning", "CC: Tweaked HTTP API is disabled or unavailable; APT downloads and online updates will not work")
+end
+if minux.canOpenTabs() == true then
+addAuditFinding(findings, "ok", "shell.openTab is available in this shell")
+else
+addAuditFinding(findings, "warning", "shell.openTab is unavailable here; advanced tab features will fall back to single-shell execution")
+end
+if minux.getconfig("login") == "local" then
+missingDir(AUTH_DIR, "Local auth directory " .. AUTH_DIR)
+if fs.exists(AUTH_DIR .. "root.usr") == true then
+addAuditFinding(findings, "ok", "Local root account file is present")
+else
+addAuditFinding(findings, "error", "Local root account file is missing")
+end
+if minux.getconfig("encrypt") == true then
+addAuditFinding(findings, "ok", "Local auth encryption is enabled")
+else
+addAuditFinding(findings, "warning", "Local auth encryption is disabled")
+end
+end
+missingFile("/boot/autorun.ls", "Boot autorun list /boot/autorun.ls", {})
+missingFile("/boot/runonce.sh", "Boot run-once list /boot/runonce.sh", {})
+
+for _, entry in ipairs(DEFAULT_SETTINGS) do
+if minux.findline(SETTINGS_FILE, entry.key .. "=") == false then
+if repair == true then
+updateConfigLine(SETTINGS_FILE, entry.key, entry.value)
+addAuditFinding(findings, "fixed", "Missing setting '" .. entry.key .. "' was restored")
+else
+addAuditFinding(findings, "error", "Missing setting '" .. entry.key .. "'")
+end
+end
+end
+
+if minux.findline(SETTINGS_FILE, "ui=") == false then
+if repair == true then
+updateConfigLine(SETTINGS_FILE, "ui", "workspace")
+addAuditFinding(findings, "fixed", "Missing UI setting was restored")
+else
+addAuditFinding(findings, "error", "Missing UI setting")
+end
+end
+
+if minux.getconfig("login") == "network" and minux.getconfig("network") ~= "enabled" then
+if repair == true then
+minux.setconfig("network", "enabled")
+addAuditFinding(findings, "fixed", "Network login now enables networking automatically")
+else
+addAuditFinding(findings, "error", "Network login is enabled while networking is disabled")
+end
+end
+
+if minux.getconfig("ui") == "menu" and minux.findline(INSTALLED_DB_FILE, "menu") == false then
+if repair == true then
+minux.setconfig("ui", "workspace")
+addAuditFinding(findings, "fixed", "UI fallback changed from missing 'menu' package to 'workspace'")
+else
+addAuditFinding(findings, "warning", "UI is set to 'menu' but the package is not installed")
+end
+end
+
+return findings
+end
+
 function getconfig(value)
 expect(1, value, "string")
 local cfgf = SETTINGS_FILE
@@ -630,6 +2186,7 @@ return false
 end
 minux.debug("generating key", "minux")
 local key = os.getComputerID() * 3
+ensureParentDirectory(ENCRYPT_KEY_FILE)
 local keyfile = fs.open(ENCRYPT_KEY_FILE, "w")
 keyfile.writeLine(key)
 keyfile.close()
@@ -820,6 +2377,7 @@ if _G.debugmode == "enabled" or _G.debugmode == "full" then
 print(printstring)
 end
 if _G.debugmode == "logging" or _G.debugmode == "full" then
+ensureDirectory("/var/log")
 local logfile = fs.open("/var/log/" .. programname .. ".txt", "a")
 logfile.writeLine(os.date() .. ":" .. printstring)
 logfile.close()
@@ -862,20 +2420,23 @@ end
 
 function findfile(fln)
 expect(1, fln, "string")
-minux.lsr("/")
-local tempfile  = fs.open("/temp/ls/files.ls", "r")
-local results   = {}
-local lineNumber = 0
-local line = tempfile.readLine()
-while line ~= nil do
-lineNumber = lineNumber + 1
-if string.find(line, fln) ~= nil then
-table.insert(results, lineNumber)
+ensureDirectory("/temp/ls")
+local entries = minux.findEntries("/", {
+recursive = true,
+includeHidden = true,
+type = "file",
+pathContains = fln,
+})
+local lines = {}
+for _, entry in ipairs(entries or {}) do
+table.insert(lines, entry.path)
 end
-line = tempfile.readLine()
+minux.writetable("/temp/ls/files.ls", lines)
+if #lines == 0 then return { "noresult" } end
+local results = {}
+for index = 1, #lines do
+results[index] = index
 end
-tempfile.close()
-if #results == 0 then return { "noresult" } end
 return results
 end
 
@@ -988,22 +2549,49 @@ end
 function download(address, filepath)
 expect(1, address,  "string")
 expect(2, filepath, "string")
-if http.checkURL(address) ~= true then
+if filepath == "" then
+minux.debug("http-get:empty target path", "minux")
+return false
+end
+if fs.isDir(filepath) == true then
+minux.debug("http-get:target is a directory: " .. filepath, "minux")
+return false
+end
+if minux.hasHttpSupport() ~= true then
+minux.debug("http-get:http api unavailable", "minux")
+return false
+end
+local ok, checkErr = http.checkURL(address)
+if ok ~= true then
+minux.debug("http-get:url rejected: " .. tostring(checkErr or address), "minux")
+return false
+end
+ensureParentDirectory(filepath)
+local parent = fs.getDir(filepath)
+if parent ~= nil and parent ~= "" and fs.exists(parent) ~= true then
+minux.debug("http-get:parent directory missing: " .. parent, "minux")
 return false
 end
 for attempt = 1, 3 do
 minux.debug("minux:http-request:" .. address, "minux")
-local response = http.get(address)
+local response, requestErr = http.get(address)
 if response ~= nil then
 local content = response.readAll()
 response.close()
 local tempfile = fs.open(filepath, "w")
+if tempfile == nil then
+minux.debug("http-get:cannot write " .. filepath, "minux")
+return false
+end
 tempfile.write(content)
 tempfile.close()
 minux.debug("http-get:file retrieved", "minux")
 return true
 end
-minux.debug("http-get:failed attempt " .. attempt .. "/3", "minux")
+minux.debug(
+"http-get:failed attempt " .. attempt .. "/3: " .. tostring(requestErr or "unknown"),
+"minux"
+)
 os.sleep(3)
 end
 minux.debug("http-get:attempt failed", "minux")

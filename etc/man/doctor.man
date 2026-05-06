@@ -1,0 +1,46 @@
+doctor - audit ReMinux health
+Executable: /bin/doctor.sh
+Alias: doctor
+
+DESCRIPTION
+  Checks the core ReMinux
+  filesystem layout and
+  important configuration
+  and CC: Tweaked runtime
+  compatibility.
+  It reports missing files,
+  risky local-auth settings
+  broken UI/network
+  combinations, disabled
+  HTTP support and missing
+  tab/window APIs.
+
+USAGE
+  doctor
+  doctor --repair
+
+OPTIONS
+  --repair
+    Recreates missing core
+    files and directories,
+    restores missing default
+    settings and applies safe
+    fallback values for known
+    broken configurations.
+
+NOTES
+  doctor does not create a
+  missing root password for
+  local login. If the local
+  root account file is gone,
+  the next boot sanity check
+  will prompt for a new one.
+  It also reports optional
+  CC: Tweaked features such
+  as HTTP and shell tabs so
+  compatibility problems can
+  be diagnosed quickly.
+
+SEE ALSO
+  config
+  top

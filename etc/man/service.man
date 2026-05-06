@@ -1,0 +1,28 @@
+service, /bin/service.sh
+alias: 'service'
+
+Manage boot and login services.
+
+USAGE
+  service list
+  service status <name>
+  service start <name>
+  service stop <name>
+  service restart <name>
+  service enable <name>
+  service disable <name>
+
+DESCRIPTION
+  ReMinux exposes legacy boot hooks such as
+  /boot/addon.d, /boot/override.d,
+  /boot/runonce.sh, /boot/autorun.ls and
+  /etc/server.sys through a small service
+  layer. Services run sequentially and track
+  their last known state in
+  /usr/minux-main/data/services.db.
+
+NOTES
+  stop/restart only work for services which
+  provide a cooperative stop command. Legacy
+  tab-based services without one report an
+  unsupported stop operation.

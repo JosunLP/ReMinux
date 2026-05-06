@@ -1,0 +1,21 @@
+mv - move or rename paths
+Executable: /bin/mv.sh
+Alias: mv
+
+DESCRIPTION
+  Moves or renames files and
+  directories.
+
+USAGE
+  mv <source> <destination>
+  mv <source> [source...]
+     <directory>
+
+NOTES
+  Wildcards are expanded
+  through fs.find().
+  Moving multiple sources
+  requires an existing
+  destination directory.
+  Drive roots and read-only
+  sources are rejected.

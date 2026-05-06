@@ -2,12 +2,13 @@
 local args = { ... }
 if args[1] == nil or args[1] == "?" or args[1] == "help" then
 	print("Usage: stat <path>")
-	print("Print size, type, attributes and (when supported) timestamps.")
+	print("Print type, owner, group, mode and timestamps.")
 	return 0
 end
 
 local target = shell.resolve(args[1])
-if fs.exists(target) == false then
+local info = minux.pathInfo(target)
+if info == nil then
 	print("stat: no such path: " .. target)
 	return 0
 end
@@ -19,24 +20,16 @@ local function fmt(bytes)
 	return tostring(bytes) .. " B"
 end
 
-local isDir = fs.isDir(target)
-print("File   : " .. target)
-print("Type   : " .. (isDir and "directory" or "regular file"))
-if isDir == false then
-	print("Size   : " .. fmt(fs.getSize(target)))
+print("File   : " .. info.path)
+print("Type   : " .. (info.isDir and "directory" or "regular file"))
+print("Owner  : " .. (info.owner or "-"))
+print("Group  : " .. (info.group or "-"))
+print("Mode   : " .. (info.mode or "----------") .. " (" .. (info.modeOctalString or "---") .. ")")
+if info.isDir == false then
+	print("Size   : " .. fmt(info.size))
 end
-if fs.isReadOnly ~= nil then
-	print("ReadOnly: " .. tostring(fs.isReadOnly(target)))
-end
--- ComputerCraft 1.95+ exposes attributes via fs.attributes.
-if fs.attributes ~= nil then
-	local ok, attrs = pcall(fs.attributes, target)
-	if ok and type(attrs) == "table" then
-		if attrs.created  ~= nil then print("Created : " .. attrs.created)  end
-		if attrs.modified ~= nil then print("Modified: " .. attrs.modified) end
-	end
-end
-if fs.getDrive ~= nil then
-	local ok, drive = pcall(fs.getDrive, target)
-	if ok and drive ~= nil then print("Drive  : " .. tostring(drive)) end
-end
+print("ReadOnly: " .. tostring(info.readOnly == true))
+if info.created ~= nil then print("Created : " .. info.created) end
+if info.modified ~= nil then print("Modified: " .. info.modified) end
+if info.drive ~= nil then print("Drive  : " .. tostring(info.drive)) end
+return true

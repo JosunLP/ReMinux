@@ -1,0 +1,13 @@
+chown, /bin/chown.sh
+alias: 'chown'
+
+Change the stored owner and
+optional group metadata for one
+or more paths.
+
+Usage:
+  chown <owner>[:group] <path> [path...]
+
+Examples:
+  chown root /boot/autorun.ls
+  chown alice:alice /home/alice

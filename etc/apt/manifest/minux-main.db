@@ -15,6 +15,8 @@ php=false
 /etc/minux-main/sys/ecpw.sys
 /etc/minux-main/sys/dcpw.sys
 /etc/minux-main/workspace/shell.lua
+/etc/minux-main/workspace/parser.lua
+/etc/minux-main/workspace/executor.lua
 /etc/minux-main/workspace/start.lua
 /etc/minux-main/workspace/startup.lua
 /etc/minux-main/workspace/workspace.cfg
@@ -49,6 +51,7 @@ php=false
 /gbin/useradd.exe
 /gbin/userdel.exe
 /bin/search.sh
+/bin/find.sh
 /bin/bash.sh
 /bin/lock.sh
 /bin/workspace.sh
@@ -81,10 +84,17 @@ php=false
 /bin/uname.sh
 /bin/clear.sh
 /bin/touch.sh
+/bin/mkdir.sh
+/bin/cp.sh
+/bin/mv.sh
+/bin/rm.sh
+/bin/chmod.sh
+/bin/chown.sh
 /bin/wc.sh
 /bin/head.sh
 /bin/tail.sh
 /bin/grep.sh
+/etc/man/find.man
 /bin/tree.sh
 /bin/df.sh
 /bin/which.sh
@@ -95,6 +105,12 @@ php=false
 /etc/man/uname.man
 /etc/man/clear.man
 /etc/man/touch.man
+/etc/man/mkdir.man
+/etc/man/cp.man
+/etc/man/mv.man
+/etc/man/rm.man
+/etc/man/chmod.man
+/etc/man/chown.man
 /etc/man/wc.man
 /etc/man/head.man
 /etc/man/tail.man
@@ -120,6 +136,7 @@ php=false
 /bin/fold.sh
 /bin/cut.sh
 /bin/stat.sh
+/bin/service.sh
 /bin/du.sh
 /bin/id.sh
 /bin/mktemp.sh
@@ -134,6 +151,7 @@ php=false
 /bin/speak.sh
 /bin/ping.sh
 /bin/chat.sh
+/bin/curl.sh
 /etc/man/basename.man
 /etc/man/dirname.man
 /etc/man/realpath.man
@@ -151,6 +169,7 @@ php=false
 /etc/man/fold.man
 /etc/man/cut.man
 /etc/man/stat.man
+/etc/man/service.man
 /etc/man/du.man
 /etc/man/id.man
 /etc/man/mktemp.man
@@ -165,3 +184,4 @@ php=false
 /etc/man/speak.man
 /etc/man/ping.man
 /etc/man/chat.man
+/etc/man/curl.man

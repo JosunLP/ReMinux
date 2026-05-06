@@ -1,7 +1,8 @@
 -- newtab: open a new workspace tab (advanced computers only).
-if term.isColor() then
+if minux.canOpenTabs() then
 print("Opening new tab")
-shell.openTab("/etc/minux-main/workspace/workspace.lua")
+minux.safeOpenTab("/etc/minux-main/workspace/workspace.lua")
 else
-print("Advanced computers only")
+print("This CC: Tweaked shell does not support tabs here.")
+print("Use an advanced computer/workspace shell with shell.openTab().")
 end

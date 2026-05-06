@@ -14,6 +14,12 @@ action options:
 add : adds a user, this
 must be followed by the
 username and password.
+usernames must start with
+a letter or digit and may
+then use letters, digits,
+'-' and '_'. the reserved
+username 'foo'
+cannot be used.
 
 del : Deletes a user, 
 this must be followed by
@@ -53,5 +59,9 @@ important locations:
 /usr/local/auth/users 
 - this is where user 
 files are stored. for 
-now passwords are not 
-hashed.
+now passwords are kept
+in recoverable form
+(plain or encrypted),
+not hashed.
+empty passwords are
+rejected.

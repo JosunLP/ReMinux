@@ -147,6 +147,13 @@ return self:normalizeSource(source)..suffix
 end
 
 function AptManager:readRemoteText(url, headers)
+if minux ~= nil and type(minux.hasHttpSupport) == "function" then
+if minux.hasHttpSupport() ~= true then
+return nil
+end
+elseif http == nil or http.get == nil or http.checkURL == nil then
+return nil
+end
 if http.checkURL(url) ~= true then
 return nil
 end
