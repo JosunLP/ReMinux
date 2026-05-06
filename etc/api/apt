@@ -969,6 +969,8 @@ minux.debug("getpack:ending", "apt")
 return true
 end
 
+-- Only uninstall canonical absolute file paths from package manifests.
+-- This avoids deleting relative traversal targets or malformed section data.
 local function isValidManifestFilePath(path)
 if type(path) ~= "string" or path == "" or path == "/" then return false end
 if string.sub(path, 1, 1) ~= "/" then return false end
@@ -1010,7 +1012,7 @@ if data == "[filelist]" then
 listStart = true
 data = temp.readLine()
 end
-if listStart == true and data ~= nil and isValidManifestFilePath(data) == true then
+if listStart == true and data ~= nil and isValidManifestFilePath(data) then
 fs.delete(data)
 elseif listStart == true and data ~= nil and string.sub(data, 1, 1) == "[" then
 listStart = false
