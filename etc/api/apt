@@ -1296,7 +1296,7 @@ end
 
 	minux.debug("Adding source", "apt")
 if manager:appendSource(source) == true then
-print("Verification succeeded, apt source added")
+print("Verification and source addition succeeded")
 return true
 end
 return false
