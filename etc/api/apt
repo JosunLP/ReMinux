@@ -135,7 +135,7 @@ for index = 1, #lines do
 file.writeLine(lines[index])
 end
 file.close()
-if fs.exists(path) == true then
+if fs.exists(path) then
 local movedOld, moveOldError = pcall(fs.move, path, backupPath)
 if movedOld ~= true then
 self:deleteIfExists(tempPath)
@@ -145,7 +145,7 @@ end
 end
 local movedNew, moveNewError = pcall(fs.move, tempPath, path)
 if movedNew ~= true then
-if fs.exists(backupPath) == true then
+if fs.exists(backupPath) then
 local restoredBackup, restoreError = pcall(fs.move, backupPath, path)
 if restoredBackup ~= true then
 minux.debug("writeLines:E:failed to restore backup: "..path.." - "..tostring(restoreError), "apt")
@@ -1102,7 +1102,7 @@ data = temp.readLine()
 end
 local hasValidManifestPath = listStart and data ~= nil and isValidManifestFilePath(data)
 if hasValidManifestPath and not fs.isDir(data) then
-if fs.exists(data) == true then
+if fs.exists(data) then
 local deletedPath, deleteError = pcall(fs.delete, data)
 if deletedPath ~= true then
 minux.debug("uninstall:E:manifest delete failed: "..data..":"..tostring(deleteError), "apt")
