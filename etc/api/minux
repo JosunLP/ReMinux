@@ -1417,7 +1417,7 @@ _G.login      = false
 _G.masterpass = false
 _G.validlogin = false
 
-local function restorePreviousSession()
+local function restorePreviousSessionAndFail()
 if wasvalid == true then
 _G.admin      = savedAdmin
 _G.login      = savedLogin
@@ -1474,7 +1474,7 @@ end
 if _G.server == nil or _G.server == "[none]" then
 minux.debug("login:E:204:DHCP not found", "minux")
 sleep(5)
-return restorePreviousSession()
+return restorePreviousSessionAndFail()
 end
 
 rednet.send(_G.server, "AUTH-ID")
@@ -1498,7 +1498,7 @@ end
 end
 if tempauth == nil then
 minux.debug("nlogin:E:209", "minux")
-return restorePreviousSession()
+return restorePreviousSessionAndFail()
 end
 
 minux.debug("login:checking for ownership", "minux")
@@ -1526,7 +1526,7 @@ minux.debug("login:E:208:auth-noreply", "minux")
 end
 if _G.authserver == nil or _G.authserver == "" then
 minux.debug("login:E:209:auth connect error", "minux")
-return restorePreviousSession()
+return restorePreviousSessionAndFail()
 end
 
 minux.debug("login:auth:" .. tostring(_G.authserver), "minux")
@@ -1538,7 +1538,7 @@ if reply == true then
 minux.debug("login:data Sync success", "minux")
 else
 minux.debug("login:E:210:data sync error", "minux")
-return restorePreviousSession()
+return restorePreviousSessionAndFail()
 end
 
 local response = netlib.getstring(_G.authserver, 1)
@@ -1583,7 +1583,7 @@ end
 end
 
 -- Restore the previous session if login failed.
-return restorePreviousSession()
+return restorePreviousSessionAndFail()
 end
 
 function checkuser(username, password)
