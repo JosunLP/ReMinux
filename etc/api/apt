@@ -1073,9 +1073,9 @@ listStart = true
 data = temp.readLine()
 end
 local validManifestPath = listStart == true and data ~= nil and isValidManifestFilePath(data)
-if validManifestPath == true and fs.isDir(data) ~= true then
+if validManifestPath and not fs.isDir(data) then
 fs.delete(data)
-elseif validManifestPath == true and fs.isDir(data) == true then
+elseif validManifestPath and fs.isDir(data) then
 minux.debug("uninstall:E:manifest directory ignored: "..data, "apt")
 elseif listStart == true and data ~= nil and string.sub(data, 1, 1) == "[" then
 listStart = false
