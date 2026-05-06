@@ -103,7 +103,7 @@ end
 
 local file = fs.open(path, "r")
 if file == nil then
-minux.debug("readlines:E:open failed:"..path, "apt")
+minux.debug("readLines:E:open failed:"..path, "apt")
 return nil
 end
 local line = file.readLine()
@@ -218,7 +218,7 @@ local packages = {}
 if fs.exists(self.repositoryManifestPath) then
 local lines = self:readLines(self.repositoryManifestPath)
 if type(lines) ~= "table" then
-minux.debug("repo manifest unreadable", "apt")
+minux.debug("repo manifest unreadable:"..self.repositoryManifestPath, "apt")
 return packages
 end
 for index = 1, #lines do
@@ -677,7 +677,7 @@ end
 function AptManager:findSources(packname)
 local sources = self:readLines(self.sourceListPath)
 if type(sources) ~= "table" then
-minux.debug("source list unreadable", "apt")
+minux.debug("source list unreadable:"..self.sourceListPath, "apt")
 return nil, 104
 end
 for index = 1, #sources do
@@ -1101,7 +1101,7 @@ end
 minux.debug("reading installed.db", "apt")
 local installedPackages = manager:readLines(manager.installedListPath)
 if type(installedPackages) ~= "table" then
-minux.debug("update:installed list unreadable", "apt")
+minux.debug("update:installed list unreadable:"..manager.installedListPath, "apt")
 return false
 end
 local updateFailed = false
