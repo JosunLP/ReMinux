@@ -38,8 +38,10 @@ shell.run = function(program, ...)
         assertTrue(_G.login == DISABLED_LOGIN_SESSION_VALUE, "expected disabled-login sentinel user")
         assertTrue(type(shell.resolveProgram("doctor")) == "string", "doctor command is unavailable")
         assertTrue(type(shell.resolveProgram("whoami")) == "string", "whoami command is unavailable")
-        assertTrue(originalShellRun("/bin/whoami.sh") == true, "whoami script failed")
-        assertTrue(originalShellRun("/bin/uname.sh") == true, "uname script failed")
+        assertTrue(type(shell.resolveProgram("uname")) == "string", "uname command is unavailable")
+        assertTrue(originalShellRun("doctor") == true, "doctor command failed")
+        assertTrue(originalShellRun("whoami") == true, "whoami command failed")
+        assertTrue(originalShellRun("uname") == true, "uname command failed")
 
         testsPassed = true
         return true
