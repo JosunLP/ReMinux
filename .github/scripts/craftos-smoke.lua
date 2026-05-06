@@ -2,7 +2,7 @@ local originalShellRun = shell.run
 local originalReboot = os.reboot
 local originalShutdown = os.shutdown
 local testsPassed = false
-local DISABLED_LOGIN_USER = "foo"
+local NOBODY_SESSION_USER = "foo"
 
 local function fail(message)
     print("CRAFTOS_TEST_FAIL: " .. tostring(message))
@@ -35,7 +35,7 @@ shell.run = function(program, ...)
 
         assertTrue(errorCount == 0, "doctor reported runtime errors")
         assertTrue(_G.validlogin == true, "login did not complete")
-        assertTrue(_G.login == DISABLED_LOGIN_USER, "expected nobody session with login disabled")
+        assertTrue(_G.login == NOBODY_SESSION_USER, "expected nobody session with login disabled")
         assertTrue(type(shell.resolveProgram("doctor")) == "string", "doctor command is unavailable")
         assertTrue(type(shell.resolveProgram("whoami")) == "string", "whoami command is unavailable")
         assertTrue(originalShellRun("/bin/whoami.sh") == true, "whoami script failed")
