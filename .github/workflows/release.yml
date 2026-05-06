@@ -94,7 +94,7 @@ jobs:
              -not -path './etc/apt/manifest/minux-main.db' \
              -printf '/%P\n' | sort)
 
-           mapfile -t filelist < <(awk '$0 == "[filelist]" { found = 1; next } found && $0 != "" { print }' \
+           mapfile -t filelist < <(awk '$0 == "[filelist]" { found = 1; next } found && $0 ~ /^\[/ { exit } found && $0 != "" { print }' \
              etc/apt/manifest/minux-main.db | sort)
 
            if ! diff -u <(printf '%s\n' "${filelist[@]}") <(printf '%s\n' "${package_payload[@]}"); then
