@@ -1072,10 +1072,10 @@ if data == "[filelist]" then
 listStart = true
 data = temp.readLine()
 end
-local validManifestPath = listStart and data ~= nil and isValidManifestFilePath(data)
-if validManifestPath and not fs.isDir(data) then
+local hasValidManifestPath = listStart and data ~= nil and isValidManifestFilePath(data)
+if hasValidManifestPath and not fs.isDir(data) then
 fs.delete(data)
-elseif validManifestPath and fs.isDir(data) then
+elseif hasValidManifestPath and fs.isDir(data) then
 minux.debug("uninstall:E:manifest directory ignored: "..data, "apt")
 elseif listStart == true and data ~= nil and string.sub(data, 1, 1) == "[" then
 listStart = false
