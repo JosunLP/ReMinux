@@ -103,7 +103,8 @@ end
 
 local file = fs.open(path, "r")
 if file == nil then
-return lines
+minux.debug("readlines:E:open failed:"..path, "apt")
+return nil
 end
 local line = file.readLine()
 while line ~= nil do
@@ -216,6 +217,10 @@ end
 local packages = {}
 if fs.exists(self.repositoryManifestPath) then
 local lines = self:readLines(self.repositoryManifestPath)
+if type(lines) ~= "table" then
+minux.debug("repo manifest unreadable", "apt")
+return packages
+end
 for index = 1, #lines do
 local entry = lines[index]
 if entry ~= "" and entry ~= "AIF" then
@@ -671,6 +676,10 @@ end
 
 function AptManager:findSources(packname)
 local sources = self:readLines(self.sourceListPath)
+if type(sources) ~= "table" then
+minux.debug("source list unreadable", "apt")
+return nil, 104
+end
 for index = 1, #sources do
 minux.debug("apt-source:"..sources[index], "apt")
 end
@@ -757,6 +766,9 @@ end
 function AptManager:appendSource(source)
 source = self:normalizeSource(source)
 local sources = self:readLines(self.sourceListPath)
+if type(sources) ~= "table" then
+return false
+end
 table.insert(sources, source)
 self:writeLines(self.sourceListPath, self:dedupeSources(sources))
 end
@@ -764,6 +776,9 @@ end
 function AptManager:removeSource(source)
 source = self:normalizeSource(source)
 local sources = self:readLines(self.sourceListPath)
+if type(sources) ~= "table" then
+return false
+end
 local updated = {}
 local removed = false
 
@@ -1085,6 +1100,10 @@ end
 
 minux.debug("reading installed.db", "apt")
 local installedPackages = manager:readLines(manager.installedListPath)
+if type(installedPackages) ~= "table" then
+minux.debug("update:installed list unreadable", "apt")
+return false
+end
 local updateFailed = false
 for index = 1, #installedPackages do
 local nextpack = installedPackages[index]
@@ -1152,6 +1171,9 @@ info.installedVersion = apt.version(installedManifest)
 end
 
 local configuredSources = manager:readLines(manager.sourceListPath)
+if type(configuredSources) ~= "table" then
+configuredSources = {}
+end
 local packageSource = manager:getPackageSource(packname)
 if info.repositoryPackage == true and manager:shouldPreferOfficialReleaseSource(configuredSources, packageSource) == true then
 info.releaseTracking = true
@@ -1294,6 +1316,9 @@ end
 function softlist()
 minux.debug("reading source list", "apt")
 local sources = manager:readLines(manager.sourceListPath)
+if type(sources) ~= "table" then
+return false
+end
 local lines = {}
 for index = 1, #sources do
 local source = sources[index]
@@ -1318,6 +1343,9 @@ end
 function checkinstall(packname)
 expect(1, packname, "string")
 local installedPackages = manager:readLines(manager.installedListPath)
+if type(installedPackages) ~= "table" then
+return false
+end
 for index = 1, #installedPackages do
 if installedPackages[index] == packname then
 return true

@@ -1736,6 +1736,9 @@ verifyFile.close()
 end
 if verifyPass ~= newpass then
 minux.debug("login:rootcreate:verification failed", "minux")
+if fs.exists(AUTH_DIR .. "root.usr") == true then
+fs.delete(AUTH_DIR .. "root.usr")
+end
 print("could not verify root user file, try again")
 sleep(1)
 else
