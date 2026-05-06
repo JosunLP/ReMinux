@@ -271,10 +271,23 @@ if firstupdate == true then
 term.clear()
 term.setCursorPos(1, 1)
 print("First run detected, verifying installation.")
-print("This process may take a while, the system will reboot when done.")
-apt.update("-f")
-apt.rebuildgenerated()
+print("This process may take a while.")
+local updateOk = apt.update("-f")
+local generatedOk = false
+if updateOk == true then
+generatedOk = apt.rebuildgenerated()
+end
+if updateOk == true and generatedOk == true then
+print("Installation verified, rebooting.")
 os.reboot()
+else
+if term.isColor() then term.setTextColor(colors.red) end
+print("Post-install verification failed.")
+if term.isColor() then term.setTextColor(colors.white) end
+print("Run 'apt -U' or 'doctor --repair' after checking your APT sources.")
+print("Hit Enter to continue without rebooting.")
+read()
+end
 end
 
 -- Welcome prompt

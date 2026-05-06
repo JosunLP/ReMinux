@@ -28,9 +28,15 @@ return false
 end
 
 if authtype == "network" then
-auth.setpass(newusername, newpassword)
+if auth == nil or type(auth.setpass) ~= "function" then
+print("Network authentication tools are unavailable")
+return false
+end
+local ok = auth.setpass(newusername, newpassword)
+return ok ~= false
 elseif authtype == "local" then
-os.run({}, "/bin/usermod.sh", "psw", newusername, newpassword)
+return os.run({}, "/bin/usermod.sh", "psw", newusername, newpassword)
 else
 print("Login type unknown or broken")
+return false
 end

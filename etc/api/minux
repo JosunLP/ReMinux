@@ -1718,9 +1718,21 @@ if key ~= nil then
 newpass = minux.encrypt(newpass, key)
 end
 local file = fs.open(AUTH_DIR .. "root.usr", "w")
+if file == nil then
+minux.debug("login:rootcreate:write failed", "minux")
+print("could not create root user file, try again")
+sleep(1)
+else
 file.write(newpass)
 file.close()
+if fs.exists(AUTH_DIR .. "root.usr") ~= true then
+minux.debug("login:rootcreate:verification failed", "minux")
+print("could not verify root user file, try again")
+sleep(1)
+else
 minux.debug("login:root account created.", "minux")
+end
+end
 else
 minux.debug("login:rootcreate:invalid data", "minux")
 print("invalid data, try again")

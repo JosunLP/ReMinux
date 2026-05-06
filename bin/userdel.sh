@@ -4,19 +4,25 @@ local newusername = args[1]
 
 if newusername == nil or newusername == "" then
 print("Usage: userdel <username>")
-return 0
+return false
 end
 
 local authtype = minux.logintype()
 if authtype == "disabled" then
 print("No login system in use")
-return 0
+return false
 end
 
 if authtype == "network" then
-auth.userdel(newusername)
+if auth == nil or type(auth.userdel) ~= "function" then
+print("Network authentication tools are unavailable")
+return false
+end
+local ok = auth.userdel(newusername)
+return ok ~= false
 elseif authtype == "local" then
-os.run({}, "/bin/usermod.sh", "del", newusername)
+return os.run({}, "/bin/usermod.sh", "del", newusername)
 else
 print("Login type unknown or broken")
+return false
 end

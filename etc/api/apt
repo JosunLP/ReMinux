@@ -102,6 +102,9 @@ return lines
 end
 
 local file = fs.open(path, "r")
+if file == nil then
+return lines
+end
 local line = file.readLine()
 while line ~= nil do
 table.insert(lines, line)
@@ -117,10 +120,14 @@ self:ensureParentDirectory(path)
 self:deleteIfExists(path)
 
 local file = fs.open(path, "w")
+if file == nil then
+return false
+end
 for index = 1, #lines do
 file.writeLine(lines[index])
 end
 file.close()
+return true
 end
 
 function AptManager:isPackageAccessAllowed(packname)
@@ -236,6 +243,9 @@ return false, nil, nil
 end
 
 local file = fs.open(self.releaseCachePath, "r")
+if file == nil then
+return false, nil, nil
+end
 local cachedAt = tonumber(file.readLine())
 local cachedStatus = file.readLine()
 local cachedTag = file.readLine()
@@ -778,13 +788,19 @@ local manager = AptManager.new()
 function verifyconfig()
 if fs.exists(manager.installedListPath) == false then
 minux.debug("ERROR:104:Installed.db missing or corrupt", "apt")
-manager:writeLines(manager.installedListPath, { "minux-main" })
+if manager:writeLines(manager.installedListPath, { "minux-main" }) ~= true then
+minux.debug("ERROR:104:Installed.db repair failed", "apt")
+return nil
+end
 return true
 end
 
 if fs.exists(manager.sourceListPath) ~= true then
 minux.debug("ERROR:104:source missing or corrupt", "apt")
-manager:writeLines(manager.sourceListPath, manager:getPresetSources("stable"))
+if manager:writeLines(manager.sourceListPath, manager:getPresetSources("stable")) ~= true then
+minux.debug("ERROR:104:source repair failed", "apt")
+return nil
+end
 return true
 end
 
@@ -801,7 +817,11 @@ if manager:isPackageAccessAllowed(packname) ~= true then
 minux.debug("APT:Access denied", "apt")
 return 100
 end
-if verifyconfig() == true then
+local configStatus = verifyconfig()
+if configStatus == nil then
+return false
+end
+if configStatus == true then
 minux.debug("apt:install file was rebuilt!", "apt")
 end
 minux.debug("apt:checking:"..packname, "apt")
@@ -1011,7 +1031,9 @@ end
 
 function update(packname)
 expect(1, packname, "string", "nil")
-verifyconfig()
+if verifyconfig() == nil then
+return false
+end
 
 local forcedupdate = packname == "-f"
 if packname ~= nil and forcedupdate ~= true then
@@ -1044,6 +1066,7 @@ end
 
 minux.debug("reading installed.db", "apt")
 local installedPackages = manager:readLines(manager.installedListPath)
+local updateFailed = false
 for index = 1, #installedPackages do
 local nextpack = installedPackages[index]
 minux.debug("finding source", "apt")
@@ -1055,13 +1078,19 @@ end
 local _, availableVersion, sourceError = manager:getAvailablePackage(nextpack, "update")
 if sourceError ~= nil then
 minux.debug("update:source lookup failed:"..nextpack..":"..tostring(sourceError), "apt")
+updateFailed = true
 elseif availableVersion == nil then
 minux.debug("update:package manifest unavailable:"..nextpack, "apt")
+updateFailed = true
 else
 local packageNeedsUpdate = manager:shouldUpdatePackage(installedVersion, availableVersion, forcedupdate)
 if packageNeedsUpdate == true then
 minux.debug("updating pack:", "apt")
-apt.getpack(nextpack)
+local updateResult = apt.getpack(nextpack)
+if updateResult ~= true then
+minux.debug("update:package update failed:"..nextpack..":"..tostring(updateResult), "apt")
+updateFailed = true
+end
 else
 minux.debug("update:package already current or newer:"..nextpack, "apt")
 end
@@ -1069,7 +1098,12 @@ end
 end
 
 minux.debug("updating configuration", "apt")
-apt.rebuildgenerated()
+if apt.rebuildgenerated() ~= true then
+return false
+end
+if updateFailed == true then
+return false
+end
 return true
 end
 
