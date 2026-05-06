@@ -8,5 +8,10 @@ end
 local NETINSTALL_URL =
 	"https://raw.githubusercontent.com/JosunLP/ReMinux/main/tmp/minux_netinstall.lua"
 
-shell.run("wget " .. NETINSTALL_URL .. " /disk/startup")
-shell.run("label set " .. _G.diskside .. " ReMinuxinstall")
+if _G.diskside == nil or _G.diskside == "NONE" then
+print("No disk drive found.")
+return false
+end
+
+shell.run("wget", NETINSTALL_URL, "/disk/startup")
+shell.run("label", "set", _G.diskside, "ReMinuxinstall")

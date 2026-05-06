@@ -1458,10 +1458,11 @@ end
 if _G.server == nil or _G.server == "[none]" then
 minux.debug("login:E:204:DHCP not found", "minux")
 sleep(5)
+return false
 end
 
 rednet.send(_G.server, "AUTH-ID")
-minux.debug("login:AUTH-REQ-" .. _G.server, "minux")
+minux.debug("login:AUTH-REQ-" .. tostring(_G.server), "minux")
 local tempauth = nil
 for attempt = 1, 3 do
 local sender, data = rednet.receive(1)
@@ -1474,13 +1475,14 @@ elseif data == nil or data == "" then
 minux.debug("login:E:206:Data nil error", "minux")
 else
 tempauth = tonumber(data)
-minux.debug("login:auth-server:" .. tempauth, "minux")
+minux.debug("login:auth-server:" .. tostring(tempauth), "minux")
 end
 break
 end
 end
 if tempauth == nil then
 minux.debug("nlogin:E:209", "minux")
+return false
 end
 
 minux.debug("login:checking for ownership", "minux")
@@ -1508,9 +1510,10 @@ minux.debug("login:E:208:auth-noreply", "minux")
 end
 if _G.authserver == nil or _G.authserver == "" then
 minux.debug("login:E:209:auth connect error", "minux")
+return false
 end
 
-minux.debug("login:auth:" .. _G.authserver, "minux")
+minux.debug("login:auth:" .. tostring(_G.authserver), "minux")
 minux.debug("building netlib table", "minux")
 local sendtable = { username, password }
 minux.debug("login:u-" .. sendtable[1], "minux")
@@ -1753,7 +1756,7 @@ end
 
 function monitorprint(printstring)
 expect(1, printstring, "string", "number")
-if _G.monitorside == "NONE" then return false end
+if _G.monitorside == "NONE" or _G.monitor == nil then return false end
 if printstring == nil or printstring == "" then return false end
 local oldTerm = term.redirect(_G.monitor)
 print(printstring)

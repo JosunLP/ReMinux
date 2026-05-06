@@ -175,6 +175,7 @@ local function writeFile(filepath, content)
         ensureParent(filepath)
         if fs.exists(filepath) then fs.delete(filepath) end
         local handle = fs.open(filepath, "w")
+        if handle == nil then error("failed to open " .. filepath .. " for writing") end
         handle.write(content)
         handle.close()
 end

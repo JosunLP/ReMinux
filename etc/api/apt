@@ -988,14 +988,18 @@ apt.cleanup(packname)
 minux.debug("clearing manifest filelist", "apt")
 local manifestFile = manager.manifestDirectory..packname..".db"
 local temp = fs.open(manifestFile, "r")
+if temp == nil then
+minux.debug("uninstall:E:104:manifest unreadable:"..manifestFile, "apt")
+return false
+end
 local listStart = false
 local data = temp.readLine()
 while data ~= nil do
 if data == "[filelist]" then
 listStart = true
-data = temp.readLine()
-end
-if listStart == true and data ~= nil then
+elseif listStart == true and string.sub(data, 1, 1) == "[" then
+listStart = false
+elseif listStart == true and string.sub(data, 1, 1) == "/" and string.find(data, "..", 1, true) == nil then
 fs.delete(data)
 end
 data = temp.readLine()
