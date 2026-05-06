@@ -6,6 +6,8 @@ AptManager.__index = AptManager
 local APT_ERROR_CONFIG_INVALID = 104
 local APT_ERROR_PACKAGE_NOT_FOUND = 105
 local APT_ERROR_SOURCE_UNAVAILABLE = 111
+local TEMP_SUFFIX = ".tmp"
+local BACKUP_SUFFIX = ".bak"
 local VERSION_LESS = -1
 local VERSION_EQUAL = 0
 local VERSION_GREATER = 1
@@ -119,8 +121,8 @@ end
 
 function AptManager:writeLines(path, lines)
 self:ensureParentDirectory(path)
-local tempPath = path..".tmp"
-local backupPath = path..".bak"
+local tempPath = path..TEMP_SUFFIX
+local backupPath = path..BACKUP_SUFFIX
 self:deleteIfExists(tempPath)
 self:deleteIfExists(backupPath)
 
@@ -137,14 +139,17 @@ if fs.exists(path) == true then
 local movedOld, moveOldError = pcall(fs.move, path, backupPath)
 if movedOld ~= true then
 self:deleteIfExists(tempPath)
-minux.debug("writeLines:E:backup failed: "..path..":"..tostring(moveOldError), "apt")
+minux.debug("writeLines:E:failed to backup existing file: "..path.." - "..tostring(moveOldError), "apt")
 return false
 end
 end
 local movedNew, moveNewError = pcall(fs.move, tempPath, path)
 if movedNew ~= true then
 if fs.exists(backupPath) == true then
-pcall(fs.move, backupPath, path)
+local restoredBackup, restoreError = pcall(fs.move, backupPath, path)
+if restoredBackup ~= true then
+minux.debug("writeLines:E:failed to restore backup: "..path.." - "..tostring(restoreError), "apt")
+end
 end
 self:deleteIfExists(tempPath)
 minux.debug("writeLines:E:replace failed: "..path..":"..tostring(moveNewError), "apt")
