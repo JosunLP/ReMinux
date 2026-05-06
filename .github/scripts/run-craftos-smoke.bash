@@ -11,6 +11,13 @@ if [ -z "$CRAFTOS_PC_BIN" ]; then
   exit 1
 fi
 
+for required_command in python3 timeout; do
+  if ! command -v "$required_command" >/dev/null 2>&1; then
+    echo "Missing required command: $required_command" >&2
+    exit 1
+  fi
+done
+
 workdir="$(mktemp -d)"
 disk_root="$workdir/disk"
 log_file="$workdir/craftos-smoke.log"

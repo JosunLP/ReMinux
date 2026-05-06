@@ -20,6 +20,7 @@ Thank you for taking the time to contribute! The guidelines below keep the codeb
    ```bash
    CRAFTOS_PC_BIN=/path/to/craftos-pc/squashfs-root/AppRun ./.github/scripts/run-craftos-smoke.bash
    ```
+   This helper currently assumes a Unix-like shell with `python3` and `timeout` available, plus a Linux/AppImage-style CraftOS-PC extraction layout. On other platforms, point `CRAFTOS_PC_BIN` at the equivalent CraftOS-PC executable and ensure those helper tools are available first.
 5. Open a pull request against `main`.
 
 ---
