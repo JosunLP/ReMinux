@@ -53,12 +53,17 @@ if apt.checkinstall(targetPackage) ~= true then
 print("Not installed: "..targetPackage)
 return false
 end
-
-return printResult(
-apt.uninstall(targetPackage),
-"Package removed: "..targetPackage,
-"Removal failed: "..targetPackage
-)
+local result, errorCode = apt.uninstall(targetPackage)
+if result == true then
+print("Package removed: "..targetPackage)
+return true
+end
+if errorCode ~= nil then
+print("Removal failed: "..targetPackage.." E:"..tostring(errorCode))
+else
+print("Removal failed: "..targetPackage)
+end
+return false
 end
 
 local function runUpdate(targetPackage)

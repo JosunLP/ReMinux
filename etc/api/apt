@@ -1041,7 +1041,7 @@ expect(1, packname, "string")
 minux.debug("removing pack:"..packname, "apt")
 local configStatus = verifyconfig()
 if configStatus == nil then
-return APT_ERROR_CONFIG_INVALID
+return false, APT_ERROR_CONFIG_INVALID
 end
 if configStatus == true then
 minux.debug("apt:uninstall file was rebuilt!", "apt")
@@ -1063,7 +1063,7 @@ local manifestFile = manager.manifestDirectory..packname..".db"
 local temp = fs.open(manifestFile, "r")
 if temp == nil then
 minux.debug("uninstall:E:104:manifest unreadable:"..manifestFile, "apt")
-return APT_ERROR_CONFIG_INVALID
+return false, APT_ERROR_CONFIG_INVALID
 end
 local listStart = false
 local data = temp.readLine()
