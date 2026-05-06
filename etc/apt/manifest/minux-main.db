@@ -4,7 +4,7 @@ version=3.0.0
 author=minux-team
 php=false
 [filelist]
-/startup
+/startup.lua
 /boot/init.sys
 /boot/network/dhcp.sys
 /boot/network/update.sys
@@ -23,14 +23,20 @@ php=false
 /etc/minux-main/workspace/workspace.lua
 /etc/apt/sys/apt-autoupdate.sys
 /etc/apt/sys/list.sys
+/etc/apt/autorun/example.sh
 /etc/apt/alias/minux-main.al
 /etc/man/apt.man
 /etc/man/cat.man
+/etc/man/doctor.man
+/etc/man/less.man
 /etc/man/login.man
 /etc/man/usermod.man
 /etc/man/man.man
 /etc/man/ls.man
+/etc/man/passwd.man
+/etc/man/programs.man
 /etc/man/config.man
+/etc/man/search.man
 /etc/man/workspace.man
 /etc/api/minux
 /etc/api/apt
@@ -52,6 +58,7 @@ php=false
 /gbin/userdel.exe
 /bin/search.sh
 /bin/find.sh
+/bin/doctor.sh
 /bin/bash.sh
 /bin/lock.sh
 /bin/workspace.sh

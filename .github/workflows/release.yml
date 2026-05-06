@@ -71,15 +71,36 @@ jobs:
             exit 1
           fi
 
-          for manifest in etc/apt/manifest/*.db; do
-            if [ "$(basename "$manifest")" = 'APT.db' ]; then
-              continue
-            fi
-            grep -qx 'AIF=true' "$manifest"
-            grep -qx "version=$VERSION" "$manifest"
-          done
+           for manifest in etc/apt/manifest/*.db; do
+             if [ "$(basename "$manifest")" = 'APT.db' ]; then
+               continue
+             fi
+             grep -qx 'AIF=true' "$manifest"
+             grep -qx "version=$VERSION" "$manifest"
+           done
 
-          grep -qx '/etc/apt/manifest/APT.db' etc/apt/manifest/minux-main.db
+           grep -qx '/etc/apt/manifest/APT.db' etc/apt/manifest/minux-main.db
+
+           mapfile -t package_payload < <(find . \
+             -type f \
+             -not -path './.git/*' \
+             -not -path './.github/*' \
+             -not -path './tmp/*' \
+             -not -path './usr/*' \
+             -not -path './README.md' \
+             -not -path './CONTRIBUTING.md' \
+             -not -path './LICENSE' \
+             -not -path './etc/apt/list/installed.db' \
+             -not -path './etc/apt/manifest/minux-main.db' \
+             -printf '/%P\n' | sort)
+
+           mapfile -t filelist < <(awk 'found { if ($0 != "") print } $0 == "[filelist]" { found = 1; next }' \
+             etc/apt/manifest/minux-main.db | sort)
+
+           if ! diff -u <(printf '%s\n' "${filelist[@]}") <(printf '%s\n' "${package_payload[@]}"); then
+             echo "minux-main.db [filelist] does not match the packaged repository files"
+             exit 1
+           fi
 
       - name: Create GitHub Release
         env:
