@@ -144,7 +144,7 @@ local function executeProgram(remainingRecursion, path, args, ioContext)
             context.write(tostring(text or ""))
             return
         end
-        baseWrite(text)
+        baseWrite(tostring(text or ""))
     end
     env.read = function(...)
         local context = minux ~= nil and type(minux.getIoContext) == "function" and minux.getIoContext() or nil
