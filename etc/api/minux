@@ -1453,8 +1453,7 @@ return restorePreviousSessionAndFail()
 end
 local storedPass = file.readLine()
 file.close()
-local isWhitespaceOnly = (type(storedPass) == "string" and storedPass ~= "" and storedPass:match("^%s*$") ~= nil)
-local invalidStoredPass = (storedPass == nil or storedPass == "" or isWhitespaceOnly)
+local invalidStoredPass = (storedPass == nil or storedPass == "" or (type(storedPass) == "string" and storedPass:match("^%s*$") ~= nil))
 if invalidStoredPass then
 minux.debug("login:E:212:userfile empty:" .. userFile, "minux")
 return restorePreviousSessionAndFail()
