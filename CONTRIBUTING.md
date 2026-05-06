@@ -16,7 +16,12 @@ Thank you for taking the time to contribute! The guidelines below keep the codeb
    luac5.1 -p path/to/file.lua
    ```
    Install with `sudo apt-get install lua5.1` if it is not available.
-4. Open a pull request against `main`.
+4. When you have CraftOS-PC available locally, run the runtime smoke test:
+   ```bash
+   CRAFTOS_PC_BIN=/path/to/craftos-pc/squashfs-root/AppRun ./.github/scripts/run-craftos-smoke.bash
+   ```
+   This helper currently assumes a Unix-like shell with `python3` and `timeout` available, plus a Linux/AppImage-style CraftOS-PC extraction layout. On other platforms, point `CRAFTOS_PC_BIN` at the equivalent CraftOS-PC executable and ensure those helper tools are available first.
+5. Open a pull request against `main`.
 
 ---
 
@@ -52,6 +57,7 @@ Thank you for taking the time to contribute! The guidelines below keep the codeb
 ## Pull request checklist
 
 - [ ] All changed Lua files pass `luac5.1 -p`
+- [ ] CraftOS-PC smoke test passes when the runtime or boot flow changes
 - [ ] No new global variable leaks in `bin/` scripts
 - [ ] Manual page added or updated if a command changed
 - [ ] Commit messages are in the imperative mood ("Add …", "Fix …", "Remove …")
