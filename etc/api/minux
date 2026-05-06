@@ -1058,7 +1058,7 @@ local function finalizeLogin(username, password, grantAdmin, sessionOwner, sessi
 	_G.login = username
 	_G.masterpass = password
 	_G.validlogin = true
-	_G.admin = (grantAdmin == true)
+	_G.admin = grantAdmin
 	_G.owner = sessionOwner
 	_G.ownergroup = sessionOwnerGroup
 	_G.authserver = sessionAuthserver
@@ -1456,10 +1456,11 @@ end
 		if password == storedPass then
 			minux.debug("login:granted:U-" .. username, "login")
 			local isRoot = (username == "root")
+			local sessionOwner = isRoot
 			if isRoot then
 				minux.debug("login:admin", "login")
 			end
-			return finalizeLogin(username, password, isRoot, isRoot, false, false)
+			return finalizeLogin(username, password, isRoot, sessionOwner, false, false)
 else
 minux.debug("login:denied:U-" .. username, "login")
 minux.debug("login:denied", "minux")
