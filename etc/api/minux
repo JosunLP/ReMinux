@@ -1453,7 +1453,7 @@ return restorePreviousSessionAndFail()
 end
 local storedPass = file.readLine()
 file.close()
-if storedPass == nil or storedPass == "" or storedPass:match("%S") == nil then
+if storedPass == nil or storedPass == "" or ((storedPass ~= nil and storedPass ~= "") and storedPass:match("%S") == nil) then
 minux.debug("login:E:212:userfile empty:" .. userFile, "minux")
 return restorePreviousSessionAndFail()
 end
