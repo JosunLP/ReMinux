@@ -872,7 +872,7 @@ end
 
 minux.debug("getpack:E:105:pack:"..packname, "apt")
 return 105
-elseif result == 105 or result == 110 then
+elseif type(result) == "number" then
 return result
 end
 
@@ -1337,10 +1337,13 @@ function softlist()
 minux.debug("reading source list", "apt")
 local sources = manager:readLines(manager.sourceListPath)
 if type(sources) ~= "table" then
-manager:writeLines(manager.programListPath, {
+local wroteDiagnostic = manager:writeLines(manager.programListPath, {
 "APT source list unreadable",
 "E:"..APT_ERROR_CONFIG_INVALID,
 })
+if wroteDiagnostic ~= true then
+return false
+end
 return APT_ERROR_CONFIG_INVALID
 end
 local lines = {}
@@ -1360,8 +1363,11 @@ end
 end
 
 minux.debug("preparing new file for display", "apt")
-manager:writeLines(manager.programListPath, lines)
+if manager:writeLines(manager.programListPath, lines) ~= true then
+return false
+end
 minux.debug("finished getprogram", "apt")
+return true
 end
 
 function checkinstall(packname)
