@@ -103,6 +103,7 @@ if not fs.exists(path) then
 return true
 end
 if fs.isDir(path) then
+minux.debug("deleteFileIfExists:E:refusing to delete directory: "..path, "apt")
 return false
 end
 fs.delete(path)
@@ -135,11 +136,9 @@ self:ensureParentDirectory(path)
 local tempPath = path..TEMP_SUFFIX
 local backupPath = path..BACKUP_SUFFIX
 if self:deleteFileIfExists(tempPath, "writeLines:E") ~= true then
-minux.debug("writeLines:E:cleanup failed: "..tempPath, "apt")
 return false
 end
 if self:deleteFileIfExists(backupPath, "writeLines:E") ~= true then
-minux.debug("writeLines:E:cleanup failed: "..backupPath, "apt")
 return false
 end
 
@@ -155,7 +154,7 @@ file.close()
 if fs.exists(path) then
 local movedOld, moveOldError = pcall(fs.move, path, backupPath)
 if movedOld ~= true then
-self:deleteFileIfExists(tempPath, "writeLines:E")
+local _ = self:deleteFileIfExists(tempPath, "writeLines:E")
 minux.debug("writeLines:E:failed to backup existing file: "..path.." - "..tostring(moveOldError), "apt")
 return false
 end
@@ -173,7 +172,6 @@ self:deleteFileIfExists(tempPath, "writeLines:E")
 return false
 end
 if self:deleteFileIfExists(backupPath, "writeLines:E") ~= true then
-minux.debug("writeLines:E:cleanup failed: "..backupPath, "apt")
 return false
 end
 return true
