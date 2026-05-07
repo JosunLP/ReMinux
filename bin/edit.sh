@@ -7,4 +7,4 @@ if filename == nil then
 	filename = read()
 end
 
-shell.run("/etc/minux-main/sys/shedit.sys "..filename)
+shell.run("/etc/minux-main/sys/shedit.sys", filename)

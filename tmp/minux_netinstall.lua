@@ -173,10 +173,37 @@ end
 
 local function writeFile(filepath, content)
         ensureParent(filepath)
-        if fs.exists(filepath) then fs.delete(filepath) end
-        local handle = fs.open(filepath, "w")
+        local tempPath = filepath .. ".tmp"
+        local backupPath = filepath .. ".bak"
+        if fs.isDir(filepath) then
+                error("refusing to replace directory target: " .. filepath)
+        end
+        local function deleteExistingFile(path, label)
+                if not fs.exists(path) then return true end
+                if fs.isDir(path) then error("refusing to delete directory " .. label .. ": " .. path) end
+                fs.delete(path)
+                return true
+        end
+        deleteExistingFile(tempPath, "temp path")
+        deleteExistingFile(backupPath, "backup path")
+        local handle = fs.open(tempPath, "w")
+        if handle == nil then error("failed to open temp file " .. tempPath .. " for writing " .. filepath) end
         handle.write(content)
         handle.close()
+        if fs.exists(filepath) then
+                local backedUp, backupError = pcall(fs.move, filepath, backupPath)
+                if backedUp ~= true then
+                        deleteExistingFile(tempPath, "temp path")
+                        error("failed to backup " .. filepath .. ": " .. tostring(backupError))
+                end
+        end
+        local replaced, replaceError = pcall(fs.move, tempPath, filepath)
+        if replaced ~= true then
+                if fs.exists(backupPath) then pcall(fs.move, backupPath, filepath) end
+                deleteExistingFile(tempPath, "temp path")
+                error("failed to replace " .. filepath .. ": " .. tostring(replaceError))
+        end
+        deleteExistingFile(backupPath, "backup path")
 end
 
 ------------------------------------------------------------

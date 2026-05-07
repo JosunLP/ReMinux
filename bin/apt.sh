@@ -53,17 +53,27 @@ if apt.checkinstall(targetPackage) ~= true then
 print("Not installed: "..targetPackage)
 return false
 end
-
-return printResult(
-apt.uninstall(targetPackage),
-"Package removed: "..targetPackage,
-"Removal failed: "..targetPackage
-)
+local result, errorCode = apt.uninstall(targetPackage)
+if result == true then
+print("Package removed: "..targetPackage)
+return true
+end
+if errorCode ~= nil then
+print("Removal failed: "..targetPackage.." E:"..tostring(errorCode))
+else
+print("Removal failed: "..targetPackage)
+end
+return false
 end
 
 local function runUpdate(targetPackage)
 local result = apt.update(targetPackage)
-return printResult(result == true, "Update complete", "Update failed")
+if result == true then
+print("Update complete")
+return true
+end
+print("Update failed E:"..tostring(result))
+return false
 end
 
 local function describeLookupError(errorCode)
@@ -126,7 +136,11 @@ elseif command == "-ls" then
 shell.run("/bin/less.sh /usr/apt/source.ls")
 elseif command == "-la" then
 if packageName == "--update" or fs.exists("/temp/apt/programs.ls") ~= true then
-apt.softlist()
+local result = apt.softlist()
+if result ~= true and fs.exists("/temp/apt/programs.ls") ~= true then
+print("List failed E:"..tostring(result))
+return false
+end
 end
 shell.run("/bin/less.sh /temp/apt/programs.ls")
 elseif command == "-l" then

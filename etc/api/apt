@@ -3,8 +3,11 @@
 local AptManager = {}
 AptManager.__index = AptManager
 
+local APT_ERROR_CONFIG_INVALID = 104
 local APT_ERROR_PACKAGE_NOT_FOUND = 105
 local APT_ERROR_SOURCE_UNAVAILABLE = 111
+local TEMP_SUFFIX = ".tmp"
+local BACKUP_SUFFIX = ".bak"
 local VERSION_LESS = -1
 local VERSION_EQUAL = 0
 local VERSION_GREATER = 1
@@ -95,6 +98,18 @@ fs.delete(path)
 end
 end
 
+function AptManager:deleteFileIfExists(path)
+if not fs.exists(path) then
+return true
+end
+if fs.isDir(path) then
+minux.debug("deleteFileIfExists: refusing to delete directory: "..path, "apt")
+return false
+end
+fs.delete(path)
+return true
+end
+
 function AptManager:readLines(path)
 local lines = {}
 if fs.exists(path) == false then
@@ -102,6 +117,10 @@ return lines
 end
 
 local file = fs.open(path, "r")
+if file == nil then
+minux.debug("readLines:E:open failed:"..path, "apt")
+return nil
+end
 local line = file.readLine()
 while line ~= nil do
 table.insert(lines, line)
@@ -114,18 +133,79 @@ end
 
 function AptManager:writeLines(path, lines)
 self:ensureParentDirectory(path)
-self:deleteIfExists(path)
+local errorContext = "writeLines:E"
+local tempPath = path..TEMP_SUFFIX
+local backupPath = path..BACKUP_SUFFIX
+if fs.isDir(path) then
+minux.debug(errorContext..":refusing to replace directory target: "..path, "apt")
+return false
+end
+if self:deleteFileIfExists(tempPath) ~= true then
+return false
+end
+if self:deleteFileIfExists(backupPath) ~= true then
+return false
+end
 
-local file = fs.open(path, "w")
+local file = fs.open(tempPath, "w")
+if file == nil then
+minux.debug(errorContext..":open failed: "..tempPath.." for "..path, "apt")
+return false
+end
 for index = 1, #lines do
 file.writeLine(lines[index])
 end
 file.close()
+if fs.exists(path) then
+local movedOld, moveOldError = pcall(fs.move, path, backupPath)
+if movedOld ~= true then
+self:deleteFileIfExists(tempPath)
+minux.debug(errorContext..":failed to backup existing file: "..path.." - "..tostring(moveOldError), "apt")
+return false
+end
+end
+local movedNew, moveNewError = pcall(fs.move, tempPath, path)
+if movedNew ~= true then
+if fs.exists(backupPath) then
+local restoredBackup, restoreError = pcall(fs.move, backupPath, path)
+if restoredBackup ~= true then
+minux.debug(errorContext..":failed to restore backup: "..path.." - "..tostring(restoreError), "apt")
+end
+end
+local cleanedTemp = self:deleteFileIfExists(tempPath)
+if cleanedTemp ~= true then
+minux.debug(errorContext..":cleanup failed: "..tempPath, "apt")
+end
+minux.debug(errorContext..":replace failed: "..path..":"..tostring(moveNewError), "apt")
+return false
+end
+if self:deleteFileIfExists(backupPath) ~= true then
+return false
+end
+return true
 end
 
 function AptManager:isPackageAccessAllowed(packname)
 local isOwner = _G.owner == true or (_G.login ~= nil and _G.owner == _G.login)
 return _G.admin == true or isOwner or packname == "auth-client"
+end
+
+function AptManager:isValidPackageName(packname)
+if type(packname) ~= "string" or packname == "" then
+return false
+end
+if string.match(packname, "^[%w%._%-]+$") == nil then
+return false
+end
+return string.find(packname, "..", 1, true) == nil
+end
+
+function AptManager:validatePackageName(packname)
+if self:isValidPackageName(packname) == true then
+return true
+end
+minux.debug("APT: Invalid package name: "..tostring(packname), "apt")
+return false
 end
 
 function AptManager:isSourceAccessAllowed()
@@ -209,6 +289,10 @@ end
 local packages = {}
 if fs.exists(self.repositoryManifestPath) then
 local lines = self:readLines(self.repositoryManifestPath)
+if type(lines) ~= "table" then
+minux.debug("repo manifest unreadable:"..self.repositoryManifestPath, "apt")
+return packages
+end
 for index = 1, #lines do
 local entry = lines[index]
 if entry ~= "" and entry ~= "AIF" then
@@ -236,6 +320,9 @@ return false, nil, nil
 end
 
 local file = fs.open(self.releaseCachePath, "r")
+if file == nil then
+return false, nil, nil
+end
 local cachedAt = tonumber(file.readLine())
 local cachedStatus = file.readLine()
 local cachedTag = file.readLine()
@@ -518,6 +605,9 @@ return nil
 end
 
 function AptManager:getPackageSource(packname)
+if self:isValidPackageName(packname) ~= true then
+return nil
+end
 local packdb = self.manifestDirectory..packname..".db"
 if fs.exists(packdb) ~= true then
 return nil
@@ -660,7 +750,14 @@ return true
 end
 
 function AptManager:findSources(packname)
+if self:validatePackageName(packname) ~= true then
+return nil, APT_ERROR_PACKAGE_NOT_FOUND
+end
 local sources = self:readLines(self.sourceListPath)
+if type(sources) ~= "table" then
+minux.debug("source list unreadable:"..self.sourceListPath, "apt")
+return nil, APT_ERROR_CONFIG_INVALID
+end
 for index = 1, #sources do
 minux.debug("apt-source:"..sources[index], "apt")
 end
@@ -747,13 +844,19 @@ end
 function AptManager:appendSource(source)
 source = self:normalizeSource(source)
 local sources = self:readLines(self.sourceListPath)
+if type(sources) ~= "table" then
+return false
+end
 table.insert(sources, source)
-self:writeLines(self.sourceListPath, self:dedupeSources(sources))
+return self:writeLines(self.sourceListPath, self:dedupeSources(sources))
 end
 
 function AptManager:removeSource(source)
 source = self:normalizeSource(source)
 local sources = self:readLines(self.sourceListPath)
+if type(sources) ~= "table" then
+return false
+end
 local updated = {}
 local removed = false
 
@@ -767,24 +870,70 @@ end
 end
 
 if removed == true then
-self:writeLines(self.sourceListPath, updated)
+return self:writeLines(self.sourceListPath, updated)
 end
 
-return removed
+return false
 end
 
 local manager = AptManager.new()
 
+-- Returns true when one or more config files were repaired.
+-- Returns false when no repair was needed.
+-- Returns false, APT_ERROR_CONFIG_INVALID on unrecoverable repair failure.
 function verifyconfig()
-if fs.exists(manager.installedListPath) == false then
-minux.debug("ERROR:104:Installed.db missing or corrupt", "apt")
-manager:writeLines(manager.installedListPath, { "minux-main" })
+local repairedConfig = false
+local repairFailed = false
+local function isUnreadableConfigPath(path)
+if fs.exists(path) ~= true then
 return true
 end
+if fs.isDir(path) == true then
+return true
+end
+local file = fs.open(path, "r")
+if file == nil then
+return true
+end
+file.close()
+return false
+end
 
-if fs.exists(manager.sourceListPath) ~= true then
+local installedListUnreadable = false
+if isUnreadableConfigPath(manager.installedListPath) == true then
+installedListUnreadable = true
+end
+
+if installedListUnreadable == true then
+minux.debug("ERROR:104:Installed.db missing or corrupt", "apt")
+if not manager:writeLines(manager.installedListPath, { "minux-main" }) then
+minux.debug("ERROR:104:Installed.db repair failed", "apt")
+repairFailed = true
+else
+repairedConfig = true
+end
+end
+
+local sourceListUnreadable = false
+if isUnreadableConfigPath(manager.sourceListPath) == true then
+sourceListUnreadable = true
+end
+
+if sourceListUnreadable == true then
 minux.debug("ERROR:104:source missing or corrupt", "apt")
-manager:writeLines(manager.sourceListPath, manager:getPresetSources("stable"))
+if not manager:writeLines(manager.sourceListPath, manager:getPresetSources("stable")) then
+minux.debug("ERROR:104:source repair failed", "apt")
+repairFailed = true
+else
+repairedConfig = true
+end
+end
+
+if repairFailed == true then
+return false, APT_ERROR_CONFIG_INVALID
+end
+
+if repairedConfig == true then
 return true
 end
 
@@ -801,7 +950,14 @@ if manager:isPackageAccessAllowed(packname) ~= true then
 minux.debug("APT:Access denied", "apt")
 return 100
 end
-if verifyconfig() == true then
+if manager:validatePackageName(packname) ~= true then
+return APT_ERROR_PACKAGE_NOT_FOUND
+end
+local configStatus, configError = verifyconfig()
+if configError == APT_ERROR_CONFIG_INVALID then
+return APT_ERROR_CONFIG_INVALID
+end
+if configStatus == true then
 minux.debug("apt:install file was rebuilt!", "apt")
 end
 minux.debug("apt:checking:"..packname, "apt")
@@ -822,7 +978,7 @@ end
 
 minux.debug("getpack:E:105:pack:"..packname, "apt")
 return 105
-elseif result == 105 or result == 110 then
+elseif type(result) == "number" then
 return result
 end
 
@@ -839,6 +995,9 @@ expect(1, packname, "string")
 if manager:isPackageAccessAllowed(packname) ~= true then
 minux.debug("APT:Access denied", "apt")
 return 100
+end
+if manager:validatePackageName(packname) ~= true then
+return APT_ERROR_PACKAGE_NOT_FOUND
 end
 
 local sources, sourceError = manager:findSources(packname)
@@ -949,13 +1108,34 @@ minux.debug("getpack:ending", "apt")
 return true
 end
 
+-- Only uninstall canonical absolute file paths from package manifests.
+-- This avoids deleting relative traversal targets or malformed section data.
+local function isValidManifestFilePath(path)
+if type(path) ~= "string" or path == "" or path == "/" then return false end
+if string.sub(path, 1, 1) ~= "/" then return false end
+if string.find(path, "..", 1, true) ~= nil then return false end
+local normalized = fs.combine("/", path)
+if string.sub(normalized, 1, 1) ~= "/" then
+normalized = "/"..normalized
+end
+return normalized == path
+end
+
 function uninstall(packname)
 expect(1, packname, "string")
 minux.debug("removing pack:"..packname, "apt")
-verifyconfig()
+local configStatus, configError = verifyconfig()
+if configError == APT_ERROR_CONFIG_INVALID then
+return false, APT_ERROR_CONFIG_INVALID
+end
+if configStatus == true then
+minux.debug("apt:uninstall file was rebuilt!", "apt")
+end
 if manager:isPackageAccessAllowed(packname) ~= true then
 minux.debug("APT:Access denied", "apt")
-return false
+return false, 100
+elseif manager:validatePackageName(packname) ~= true then
+return false, APT_ERROR_PACKAGE_NOT_FOUND
 elseif packname == "minux-main" then
 return false
 elseif apt.checkinstall(packname) == false then
@@ -968,6 +1148,10 @@ apt.cleanup(packname)
 minux.debug("clearing manifest filelist", "apt")
 local manifestFile = manager.manifestDirectory..packname..".db"
 local temp = fs.open(manifestFile, "r")
+if temp == nil then
+minux.debug("uninstall:E:104:manifest unreadable:"..manifestFile, "apt")
+return false, APT_ERROR_CONFIG_INVALID
+end
 local listStart = false
 local data = temp.readLine()
 while data ~= nil do
@@ -975,8 +1159,18 @@ if data == "[filelist]" then
 listStart = true
 data = temp.readLine()
 end
-if listStart == true and data ~= nil then
-fs.delete(data)
+local hasValidManifestPath = listStart and data ~= nil and isValidManifestFilePath(data)
+if hasValidManifestPath and not fs.isDir(data) then
+if fs.exists(data) then
+local deletedPath, deleteError = pcall(fs.delete, data)
+if deletedPath ~= true then
+minux.debug("uninstall:E:manifest delete failed: "..data..":"..tostring(deleteError), "apt")
+end
+end
+elseif hasValidManifestPath and fs.isDir(data) then
+minux.debug("uninstall:E:manifest directory ignored: "..data, "apt")
+elseif listStart == true and data ~= nil and string.sub(data, 1, 1) == "[" then
+listStart = false
 end
 data = temp.readLine()
 end
@@ -1011,10 +1205,16 @@ end
 
 function update(packname)
 expect(1, packname, "string", "nil")
-verifyconfig()
+local _, configError = verifyconfig()
+if configError == APT_ERROR_CONFIG_INVALID then
+return APT_ERROR_CONFIG_INVALID
+end
 
 local forcedupdate = packname == "-f"
 if packname ~= nil and forcedupdate ~= true then
+if manager:validatePackageName(packname) ~= true then
+return APT_ERROR_PACKAGE_NOT_FOUND
+end
 if apt.checkinstall(packname) ~= true then
 return false
 end
@@ -1044,9 +1244,17 @@ end
 
 minux.debug("reading installed.db", "apt")
 local installedPackages = manager:readLines(manager.installedListPath)
+if type(installedPackages) ~= "table" then
+minux.debug("update:installed list unreadable:"..manager.installedListPath, "apt")
+return APT_ERROR_CONFIG_INVALID
+end
+local updateFailed = false
 for index = 1, #installedPackages do
 local nextpack = installedPackages[index]
 minux.debug("finding source", "apt")
+if manager:validatePackageName(nextpack) ~= true then
+updateFailed = true
+else
 local installedVersion = nil
 local manifestPath = manager.manifestDirectory..nextpack..".db"
 if fs.exists(manifestPath) then
@@ -1055,35 +1263,46 @@ end
 local _, availableVersion, sourceError = manager:getAvailablePackage(nextpack, "update")
 if sourceError ~= nil then
 minux.debug("update:source lookup failed:"..nextpack..":"..tostring(sourceError), "apt")
+updateFailed = true
 elseif availableVersion == nil then
 minux.debug("update:package manifest unavailable:"..nextpack, "apt")
+updateFailed = true
 else
 local packageNeedsUpdate = manager:shouldUpdatePackage(installedVersion, availableVersion, forcedupdate)
 if packageNeedsUpdate == true then
 minux.debug("updating pack:", "apt")
-apt.getpack(nextpack)
+local updateResult = apt.getpack(nextpack)
+if updateResult ~= true then
+minux.debug("update:package update failed:"..nextpack..":"..tostring(updateResult), "apt")
+updateFailed = true
+end
 else
 minux.debug("update:package already current or newer:"..nextpack, "apt")
 end
 end
 end
+end
 
 minux.debug("updating configuration", "apt")
-apt.rebuildgenerated()
+if apt.rebuildgenerated() ~= true then
+return false
+end
+if updateFailed == true then
+return false
+end
 return true
 end
 
 function packageinfo(packname)
 expect(1, packname, "string", "nil")
-verifyconfig()
-
 if packname == nil then
 packname = "minux-main"
 end
 
+local repairedConfig, configError = verifyconfig()
 local info = {
 package = packname,
-installed = apt.checkinstall(packname),
+installed = false,
 installedVersion = nil,
 availableVersion = nil,
 source = nil,
@@ -1093,12 +1312,28 @@ releaseTracking = false,
 repositoryPackage = manager:isRepositoryPackage(packname),
 }
 
+if repairedConfig then
+minux.debug("packageinfo:APT config repaired", "apt")
+end
+if configError == APT_ERROR_CONFIG_INVALID then
+info.error = APT_ERROR_CONFIG_INVALID
+return info
+end
+if manager:validatePackageName(packname) ~= true then
+info.error = APT_ERROR_PACKAGE_NOT_FOUND
+return info
+end
+info.installed = apt.checkinstall(packname)
+
 local installedManifest = manager.manifestDirectory..packname..".db"
 if fs.exists(installedManifest) then
 info.installedVersion = apt.version(installedManifest)
 end
 
 local configuredSources = manager:readLines(manager.sourceListPath)
+if type(configuredSources) ~= "table" then
+configuredSources = {}
+end
 local packageSource = manager:getPackageSource(packname)
 if info.repositoryPackage == true and manager:shouldPreferOfficialReleaseSource(configuredSources, packageSource) == true then
 info.releaseTracking = true
@@ -1201,8 +1436,7 @@ end
 local preset = manager:getPresetSources(source)
 if preset ~= nil then
 minux.debug("resetting sources to preset:"..source, "apt")
-manager:writeLines(manager.sourceListPath, preset)
-return true
+return manager:writeLines(manager.sourceListPath, preset)
 end
 
 minux.debug("touching APT repo:"..source, "apt")
@@ -1220,9 +1454,11 @@ return false
 end
 
 	minux.debug("Adding source", "apt")
-print("Verification succeeded, apt source added")
-manager:appendSource(source)
+if manager:appendSource(source) == true then
+print("Verification and source addition succeeded")
 return true
+end
+return false
 end
 
 function clearsource(source)
@@ -1241,6 +1477,16 @@ end
 function softlist()
 minux.debug("reading source list", "apt")
 local sources = manager:readLines(manager.sourceListPath)
+if type(sources) ~= "table" then
+local wroteDiagnostic = manager:writeLines(manager.programListPath, {
+"APT source list unreadable",
+"E:"..APT_ERROR_CONFIG_INVALID,
+})
+if wroteDiagnostic ~= true then
+return false
+end
+return APT_ERROR_CONFIG_INVALID
+end
 local lines = {}
 for index = 1, #sources do
 local source = sources[index]
@@ -1258,13 +1504,19 @@ end
 end
 
 minux.debug("preparing new file for display", "apt")
-manager:writeLines(manager.programListPath, lines)
+if manager:writeLines(manager.programListPath, lines) ~= true then
+return false
+end
 minux.debug("finished getprogram", "apt")
+return true
 end
 
 function checkinstall(packname)
 expect(1, packname, "string")
 local installedPackages = manager:readLines(manager.installedListPath)
+if type(installedPackages) ~= "table" then
+return false
+end
 for index = 1, #installedPackages do
 if installedPackages[index] == packname then
 return true
