@@ -1247,7 +1247,7 @@ releaseTracking = false,
 repositoryPackage = manager:isRepositoryPackage(packname),
 }
 
-if configStatus == true then
+if configStatus then
 minux.debug("packageinfo:APT config repaired", "apt")
 end
 if configError == APT_ERROR_CONFIG_INVALID then
