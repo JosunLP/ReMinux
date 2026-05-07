@@ -167,10 +167,8 @@ if restoredBackup ~= true then
 minux.debug("writeLines:E:failed to restore backup: "..path.." - "..tostring(restoreError), "apt")
 end
 end
-if self:deleteFileIfExists(tempPath, "writeLines:E") ~= true then
-return false
-end
 minux.debug("writeLines:E:replace failed: "..path..":"..tostring(moveNewError), "apt")
+self:deleteFileIfExists(tempPath, "writeLines:E")
 return false
 end
 if self:deleteFileIfExists(backupPath, "writeLines:E") ~= true then
