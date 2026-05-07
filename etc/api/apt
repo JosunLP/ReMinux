@@ -33,6 +33,12 @@ latestReleaseResolved = false,
 latestReleaseTag = nil,
 latestReleaseStatus = nil,
 repositoryPackages = nil,
+virtualInstalledEntries = {
+["auth-client"] = true,
+menu = true,
+minex = true,
+netlib = true,
+},
 legacySources = {
 "https://minux.cc/apt/2.0/soft/",
 "https://minux.cc/apt/2.0/os/",
@@ -313,11 +319,8 @@ function AptManager:isRepositoryPackage(packname)
 return self:getRepositoryPackages()[packname] == true
 end
 
-function AptManager:shouldSkipMissingManifestEntry(packname, availableVersion, sourceError)
-if self:isRepositoryPackage(packname) == true then
-return false
-end
-return availableVersion == nil and (sourceError == nil or sourceError == APT_ERROR_SOURCE_UNAVAILABLE)
+function AptManager:isVirtualInstalledEntry(packname)
+return self.virtualInstalledEntries[packname] == true
 end
 
 function AptManager:readLatestReleaseCache()
@@ -1263,15 +1266,17 @@ if manager:validatePackageName(nextpack) ~= true then
 updateFailed = true
 else
 local manifestPath = manager.manifestDirectory..nextpack..".db"
-local missingManifest = fs.exists(manifestPath) ~= true
-local installedVersion = nil
-if not missingManifest then
-installedVersion = apt.version(manifestPath)
-end
-local _, availableVersion, sourceError = manager:getAvailablePackage(nextpack, "update")
-if missingManifest and manager:shouldSkipMissingManifestEntry(nextpack, availableVersion, sourceError) then
+if fs.exists(manifestPath) ~= true then
+if manager:isVirtualInstalledEntry(nextpack) == true then
 minux.debug("update:skipping virtual entry without local manifest:"..nextpack, "apt")
-elseif sourceError ~= nil then
+else
+minux.debug("update:installed package missing local manifest:"..nextpack, "apt")
+updateFailed = true
+end
+else
+local installedVersion = apt.version(manifestPath)
+local _, availableVersion, sourceError = manager:getAvailablePackage(nextpack, "update")
+if sourceError ~= nil then
 minux.debug("update:source lookup failed:"..nextpack..":"..tostring(sourceError), "apt")
 updateFailed = true
 elseif availableVersion == nil then
@@ -1288,6 +1293,7 @@ updateFailed = true
 end
 else
 minux.debug("update:package already current or newer:"..nextpack, "apt")
+end
 end
 end
 end
