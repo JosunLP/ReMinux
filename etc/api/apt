@@ -1255,11 +1255,11 @@ minux.debug("finding source", "apt")
 if manager:validatePackageName(nextpack) ~= true then
 updateFailed = true
 else
-local installedVersion = nil
 local manifestPath = manager.manifestDirectory..nextpack..".db"
-if fs.exists(manifestPath) then
-installedVersion = apt.version(manifestPath)
-end
+if fs.exists(manifestPath) ~= true then
+minux.debug("update:skipping virtual entry without local manifest:"..nextpack, "apt")
+else
+local installedVersion = apt.version(manifestPath)
 local _, availableVersion, sourceError = manager:getAvailablePackage(nextpack, "update")
 if sourceError ~= nil then
 minux.debug("update:source lookup failed:"..nextpack..":"..tostring(sourceError), "apt")
@@ -1278,6 +1278,7 @@ updateFailed = true
 end
 else
 minux.debug("update:package already current or newer:"..nextpack, "apt")
+end
 end
 end
 end
