@@ -1234,7 +1234,7 @@ if packname == nil then
 packname = "minux-main"
 end
 
-local _, configError = verifyconfig()
+local configStatus, configError = verifyconfig()
 local info = {
 package = packname,
 installed = false,
@@ -1247,6 +1247,9 @@ releaseTracking = false,
 repositoryPackage = manager:isRepositoryPackage(packname),
 }
 
+if configStatus == true then
+minux.debug("packageinfo:APT config repaired", "apt")
+end
 if configError == APT_ERROR_CONFIG_INVALID then
 info.error = APT_ERROR_CONFIG_INVALID
 return info
