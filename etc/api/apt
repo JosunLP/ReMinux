@@ -98,6 +98,18 @@ fs.delete(path)
 end
 end
 
+function AptManager:deleteFileIfExists(path, context)
+if fs.exists(path) == false then
+return true
+end
+if fs.isDir(path) == true then
+minux.debug(context..":refusing to delete directory: "..path, "apt")
+return false
+end
+fs.delete(path)
+return true
+end
+
 function AptManager:readLines(path)
 local lines = {}
 if fs.exists(path) == false then
@@ -123,8 +135,12 @@ function AptManager:writeLines(path, lines)
 self:ensureParentDirectory(path)
 local tempPath = path..TEMP_SUFFIX
 local backupPath = path..BACKUP_SUFFIX
-self:deleteIfExists(tempPath)
-self:deleteIfExists(backupPath)
+if self:deleteFileIfExists(tempPath, "writeLines:E") ~= true then
+return false
+end
+if self:deleteFileIfExists(backupPath, "writeLines:E") ~= true then
+return false
+end
 
 local file = fs.open(tempPath, "w")
 if file == nil then
@@ -138,7 +154,7 @@ file.close()
 if fs.exists(path) then
 local movedOld, moveOldError = pcall(fs.move, path, backupPath)
 if movedOld ~= true then
-self:deleteIfExists(tempPath)
+self:deleteFileIfExists(tempPath, "writeLines:E")
 minux.debug("writeLines:E:failed to backup existing file: "..path.." - "..tostring(moveOldError), "apt")
 return false
 end
@@ -151,11 +167,15 @@ if restoredBackup ~= true then
 minux.debug("writeLines:E:failed to restore backup: "..path.." - "..tostring(restoreError), "apt")
 end
 end
-self:deleteIfExists(tempPath)
+if self:deleteFileIfExists(tempPath, "writeLines:E") ~= true then
+return false
+end
 minux.debug("writeLines:E:replace failed: "..path..":"..tostring(moveNewError), "apt")
 return false
 end
-self:deleteIfExists(backupPath)
+if self:deleteFileIfExists(backupPath, "writeLines:E") ~= true then
+return false
+end
 return true
 end
 
