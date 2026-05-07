@@ -98,7 +98,7 @@ fs.delete(path)
 end
 end
 
-function AptManager:deleteFileIfExists(path, context)
+function AptManager:deleteFileIfExists(path)
 if not fs.exists(path) then
 return true
 end
@@ -133,18 +133,19 @@ end
 
 function AptManager:writeLines(path, lines)
 self:ensureParentDirectory(path)
+local errorContext = "writeLines:E"
 local tempPath = path..TEMP_SUFFIX
 local backupPath = path..BACKUP_SUFFIX
-if self:deleteFileIfExists(tempPath, "writeLines:E") ~= true then
+if self:deleteFileIfExists(tempPath) ~= true then
 return false
 end
-if self:deleteFileIfExists(backupPath, "writeLines:E") ~= true then
+if self:deleteFileIfExists(backupPath) ~= true then
 return false
 end
 
 local file = fs.open(tempPath, "w")
 if file == nil then
-minux.debug("writeLines:E:open failed: "..path, "apt")
+minux.debug(errorContext..":open failed: "..path, "apt")
 return false
 end
 for index = 1, #lines do
@@ -154,8 +155,8 @@ file.close()
 if fs.exists(path) then
 local movedOld, moveOldError = pcall(fs.move, path, backupPath)
 if movedOld ~= true then
-local _ = self:deleteFileIfExists(tempPath, "writeLines:E")
-minux.debug("writeLines:E:failed to backup existing file: "..path.." - "..tostring(moveOldError), "apt")
+self:deleteFileIfExists(tempPath)
+minux.debug(errorContext..":failed to backup existing file: "..path.." - "..tostring(moveOldError), "apt")
 return false
 end
 end
@@ -164,14 +165,14 @@ if movedNew ~= true then
 if fs.exists(backupPath) then
 local restoredBackup, restoreError = pcall(fs.move, backupPath, path)
 if restoredBackup ~= true then
-minux.debug("writeLines:E:failed to restore backup: "..path.." - "..tostring(restoreError), "apt")
+minux.debug(errorContext..":failed to restore backup: "..path.." - "..tostring(restoreError), "apt")
 end
 end
-minux.debug("writeLines:E:replace failed: "..path..":"..tostring(moveNewError), "apt")
-self:deleteFileIfExists(tempPath, "writeLines:E")
+minux.debug(errorContext..":replace failed: "..path..":"..tostring(moveNewError), "apt")
+self:deleteFileIfExists(tempPath)
 return false
 end
-if self:deleteFileIfExists(backupPath, "writeLines:E") ~= true then
+if self:deleteFileIfExists(backupPath) ~= true then
 return false
 end
 return true
