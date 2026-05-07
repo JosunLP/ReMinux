@@ -1234,10 +1234,10 @@ if packname == nil then
 packname = "minux-main"
 end
 
-local configStatus, configError = verifyconfig()
+local _, configError = verifyconfig()
 local info = {
 package = packname,
-installed = nil,
+installed = false,
 installedVersion = nil,
 availableVersion = nil,
 source = nil,

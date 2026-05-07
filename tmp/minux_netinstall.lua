@@ -181,7 +181,13 @@ local function writeFile(filepath, content)
         if handle == nil then error("failed to open " .. filepath .. " for writing") end
         handle.write(content)
         handle.close()
-        if fs.exists(filepath) then fs.move(filepath, backupPath) end
+        if fs.exists(filepath) then
+                local backedUp, backupError = pcall(fs.move, filepath, backupPath)
+                if backedUp ~= true then
+                        if fs.exists(tempPath) then fs.delete(tempPath) end
+                        error("failed to backup " .. filepath .. ": " .. tostring(backupError))
+                end
+        end
         local replaced, replaceError = pcall(fs.move, tempPath, filepath)
         if replaced ~= true then
                 if fs.exists(backupPath) then pcall(fs.move, backupPath, filepath) end
