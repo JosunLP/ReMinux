@@ -175,7 +175,7 @@ local function writeFile(filepath, content)
         ensureParent(filepath)
         local tempPath = filepath .. ".tmp"
         local backupPath = filepath .. ".bak"
-        if fs.exists(filepath) and fs.isDir(filepath) then
+        if fs.isDir(filepath) then
                 error("refusing to replace directory target: " .. filepath)
         end
         local function deleteExistingFile(path, label)
