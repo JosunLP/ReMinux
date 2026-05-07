@@ -99,10 +99,10 @@ end
 end
 
 function AptManager:deleteFileIfExists(path, context)
-if fs.exists(path) == false then
+if not fs.exists(path) then
 return true
 end
-if fs.isDir(path) == true then
+if fs.isDir(path) then
 minux.debug(context..":refusing to delete directory: "..path, "apt")
 return false
 end

@@ -176,8 +176,8 @@ local function writeFile(filepath, content)
         local tempPath = filepath .. ".tmp"
         local backupPath = filepath .. ".bak"
         local function deleteExistingFile(path, label)
-                if fs.exists(path) == false then return true end
-                if fs.isDir(path) == true then error("refusing to delete directory " .. label .. ": " .. path) end
+                if not fs.exists(path) then return true end
+                if fs.isDir(path) then error("refusing to delete directory " .. label .. ": " .. path) end
                 fs.delete(path)
                 return true
         end
