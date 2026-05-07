@@ -149,7 +149,7 @@ end
 
 local file = fs.open(tempPath, "w")
 if file == nil then
-minux.debug(errorContext..":open failed: "..path, "apt")
+minux.debug(errorContext..":open failed: "..tempPath.." for "..path, "apt")
 return false
 end
 for index = 1, #lines do
@@ -188,6 +188,24 @@ end
 function AptManager:isPackageAccessAllowed(packname)
 local isOwner = _G.owner == true or (_G.login ~= nil and _G.owner == _G.login)
 return _G.admin == true or isOwner or packname == "auth-client"
+end
+
+function AptManager:isValidPackageName(packname)
+if type(packname) ~= "string" or packname == "" then
+return false
+end
+if string.match(packname, "^[%w%._%-]+$") == nil then
+return false
+end
+return string.find(packname, "..", 1, true) == nil
+end
+
+function AptManager:validatePackageName(packname)
+if self:isValidPackageName(packname) == true then
+return true
+end
+minux.debug("APT: Invalid package name: "..tostring(packname), "apt")
+return false
 end
 
 function AptManager:isSourceAccessAllowed()
@@ -587,6 +605,9 @@ return nil
 end
 
 function AptManager:getPackageSource(packname)
+if self:isValidPackageName(packname) ~= true then
+return nil
+end
 local packdb = self.manifestDirectory..packname..".db"
 if fs.exists(packdb) ~= true then
 return nil
@@ -729,6 +750,9 @@ return true
 end
 
 function AptManager:findSources(packname)
+if self:validatePackageName(packname) ~= true then
+return nil, APT_ERROR_PACKAGE_NOT_FOUND
+end
 local sources = self:readLines(self.sourceListPath)
 if type(sources) ~= "table" then
 minux.debug("source list unreadable:"..self.sourceListPath, "apt")
@@ -926,6 +950,9 @@ if manager:isPackageAccessAllowed(packname) ~= true then
 minux.debug("APT:Access denied", "apt")
 return 100
 end
+if manager:validatePackageName(packname) ~= true then
+return APT_ERROR_PACKAGE_NOT_FOUND
+end
 local configStatus, configError = verifyconfig()
 if configError == APT_ERROR_CONFIG_INVALID then
 return APT_ERROR_CONFIG_INVALID
@@ -968,6 +995,9 @@ expect(1, packname, "string")
 if manager:isPackageAccessAllowed(packname) ~= true then
 minux.debug("APT:Access denied", "apt")
 return 100
+end
+if manager:validatePackageName(packname) ~= true then
+return APT_ERROR_PACKAGE_NOT_FOUND
 end
 
 local sources, sourceError = manager:findSources(packname)
@@ -1103,7 +1133,9 @@ minux.debug("apt:uninstall file was rebuilt!", "apt")
 end
 if manager:isPackageAccessAllowed(packname) ~= true then
 minux.debug("APT:Access denied", "apt")
-return false
+return false, 100
+elseif manager:validatePackageName(packname) ~= true then
+return false, APT_ERROR_PACKAGE_NOT_FOUND
 elseif packname == "minux-main" then
 return false
 elseif apt.checkinstall(packname) == false then
@@ -1180,6 +1212,9 @@ end
 
 local forcedupdate = packname == "-f"
 if packname ~= nil and forcedupdate ~= true then
+if manager:validatePackageName(packname) ~= true then
+return APT_ERROR_PACKAGE_NOT_FOUND
+end
 if apt.checkinstall(packname) ~= true then
 return false
 end
@@ -1217,6 +1252,9 @@ local updateFailed = false
 for index = 1, #installedPackages do
 local nextpack = installedPackages[index]
 minux.debug("finding source", "apt")
+if manager:validatePackageName(nextpack) ~= true then
+updateFailed = true
+else
 local installedVersion = nil
 local manifestPath = manager.manifestDirectory..nextpack..".db"
 if fs.exists(manifestPath) then
@@ -1240,6 +1278,7 @@ updateFailed = true
 end
 else
 minux.debug("update:package already current or newer:"..nextpack, "apt")
+end
 end
 end
 end
@@ -1278,6 +1317,10 @@ minux.debug("packageinfo:APT config repaired", "apt")
 end
 if configError == APT_ERROR_CONFIG_INVALID then
 info.error = APT_ERROR_CONFIG_INVALID
+return info
+end
+if manager:validatePackageName(packname) ~= true then
+info.error = APT_ERROR_PACKAGE_NOT_FOUND
 return info
 end
 info.installed = apt.checkinstall(packname)
