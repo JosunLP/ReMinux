@@ -184,7 +184,7 @@ local function writeFile(filepath, content)
         deleteExistingFile(tempPath, "temp path")
         deleteExistingFile(backupPath, "backup path")
         local handle = fs.open(tempPath, "w")
-        if handle == nil then error("failed to open " .. filepath .. " for writing") end
+        if handle == nil then error("failed to open temp file " .. tempPath .. " for writing " .. filepath) end
         handle.write(content)
         handle.close()
         if fs.exists(filepath) then

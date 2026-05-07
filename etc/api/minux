@@ -1408,18 +1408,18 @@ minux.debug("login:valid login detected", "minux")
 wasvalid = true
 savedAdmin = _G.admin
 savedLogin = _G.login
-	savedPass  = _G.masterpass
-	savedOwner = _G.owner
-	savedOwnerGroup = _G.ownergroup
-	savedAuthserver = _G.authserver
-	end
-	_G.admin      = nil
-	_G.login      = nil
-	_G.masterpass = nil
-	_G.validlogin = false
-	_G.owner      = nil
-	_G.ownergroup = nil
-	_G.authserver = nil
+savedPass  = _G.masterpass
+savedOwner = _G.owner
+savedOwnerGroup = _G.ownergroup
+savedAuthserver = _G.authserver
+end
+_G.admin      = nil
+_G.login      = nil
+_G.masterpass = nil
+_G.validlogin = false
+_G.owner      = nil
+_G.ownergroup = nil
+_G.authserver = nil
 
 local function restorePreviousSessionAndFail()
 if wasvalid == true then
