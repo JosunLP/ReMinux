@@ -1265,11 +1265,11 @@ else
 local manifestPath = manager.manifestDirectory..nextpack..".db"
 local missingManifest = fs.exists(manifestPath) ~= true
 local installedVersion = nil
-if missingManifest ~= true then
+if not missingManifest then
 installedVersion = apt.version(manifestPath)
 end
 local _, availableVersion, sourceError = manager:getAvailablePackage(nextpack, "update")
-if missingManifest == true and manager:shouldSkipMissingManifestEntry(nextpack, availableVersion, sourceError) == true then
+if missingManifest and manager:shouldSkipMissingManifestEntry(nextpack, availableVersion, sourceError) then
 minux.debug("update:skipping virtual entry without local manifest:"..nextpack, "apt")
 elseif sourceError ~= nil then
 minux.debug("update:source lookup failed:"..nextpack..":"..tostring(sourceError), "apt")
