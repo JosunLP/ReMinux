@@ -103,7 +103,7 @@ if not fs.exists(path) then
 return true
 end
 if fs.isDir(path) then
-minux.debug("deleteFileIfExists:E:refusing to delete directory: "..path, "apt")
+minux.debug("deleteFileIfExists: refusing to delete directory: "..path, "apt")
 return false
 end
 fs.delete(path)
@@ -168,8 +168,11 @@ if restoredBackup ~= true then
 minux.debug(errorContext..":failed to restore backup: "..path.." - "..tostring(restoreError), "apt")
 end
 end
+local cleanedTemp = self:deleteFileIfExists(tempPath)
+if cleanedTemp ~= true then
+minux.debug(errorContext..":cleanup failed: "..tempPath, "apt")
+end
 minux.debug(errorContext..":replace failed: "..path..":"..tostring(moveNewError), "apt")
-self:deleteFileIfExists(tempPath)
 return false
 end
 if self:deleteFileIfExists(backupPath) ~= true then
