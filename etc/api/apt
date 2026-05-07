@@ -33,6 +33,12 @@ latestReleaseResolved = false,
 latestReleaseTag = nil,
 latestReleaseStatus = nil,
 repositoryPackages = nil,
+virtualInstalledEntries = {
+["auth-client"] = true,
+menu = true,
+minex = true,
+netlib = true,
+},
 legacySources = {
 "https://minux.cc/apt/2.0/soft/",
 "https://minux.cc/apt/2.0/os/",
@@ -311,6 +317,10 @@ end
 
 function AptManager:isRepositoryPackage(packname)
 return self:getRepositoryPackages()[packname] == true
+end
+
+function AptManager:isVirtualInstalledEntry(packname)
+return self.virtualInstalledEntries[packname] == true
 end
 
 function AptManager:readLatestReleaseCache()
@@ -1255,11 +1265,16 @@ minux.debug("finding source", "apt")
 if manager:validatePackageName(nextpack) ~= true then
 updateFailed = true
 else
-local installedVersion = nil
 local manifestPath = manager.manifestDirectory..nextpack..".db"
-if fs.exists(manifestPath) then
-installedVersion = apt.version(manifestPath)
+if fs.exists(manifestPath) ~= true then
+if manager:isVirtualInstalledEntry(nextpack) == true then
+minux.debug("update:skipping virtual entry without local manifest:"..nextpack, "apt")
+else
+minux.debug("update:installed package missing local manifest:"..nextpack, "apt")
+updateFailed = true
 end
+else
+local installedVersion = apt.version(manifestPath)
 local _, availableVersion, sourceError = manager:getAvailablePackage(nextpack, "update")
 if sourceError ~= nil then
 minux.debug("update:source lookup failed:"..nextpack..":"..tostring(sourceError), "apt")
@@ -1278,6 +1293,7 @@ updateFailed = true
 end
 else
 minux.debug("update:package already current or newer:"..nextpack, "apt")
+end
 end
 end
 end
