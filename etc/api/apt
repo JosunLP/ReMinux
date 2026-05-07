@@ -136,6 +136,10 @@ self:ensureParentDirectory(path)
 local errorContext = "writeLines:E"
 local tempPath = path..TEMP_SUFFIX
 local backupPath = path..BACKUP_SUFFIX
+if fs.exists(path) and fs.isDir(path) then
+minux.debug(errorContext..":refusing to replace directory target: "..path, "apt")
+return false
+end
 if self:deleteFileIfExists(tempPath) ~= true then
 return false
 end
