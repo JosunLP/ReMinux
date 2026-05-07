@@ -103,7 +103,6 @@ if not fs.exists(path) then
 return true
 end
 if fs.isDir(path) then
-minux.debug(context..": refusing to delete directory: "..path, "apt")
 return false
 end
 fs.delete(path)
@@ -174,6 +173,7 @@ self:deleteFileIfExists(tempPath, "writeLines:E")
 return false
 end
 if self:deleteFileIfExists(backupPath, "writeLines:E") ~= true then
+minux.debug("writeLines:E:cleanup failed: "..backupPath, "apt")
 return false
 end
 return true
