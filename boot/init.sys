@@ -321,9 +321,9 @@ if term.isColor() then term.setTextColor(colors.red) end
 print("Post-install verification failed.")
 if term.isColor() then term.setTextColor(colors.white) end
 if updateError ~= nil then
-print("apt update "..(updateErrorAction or "failed")..": "..tostring(updateError))
+print("apt update "..updateErrorAction..": "..tostring(updateError))
 elseif generatedError ~= nil then
-print("apt.rebuildgenerated "..(generatedErrorAction or "failed")..": "..tostring(generatedError))
+print("apt.rebuildgenerated "..generatedErrorAction..": "..tostring(generatedError))
 end
 print("Run 'apt -U' or 'doctor --repair' after checking your APT sources.")
 print("Continuing without rebooting in 3 seconds.")
