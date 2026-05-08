@@ -316,8 +316,15 @@ firstrunMarked = true
 else
 minux.debug("firstrun:write failed: "..firstrunFile, "minux")
 end
-if updateResult and generatedOk and firstrunMarked then
+if updateResult and generatedOk then
 print("Installation verified, rebooting.")
+if firstrunMarked ~= true then
+if term.isColor() then term.setTextColor(colors.yellow) end
+print("Warning: could not record first-run marker at "..firstrunFile..".")
+print("Verification may run again on the next boot.")
+if term.isColor() then term.setTextColor(colors.white) end
+sleep(3)
+end
 os.reboot()
 else
 minux.debug("first-run verification failed; continuing without reboot after delay", "minux")
@@ -332,9 +339,7 @@ end
 if firstrunMarked ~= true then
 print("Could not record first-run marker at "..firstrunFile..".")
 end
-if updateResult ~= true or generatedOk ~= true then
 print("Run 'apt -U' or 'doctor --repair' after checking your APT sources.")
-end
 print("Continuing without rebooting in 3 seconds.")
 sleep(3)
 end
