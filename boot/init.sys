@@ -302,7 +302,22 @@ end
 generatedOk = rebuildResult
 end
 end
-if updateResult == true and generatedOk == true then
+-- Always mark the first-run check as done after a single attempt, even when
+-- the verify failed.  Otherwise the slow apt.update("-f") flow re-runs on
+-- every subsequent boot, which manifests as an endless "verifying
+-- installation" loop for the user.  Failures are reported below and the
+-- shipped guidance ('apt -U' / 'doctor --repair') lets the operator retry
+-- on demand.
+local firstrunDir = fs.getDir(firstrunFile)
+if firstrunDir ~= "" and not fs.exists(firstrunDir) then
+local firstrunDirOk, firstrunDirError = pcall(fs.makeDir, firstrunDir)
+if not firstrunDirOk then
+minux.debug("firstrun:mkdir failed: "..firstrunDir..": "..tostring(firstrunDirError), "minux")
+end
+if not fs.exists(firstrunDir) then
+minux.debug("firstrun:mkdir left path missing: "..firstrunDir, "minux")
+end
+end
 local tmpfile = fs.open(firstrunFile, "w")
 if tmpfile ~= nil then
 tmpfile.writeLine("done")
@@ -311,10 +326,18 @@ firstrunMarked = true
 else
 minux.debug("firstrun:write failed: "..firstrunFile, "minux")
 end
-end
-if updateResult and generatedOk and firstrunMarked then
+if updateResult and generatedOk then
+if firstrunMarked ~= true then
+minux.debug("firstrun verification succeeded but marker write failed; continuing without reboot", "minux")
+if term.isColor() then term.setTextColor(colors.yellow) end
+print("Installation verified, but could not record first-run marker at "..firstrunFile..".")
+print("Continuing without rebooting to avoid repeating verification on restart.")
+if term.isColor() then term.setTextColor(colors.white) end
+sleep(3)
+else
 print("Installation verified, rebooting.")
 os.reboot()
+end
 else
 minux.debug("first-run verification failed; continuing without reboot after delay", "minux")
 if term.isColor() then term.setTextColor(colors.red) end
@@ -324,6 +347,9 @@ if updateError ~= nil then
 print("apt update "..updateErrorAction..": "..tostring(updateError))
 elseif generatedError ~= nil then
 print("apt.rebuildgenerated "..generatedErrorAction..": "..tostring(generatedError))
+end
+if firstrunMarked ~= true then
+print("Could not record first-run marker at "..firstrunFile..".")
 end
 print("Run 'apt -U' or 'doctor --repair' after checking your APT sources.")
 print("Continuing without rebooting in 3 seconds.")
