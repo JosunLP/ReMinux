@@ -309,9 +309,9 @@ end
 -- shipped guidance ('apt -U' / 'doctor --repair') lets the operator retry
 -- on demand.
 local firstrunDir = fs.getDir(firstrunFile)
-if firstrunDir ~= "" and fs.exists(firstrunDir) == false then
+if firstrunDir ~= "" and not fs.exists(firstrunDir) then
 fs.makeDir(firstrunDir)
-if fs.exists(firstrunDir) == false then
+if not fs.exists(firstrunDir) then
 minux.debug("firstrun:mkdir failed: "..firstrunDir, "minux")
 end
 end
