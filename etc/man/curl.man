@@ -55,7 +55,7 @@ NOTES
   The HTTP API must be
   enabled in the CC: Tweaked
   server config. curl checks
-  via the ReMinux HTTP support check
+  via minux.hasHttpSupport()
   and exits with an error if
   HTTP is disabled.
 

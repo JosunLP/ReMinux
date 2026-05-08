@@ -281,13 +281,13 @@ local generatedError
 local firstrunMarked = false
 if updateResult == true then
 local rebuildOk, rebuildResult = pcall(apt.rebuildgenerated)
-	if rebuildOk ~= true then
-	minux.debug("firstrun:apt.rebuildgenerated crashed: "..tostring(rebuildResult), "minux")
-	generatedError = rebuildResult
-	generatedOk = false
-	else
-	generatedOk = rebuildResult
-	end
+if rebuildOk ~= true then
+minux.debug("firstrun:apt.rebuildgenerated crashed: "..tostring(rebuildResult), "minux")
+generatedError = rebuildResult
+generatedOk = false
+else
+generatedOk = rebuildResult
+end
 end
 if updateResult == true and generatedOk == true then
 local tmpfile = fs.open(firstrunFile, "w")
@@ -310,7 +310,7 @@ if term.isColor() then term.setTextColor(colors.white) end
 if updateError ~= nil then
 print("apt update raised: "..tostring(updateError))
 elseif generatedError ~= nil then
-print("rebuild raised: "..tostring(generatedError))
+print("apt.rebuildgenerated raised: "..tostring(generatedError))
 end
 print("Run 'apt -U' or 'doctor --repair' after checking your APT sources.")
 print("Continuing without rebooting in 3 seconds.")
