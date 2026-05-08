@@ -247,7 +247,7 @@ end
 end
 minux.debug("running login.sh", "minux")
 if _G.validlogin ~= true then shell.run("/bin/login.sh") end
-local loginAttempts = 1
+local loginAttempts = 0
 while _G.validlogin ~= true do
 loginAttempts = loginAttempts + 1
 minux.debug("login failed.", "minux")
