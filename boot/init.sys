@@ -308,6 +308,13 @@ end
 -- installation" loop for the user.  Failures are reported below and the
 -- shipped guidance ('apt -U' / 'doctor --repair') lets the operator retry
 -- on demand.
+local firstrunDir = fs.getDir(firstrunFile)
+if firstrunDir ~= "" and fs.exists(firstrunDir) == false then
+fs.makeDir(firstrunDir)
+if fs.exists(firstrunDir) == false then
+minux.debug("firstrun:mkdir failed: "..firstrunDir, "minux")
+end
+end
 local tmpfile = fs.open(firstrunFile, "w")
 if tmpfile ~= nil then
 tmpfile.writeLine("done")
@@ -317,15 +324,17 @@ else
 minux.debug("firstrun:write failed: "..firstrunFile, "minux")
 end
 if updateResult and generatedOk then
-print("Installation verified, rebooting.")
 if firstrunMarked ~= true then
+minux.debug("first-run verification succeeded but marker write failed; continuing without reboot", "minux")
 if term.isColor() then term.setTextColor(colors.yellow) end
-print("Warning: could not record first-run marker at "..firstrunFile..".")
-print("Verification may run again on the next boot.")
+print("Installation verified, but could not record first-run marker at "..firstrunFile..".")
+print("Continuing without rebooting to avoid repeating verification on restart.")
 if term.isColor() then term.setTextColor(colors.white) end
 sleep(3)
-end
+else
+print("Installation verified, rebooting.")
 os.reboot()
+end
 else
 minux.debug("first-run verification failed; continuing without reboot after delay", "minux")
 if term.isColor() then term.setTextColor(colors.red) end
