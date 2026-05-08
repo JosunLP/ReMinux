@@ -1,0 +1,27 @@
+halt - shut down the computer
+Executable: /bin/halt.sh
+Alias: halt
+
+DESCRIPTION
+  Cleanly stops the running
+  ReMinux session and powers
+  the CC: Tweaked computer
+  off via os.shutdown().
+
+USAGE
+  halt
+
+NOTES
+  Equivalent to running
+  'shutdown' on a real Unix
+  system. Use 'restart' to
+  reboot instead of stopping.
+
+  After halting the computer
+  must be powered on again in
+  game (right-click) before
+  ReMinux boots back up.
+
+SEE ALSO
+  restart - reboot the system
+  lock    - lock the screen

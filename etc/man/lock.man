@@ -1,0 +1,35 @@
+lock - lock the screen
+Executable: /bin/lock.sh
+Alias: lock
+
+DESCRIPTION
+  Locks the terminal until the
+  current user's password is
+  re-entered. Useful for
+  walking away from a running
+  computer without logging
+  out.
+
+USAGE
+  lock
+
+NOTES
+  Lock uses the active auth
+  backend (local or network)
+  to verify the password.
+  If the login system is
+  disabled, lock has no
+  password to check against
+  and returns immediately.
+
+  Terminate (Ctrl+T) is
+  ignored on the lock screen,
+  but a Minecraft chunk
+  reload or a server restart
+  will still drop you back to
+  init/login.
+
+SEE ALSO
+  login   - log in as a user
+  passwd  - change a password
+  halt    - shut down

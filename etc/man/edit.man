@@ -1,0 +1,30 @@
+edit - launch the text editor
+Executable: /bin/edit.sh
+Alias: edit
+
+DESCRIPTION
+  Opens the ReMinux line/page
+  text editor (shedit) for the
+  given file. If the file does
+  not exist it will be created
+  on save.
+
+USAGE
+  edit <filename>
+  edit
+
+NOTES
+  When called without a
+  filename the editor prompts
+  for one interactively.
+
+  Paths are resolved through
+  the current shell, so both
+  absolute paths (/home/foo)
+  and shell-relative paths
+  (notes.txt) are accepted.
+
+SEE ALSO
+  vix / vim - modal editor
+  cat       - print a file
+  less      - scroll a file

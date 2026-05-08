@@ -1,0 +1,46 @@
+makeboot - write a boot disk
+Executable: /bin/makeboot.sh
+Alias: makeboot
+
+DESCRIPTION
+  Writes the ReMinux net-
+  installer to a floppy disk
+  in an attached disk drive
+  so the disk can boot a fresh
+  ComputerCraft computer.
+
+USAGE
+  makeboot
+
+REQUIREMENTS
+  - A disk drive must be
+    attached to the computer
+    and detected at boot
+    (_G.diskside is set by
+    /boot/init.sys).
+  - The disk must be empty;
+    if /disk/startup already
+    exists makeboot refuses
+    to overwrite it.
+  - HTTP must be enabled in
+    the CC: Tweaked config so
+    wget can fetch the
+    installer.
+
+NOTES
+  The installer is fetched
+  from the upstream repository
+  on raw.githubusercontent.com
+  and written to /disk/startup.
+  The disk is then labelled
+  'ReMinuxinstall'.
+
+  Insert the disk into a fresh
+  computer and reboot it; the
+  net-installer will guide
+  through installation source
+  and type selection.
+
+SEE ALSO
+  apt     - package manager
+  doctor  - audit/repair

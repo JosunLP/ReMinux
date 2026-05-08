@@ -1,0 +1,44 @@
+bash - launch the ReMinux shell
+Executable: /bin/bash.sh
+Alias: bash
+
+DESCRIPTION
+  Starts the ReMinux shell
+  (/etc/minux-main/workspace/shell.lua)
+  with optional pipeline,
+  redirection and alias support
+  on top of CC: Tweaked.
+
+USAGE
+  bash
+  bash <command>
+  bash setcolor <text>
+       <background> <prompt>
+
+NOTES
+  Without arguments bash opens
+  an interactive prompt. With a
+  single argument the command
+  is executed once and bash
+  exits.
+
+  'bash setcolor' updates the
+  shell theme. Each colour
+  argument must be a valid
+  CC: Tweaked colour name
+  (e.g. white, black, lime,
+  lightBlue, lightGray, gray).
+  On non-advanced terminals
+  colours fall back to white
+  on black automatically.
+
+EXAMPLES
+  bash
+  bash "ls /home"
+  bash setcolor white black
+       yellow
+
+SEE ALSO
+  config  - change ui mode
+  workspace - tabbed UI
+  newtab  - open a new tab

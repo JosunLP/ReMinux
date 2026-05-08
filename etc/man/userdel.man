@@ -1,0 +1,36 @@
+userdel - delete a user
+Executable: /bin/userdel.sh
+Alias: userdel
+
+DESCRIPTION
+  Removes a user account from
+  the active auth backend
+  (local or network).
+
+USAGE
+  userdel <username>
+
+NOTES
+  When the login system is set
+  to 'local', userdel delegates
+  to /bin/usermod.sh and
+  removes the credential file
+  under /usr/local/auth/. When
+  set to 'network', the
+  request is forwarded to the
+  AUTH server via the auth
+  API.
+
+  The 'root' account cannot be
+  deleted on local AUTH; it is
+  the only admin user.
+
+  If the login system is
+  disabled there is no auth
+  database to modify and
+  userdel refuses to run.
+
+SEE ALSO
+  useradd - add a user
+  usermod - manage users
+  passwd  - change a password
