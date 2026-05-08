@@ -13,13 +13,13 @@ end
 if filename == nil or filename == "" then
 print("Invalid filename")
 print("Use 'man less' for the manual")
-return 0
+return false
 end
 
 local resolved = shell.resolve(filename)
 if fs.exists(resolved) == false then
 print("File not found: " .. resolved)
-return 0
+return false
 end
 
 local termX, termY = term.getSize()

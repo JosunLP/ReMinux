@@ -1,10 +1,16 @@
 -- tail: print the last N lines (default 10) of a file.
 local args = { ... }
 
-if args[1] == nil or args[1] == "?" or args[1] == "help" then
+if args[1] == "?" or args[1] == "help" then
 	print("Usage: tail [-n <count>] <file>")
 	print("Defaults to 10 lines.")
 	return 0
+end
+
+if args[1] == nil then
+	print("Usage: tail [-n <count>] <file>")
+	print("Defaults to 10 lines.")
+	return false
 end
 
 local count = 10
@@ -13,7 +19,7 @@ if args[1] == "-n" and args[2] ~= nil then
 	local parsed = tonumber(args[2])
 	if parsed == nil or parsed < 0 then
 		print("Invalid line count: " .. tostring(args[2]))
-		return 0
+		return false
 	end
 	count = math.floor(parsed)
 	fileArg = args[3]
@@ -21,13 +27,13 @@ end
 
 if fileArg == nil then
 	print("No file given.")
-	return 0
+	return false
 end
 
 local target = shell.resolve(fileArg)
 if fs.exists(target) == false or fs.isDir(target) then
 	print("Not a file: " .. target)
-	return 0
+	return false
 end
 
 local lines = {}
