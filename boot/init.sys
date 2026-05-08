@@ -269,13 +269,27 @@ term.clear()
 term.setCursorPos(1, 1)
 print("First run detected, verifying installation.")
 print("This process may take a while.")
-local updateOk = apt.update("-f")
-local generatedOk = false
-local firstrunMarked = false
-if updateOk == true then
-generatedOk = apt.rebuildgenerated()
+local updateOk, updateReturn = pcall(apt.update, "-f")
+local updateError
+if updateOk ~= true then
+updateError = updateReturn
+minux.debug("firstrun:apt.update crashed: "..tostring(updateReturn), "minux")
 end
-if updateOk == true and generatedOk == true then
+local updateResult = updateOk and updateReturn == true
+local generatedOk = false
+local generatedError
+local firstrunMarked = false
+if updateResult == true then
+local rebuildOk, rebuildResult = pcall(apt.rebuildgenerated)
+if rebuildOk ~= true then
+minux.debug("firstrun:apt.rebuildgenerated crashed: "..tostring(rebuildResult), "minux")
+generatedError = rebuildResult
+generatedOk = false
+else
+generatedOk = rebuildResult == true
+end
+end
+if updateResult == true and generatedOk == true then
 local tmpfile = fs.open(firstrunFile, "w")
 if tmpfile ~= nil then
 tmpfile.writeLine("done")
@@ -285,7 +299,7 @@ else
 minux.debug("firstrun:write failed: "..firstrunFile, "minux")
 end
 end
-if updateOk and generatedOk and firstrunMarked then
+if updateResult and generatedOk and firstrunMarked then
 print("Installation verified, rebooting.")
 os.reboot()
 else
@@ -293,6 +307,11 @@ minux.debug("first-run verification failed; continuing without reboot after dela
 if term.isColor() then term.setTextColor(colors.red) end
 print("Post-install verification failed.")
 if term.isColor() then term.setTextColor(colors.white) end
+if updateError ~= nil then
+print("apt update raised: "..tostring(updateError))
+elseif generatedError ~= nil then
+print("rebuild raised: "..tostring(generatedError))
+end
 print("Run 'apt -U' or 'doctor --repair' after checking your APT sources.")
 print("Continuing without rebooting in 3 seconds.")
 sleep(3)
