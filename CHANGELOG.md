@@ -15,6 +15,13 @@ All notable changes to this project will be documented in this file.
   unknown values clearly instead of silently writing them to disk.
 - The boot welcome prompt accepts `help` / `?` and lists the available
   prompt commands (`bash`, `update`, `restart`, `halt`).
+- `login`, `useradd`, `userdel`, and `passwd` now all accept
+  `help` / `-h` / `--help` / `?` and use a uniform Usage block.
+- `useradd` prompts interactively (masked) for a password when one is
+  not supplied on the command line (parity with `passwd`).
+- `userdel` now requires an interactive `[y/N]` confirmation before
+  deleting an account; pass `-y` / `--yes` to keep the previous
+  non-interactive behaviour.
 
 ### Changed
 - `config` and `bash setcolor` now print success/failure feedback
@@ -22,7 +29,17 @@ All notable changes to this project will be documented in this file.
   change applied. Failed `minux.setconfig` calls (e.g. denied because
   the user is not admin/owner) surface a friendly hint instead of
   silently noop'ing.
-- Refreshed `man config` and `man bash` to document the expanded CLI.
+- `login.sh` no longer eats a stray keystroke after empty input, prints
+  `Access granted/denied` in green/red, and shows the username on a
+  failed attempt. It returns false on failure so `&&` / `||` work.
+- `useradd` / `userdel` / `passwd` print colour-coded success and
+  failure lines with concrete hints (e.g. "'apt -i auth-client' to
+  install the network auth client") and avoid duplicate messages when
+  delegating to `usermod`.
+- The boot login retry loop dropped its blocking 2-second sleep and now
+  shows an attempt counter so users can see the prompt is alive.
+- Refreshed `man config`, `man bash`, `man login`, `man useradd`, and
+  `man userdel` to document the expanded CLI.
 
 ## [3.0.2] - 2026-05-08
 

@@ -5,7 +5,18 @@ alias:'login'
 login is part of base
 
 syntax: 
-'login username pass'
+'login'              -
+prompt for username and
+password (masked input)
+'login <user>'        -
+prompt only for the
+password
+'login <user> <pass>' -
+non-interactive (the
+password is visible on
+the command line)
+'login help'         -
+print usage
 
 login can be used to 
 change username on the
