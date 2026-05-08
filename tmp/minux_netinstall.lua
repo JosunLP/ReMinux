@@ -323,6 +323,7 @@ local function resolveRecommendedGitSource(repo, fallbackRef)
                 return nil, err or "unable to read GitHub releases"
         end
         source.configuredSources = {
+                source:urlFor("/etc/apt/"),
                 LEGACY_APT_SOFT,
                 LEGACY_APT_OS,
         }
