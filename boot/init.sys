@@ -339,9 +339,7 @@ end
 if firstrunMarked ~= true then
 print("Could not record first-run marker at "..firstrunFile..".")
 end
-if updateResult ~= true or generatedOk ~= true then
 print("Run 'apt -U' or 'doctor --repair' after checking your APT sources.")
-end
 print("Continuing without rebooting in 3 seconds.")
 sleep(3)
 end
