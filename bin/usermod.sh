@@ -4,21 +4,51 @@ local action   = args[1]
 local username = args[2]
 local newpass  = args[3]
 
+local function withColor(color, callback)
+if term.isColor() then term.setTextColor(color) end
+callback()
+if term.isColor() then term.setTextColor(colors.white) end
+end
+
+local function isHelpToken(token)
+return token == "help" or token == "-h" or token == "--help" or token == "?"
+end
+
+local function err(message)
+withColor(colors.red, function()
+print("usermod: " .. message)
+end)
+end
+
+local function ok(message)
+withColor(colors.green, function()
+print("usermod: " .. message)
+end)
+end
+
+local function printGeneralUsage()
+print("Usage: usermod <action> <username> [password]")
+print("       usermod help|-h|--help|?   show this message")
+print("Actions: add, del, psw")
+end
+
 if _G.admin ~= true then
-print("Access denied!")
+err("requires admin privileges")
+print("Hint: log in as an admin or owner before changing users.")
 return false
 end
 
 if fs.exists("/usr/minux-main/settings.cfg") == false then
-print("Configuration files missing, run 'config login local'")
+err("configuration files are missing")
+print("Hint: run 'config login local' to restore local auth settings.")
 return false
 end
 
 local authtype = minux.getconfig("login")
 if authtype ~= "local" then
-print("Authentication type is not set to local")
-print("Use 'auth-client' to manage networked users")
-print("Use 'apt -i auth-client' to install said package")
+err("local auth is disabled (login=" .. tostring(authtype) .. ")")
+print("Use 'auth-client' to manage networked users.")
+print("Hint: install it with 'apt -i auth-client' if needed.")
 return false
 end
 
@@ -54,91 +84,100 @@ end
 
 local userPath = "/usr/local/auth/" .. (username or "") .. ".usr"
 
-if action == "?" or action == "help" then
+if isHelpToken(action) then
 print("usermod - local user management")
-print("Usage: usermod <action> <username> [password]")
+printGeneralUsage()
 print("  add  <username> <password>  - create a new user")
 print("  del  <username>             - delete a user")
 print("  psw  <username> <password>  - reset a user's password")
 return true
 
+elseif action == nil or action == "" then
+err("missing action")
+printGeneralUsage()
+return false
+
 elseif action == "add" then
 if username == nil or newpass == nil then
+err("missing username or password for 'add'")
 print("Usage: usermod add <username> <password>")
 return false
 end
 local validUser, userError = minux.validateUsername(username)
 if validUser ~= true then
-print("Invalid username: " .. userError)
+err("invalid username '" .. tostring(username) .. "': " .. tostring(userError))
 return false
 end
 if newpass == "" then
-print("Password must not be empty")
+err("password must not be empty")
 return false
 end
 if fs.exists(userPath) then
-print("This user already exists")
+err("user already exists: " .. username)
 return false
 end
 if writeUserFile(userPath, newpass) ~= true then
-print("Could not write user file")
+err("could not write user file")
 return false
 end
-print("User added!")
+ok("added user '" .. username .. "'")
 return true
 
 elseif action == "del" then
 if username == nil then
+err("missing username for 'del'")
 print("Usage: usermod del <username>")
 return false
 end
 local validUser, userError = minux.validateUsername(username)
 if validUser ~= true then
-print("Invalid username: " .. userError)
+err("invalid username '" .. tostring(username) .. "': " .. tostring(userError))
 return false
 end
 if fs.exists(userPath) == false then
-print("This user does not exist")
+err("user does not exist: " .. username)
 return false
 end
 if username == "root" then
-print("You cannot delete the root user")
+err("cannot delete the root user")
 return false
 end
 fs.delete(userPath)
 if fs.exists(userPath) == true then
-print("Could not remove user file")
+err("could not remove user file")
 return false
 end
-print("User removed!")
+ok("removed user '" .. username .. "'")
 return true
 
 elseif action == "psw" then
 if username == nil or newpass == nil then
+err("missing username or password for 'psw'")
 print("Usage: usermod psw <username> <password>")
 return false
 end
 local validUser, userError = minux.validateUsername(username)
 if validUser ~= true then
-print("Invalid username: " .. userError)
+err("invalid username '" .. tostring(username) .. "': " .. tostring(userError))
 return false
 end
 if newpass == "" then
-print("Password must not be empty")
+err("password must not be empty")
 return false
 end
 if fs.exists(userPath) == false then
-print("This user does not exist")
+err("user does not exist: " .. username)
 return false
 end
 if writeUserFile(userPath, newpass) ~= true then
-print("Could not write user file")
+err("could not write user file")
 return false
 end
-print("User modified")
+ok("updated password for '" .. username .. "'")
 return true
 
 else
-print("Unknown action, use 'usermod ?'")
+err("unknown action '" .. tostring(action) .. "'")
+printGeneralUsage()
 return false
 end

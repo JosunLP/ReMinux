@@ -30,6 +30,11 @@ All notable changes to this project will be documented in this file.
   non-interactive behaviour.
 
 ### Changed
+- The core shell now reports the missing command name (`No such program:
+  <name>`) instead of a generic line, including multishell tab launches.
+- `usermod` now matches the newer wrapper style: `help/-h/--help/?`,
+  `usermod:`-prefixed errors, clearer local-vs-network AUTH guidance,
+  and specific usage hints for missing actions / usernames / passwords.
 - `apt` distinguishes between missing argument, missing admin, and
   unknown command instead of one merged "Invalid input or access
   denied" message; failure paths now return `false` and surface

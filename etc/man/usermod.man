@@ -8,6 +8,7 @@ ReMinux core app.
 
 syntax: 
 usermod action arg1 arg2
+usermod help|-h|--help|?
 eg:"usermod add foo bar"
 
 action options:
@@ -40,6 +41,15 @@ network login. the
 only admin and cannot
 be deleted, no other 
 user can be made admin.
+
+usermod requires an
+admin / owner login and
+only works while
+'config login local' is
+active. when network
+login is enabled, use
+the auth-client package
+instead.
 
 remember: local AUTH 
 must store the user and
