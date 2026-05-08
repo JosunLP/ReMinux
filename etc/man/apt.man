@@ -53,7 +53,8 @@ installed and remote
 version information.
 if no app name is
 given it checks
-the core ReMinux package.
+the core ReMinux
+package ('minux-main').
 
 -s : 'source' ,sets an 
 additional repo source
