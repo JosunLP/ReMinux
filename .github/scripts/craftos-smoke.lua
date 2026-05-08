@@ -42,6 +42,7 @@ shell.run = function(program, ...)
         assertTrue(originalShellRun("doctor") == true, "doctor command failed")
         assertTrue(originalShellRun("whoami") == true, "whoami command failed")
         assertTrue(originalShellRun("uname") == true, "uname command failed")
+
         testsPassed = true
         return true
     end
