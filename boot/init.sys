@@ -310,9 +310,12 @@ end
 -- on demand.
 local firstrunDir = fs.getDir(firstrunFile)
 if firstrunDir ~= "" and not fs.exists(firstrunDir) then
-fs.makeDir(firstrunDir)
+local firstrunDirOk, firstrunDirError = pcall(fs.makeDir, firstrunDir)
+if firstrunDirOk ~= true then
+minux.debug("firstrun:mkdir crashed: "..firstrunDir..": "..tostring(firstrunDirError), "minux")
+end
 if not fs.exists(firstrunDir) then
-minux.debug("firstrun:mkdir failed: "..firstrunDir, "minux")
+minux.debug("firstrun:mkdir left path missing: "..firstrunDir, "minux")
 end
 end
 local tmpfile = fs.open(firstrunFile, "w")
@@ -325,7 +328,7 @@ minux.debug("firstrun:write failed: "..firstrunFile, "minux")
 end
 if updateResult and generatedOk then
 if firstrunMarked ~= true then
-minux.debug("first-run verification succeeded but marker write failed; continuing without reboot", "minux")
+minux.debug("firstrun verification succeeded but marker write failed; continuing without reboot", "minux")
 if term.isColor() then term.setTextColor(colors.yellow) end
 print("Installation verified, but could not record first-run marker at "..firstrunFile..".")
 print("Continuing without rebooting to avoid repeating verification on restart.")
