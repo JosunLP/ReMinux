@@ -2,7 +2,7 @@
 local args = { ... }
 if args[1] == "?" or args[1] == "help" then
 	print("Usage: ping [timeout-seconds]")
-	print("Broadcasts a 'minux-ping' rednet packet and lists responders.")
+	print("Broadcasts a 'reminux-ping' rednet packet and lists responders.")
 	print("Timeout defaults to 2 seconds.")
 	return 0
 end
@@ -31,14 +31,14 @@ end
 
 print("Pinging rednet, timeout " .. timeout .. "s ...")
 local start = os.clock()
-rednet.broadcast("minux-ping", "minux-ping")
+rednet.broadcast("reminux-ping", "reminux-ping")
 
 local responders = {}
 local deadline = os.clock() + timeout
 while os.clock() < deadline do
 	local remaining = deadline - os.clock()
 	if remaining <= 0 then break end
-	local id, message, protocol = rednet.receive("minux-pong", remaining)
+	local id, message, protocol = rednet.receive("reminux-pong", remaining)
 	if id ~= nil then
 		responders[#responders + 1] = {
 			id = id, message = message, rtt = os.clock() - start,

@@ -4,7 +4,7 @@ executable location:
 /bin/usermod.sh   
 alias:usermod
 usermod is part of the 
-'minux-main' app.
+ReMinux core app.
 
 syntax: 
 usermod action arg1 arg2

@@ -281,13 +281,13 @@ local generatedError
 local firstrunMarked = false
 if updateResult == true then
 local rebuildOk, rebuildResult = pcall(apt.rebuildgenerated)
-if rebuildOk ~= true then
-minux.debug("firstrun:apt.rebuildgenerated crashed: "..tostring(rebuildResult), "minux")
-generatedError = rebuildResult
-generatedOk = false
-else
-generatedOk = rebuildResult == true
-end
+	if rebuildOk ~= true then
+	minux.debug("firstrun:apt.rebuildgenerated crashed: "..tostring(rebuildResult), "minux")
+	generatedError = rebuildResult
+	generatedOk = false
+	else
+	generatedOk = rebuildResult
+	end
 end
 if updateResult == true and generatedOk == true then
 local tmpfile = fs.open(firstrunFile, "w")

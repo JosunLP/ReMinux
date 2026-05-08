@@ -1095,21 +1095,20 @@ local mapPath = manager.mapCacheDirectory..packname..".map"
 fs.delete(mapPath)
 minux.download(downloadSource, mapPath)
 if fs.exists(mapPath) == true then
-local originalTerminal = minux.disableoutput()
-local runOk, runErr = pcall(shell.run, mapPath.." /")
-minux.enableoutput(originalTerminal)
-if runOk ~= true then
-minux.debug("getpack:map crashed:"..tostring(runErr), "apt")
-if fs.exists(mapPath) then
-fs.delete(mapPath)
-end
-return 109
-end
-fs.delete(mapPath)
-minux.debug("getpack:package executed.", "apt")
-if minux.getconfig("mapcleanup") == "enabled" and fs.exists(mapPath) then
-fs.delete(mapPath)
-end
+	local originalTerminal = minux.disableoutput()
+	local runOk, runErr = pcall(shell.run, mapPath.." /")
+	minux.enableoutput(originalTerminal)
+	if runOk ~= true then
+		minux.debug("getpack:map crashed:"..tostring(runErr), "apt")
+		if fs.exists(mapPath) then
+			fs.delete(mapPath)
+		end
+		return 109
+	end
+	if fs.exists(mapPath) then
+		fs.delete(mapPath)
+	end
+	minux.debug("getpack:package executed.", "apt")
 else
 minux.debug("getpack:nopack-dlfail:109", "apt")
 return 109
