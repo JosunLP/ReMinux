@@ -1,6 +1,6 @@
 AIF=true
 https://raw.githubusercontent.com/JosunLP/ReMinux/main/etc/apt/
-version=3.0.1
+version=3.0.2
 author=minux-team
 php=false
 [filelist]
@@ -11,6 +11,7 @@ php=false
 /boot/network/update.sys
 /boot/alias.ls
 /etc/apt/manifest/APT.db
+/CHANGELOG.md
 /etc/apt/boot/minux-main.d
 /etc/minux-main/sys/menu.lua
 /etc/minux-main/sys/ecpw.sys
