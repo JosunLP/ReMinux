@@ -5,6 +5,12 @@ All notable changes to this project will be documented in this file.
 ## [Unreleased]
 
 ### Added
+- `apt help` / `-h` / `--help` / `?` now prints a structured usage
+  block listing every command, its short flag, and which actions
+  require admin privileges.
+- `halt` and `restart` accept `help` / `-h` / `--help` / `?` and ask
+  for an interactive `[y/N]` confirmation by default; pass `-y` /
+  `--yes` to keep the previous immediate behaviour.
 - `config` with no arguments now lists every configurable key and its
   current value when the `menu` package is not installed, instead of
   printing a generic "invalid input" message.
@@ -24,6 +30,11 @@ All notable changes to this project will be documented in this file.
   non-interactive behaviour.
 
 ### Changed
+- `apt` distinguishes between missing argument, missing admin, and
+  unknown command instead of one merged "Invalid input or access
+  denied" message; failure paths now return `false` and surface
+  red error lines with concrete hints. Removed the always-printed
+  `Apt: operation complete.` trailer that ran even after failures.
 - `config` and `bash setcolor` now print success/failure feedback
   (green on success, red on error) so users can see whether a setting
   change applied. Failed `minux.setconfig` calls (e.g. denied because

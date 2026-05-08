@@ -9,13 +9,21 @@ DESCRIPTION
   off via os.shutdown().
 
 USAGE
-  halt
+  halt [-y]
+  halt help|-h|--help|?
 
 NOTES
   Equivalent to running
   'shutdown' on a real Unix
   system. Use 'restart' to
   reboot instead of stopping.
+
+  Asks for an interactive
+  [y/N] confirmation before
+  powering off unless -y /
+  --yes is given. This avoids
+  accidental shutdowns from
+  typos.
 
   After halting the computer
   must be powered on again in
