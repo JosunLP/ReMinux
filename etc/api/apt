@@ -1098,24 +1098,24 @@ if fs.exists(mapPath) == true then
 local originalTerminal = minux.disableoutput()
 local runOk, runResult = pcall(shell.run, mapPath.." /")
 minux.enableoutput(originalTerminal)
-local function deleteMapIfExists()
+local function deleteMap()
 if fs.exists(mapPath) then
 fs.delete(mapPath)
 end
 end
 if runOk ~= true then
 minux.debug("getpack:map crashed:"..tostring(runResult), "apt")
-deleteMapIfExists()
+deleteMap()
 return 109
 end
 if runResult == false or (type(runResult) == "number" and runResult ~= 0) then
 minux.debug("getpack:map failed:"..tostring(runResult), "apt")
-deleteMapIfExists()
+deleteMap()
 return 109
 end
 minux.debug("getpack:package executed.", "apt")
 if minux.getconfig("mapcleanup") == "enabled" then
-deleteMapIfExists()
+deleteMap()
 end
 else
 minux.debug("getpack:nopack-dlfail:109", "apt")
