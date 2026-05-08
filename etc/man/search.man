@@ -13,7 +13,7 @@ USAGE
   search <name> [start-path]
 
 EXAMPLES
-  search minux
+  search reminux
   search .db
 
 NOTES

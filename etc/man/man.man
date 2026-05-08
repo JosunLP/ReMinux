@@ -4,7 +4,7 @@ executable location:
 '/bin/man.sh' 
 alias:'man'
 man is part of the 
-'minux-main' app
+ReMinux core app
 
 man is used to open 
 manuals.

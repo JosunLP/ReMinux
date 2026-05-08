@@ -2,7 +2,7 @@ ls - file lister
 executable location: 
 '/bin/ls.sh' alias:'ls'
 ls is part of the 
-'minux-main' app
+ReMinux core app
 
 ls is used to list 
 folder contents.

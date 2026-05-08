@@ -16,7 +16,7 @@ if user == nil or user == false or user == "" or user == "foo" then
 	user = "nobody"
 end
 print("user=" .. user)
-if _G.version ~= nil then print("minux=" .. _G.version) end
+if _G.version ~= nil then print("reminux=" .. _G.version) end
 
 print("")
 print("# Shell")

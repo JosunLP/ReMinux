@@ -4,8 +4,8 @@ executable location:
 '/bin/config.sh'   
 alias: 'config'
 config is part of the 
-'minux-main' app config
-is used to change minux
+ReMinux core app.
+It is used to change ReMinux
 configuration
 
 syntax: 
