@@ -5,11 +5,27 @@ executable location:
 alias: 'config'
 config is part of the 
 ReMinux core app.
-It is used to change ReMinux
+It is used to inspect and
+change ReMinux 
 configuration
 
 syntax: 
-'config type setting' 
+'config'              -
+list current settings
+'config <key>'        -
+show current value plus
+the valid options
+'config <key> <value>' -
+change the setting
+'config help'         -
+print usage
+
+When run with no arguments
+and the 'menu' package is
+installed, the graphical
+configuration menu is
+launched instead of a
+listing.
 
 eg: 
 'config login network'

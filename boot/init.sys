@@ -362,7 +362,7 @@ end
 if pocket or turtle then
 print("Hit Enter to start")
 else
-print("Welcome to ReMinux. Hit Enter to start.")
+print("Welcome to ReMinux. Hit Enter to start, or type 'help'.")
 end
 local initput = read()
 while initput ~= nil do
@@ -376,6 +376,15 @@ elseif initput == "reboot" or initput == "restart" then
 minux.restart()
 elseif initput == "halt" or initput == "shutdown" then
 minux.halt()
+elseif initput == "help" or initput == "?" then
+print("Available commands:")
+print("  bash             launch the ReMinux shell")
+print("  update           refresh APT packages now")
+print("  restart / reboot reboot the computer")
+print("  halt / shutdown  shut the computer down")
+print("  help / ?         show this message")
+print("Press Enter on its own to continue to the configured UI.")
+initput = read()
 else
 initput = nil
 end
