@@ -193,3 +193,12 @@ php=false
 /etc/man/ping.man
 /etc/man/chat.man
 /etc/man/curl.man
+/etc/man/bash.man
+/etc/man/edit.man
+/etc/man/halt.man
+/etc/man/lock.man
+/etc/man/makeboot.man
+/etc/man/newtab.man
+/etc/man/restart.man
+/etc/man/useradd.man
+/etc/man/userdel.man

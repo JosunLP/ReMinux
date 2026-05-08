@@ -1,0 +1,29 @@
+restart - reboot the computer
+Executable: /bin/restart.sh
+Alias: restart
+
+DESCRIPTION
+  Reboots the CC: Tweaked
+  computer via os.reboot().
+  ReMinux will boot again
+  through /startup.lua and
+  /boot/init.sys.
+
+USAGE
+  restart
+
+NOTES
+  Use 'halt' to power off
+  instead of rebooting.
+
+  The crash handler in
+  /boot/init.sys counts boot
+  attempts per stage. A clean
+  restart that completes the
+  boot sequence resets those
+  counters automatically.
+
+SEE ALSO
+  halt    - shut down
+  doctor  - audit/repair
+  config  - boot settings

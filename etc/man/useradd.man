@@ -1,0 +1,44 @@
+useradd - add a user account
+Executable: /bin/useradd.sh
+Alias: useradd
+
+DESCRIPTION
+  Creates a new user account
+  through the active auth
+  backend (local or network).
+
+USAGE
+  useradd <username> <password>
+
+NOTES
+  Both the username and
+  password are required.
+  Usernames must start with a
+  letter or digit and may then
+  contain letters, digits, '-'
+  and '_'. The reserved name
+  'foo' cannot be used.
+
+  When the login system is set
+  to 'local', useradd delegates
+  to /bin/usermod.sh and stores
+  the credentials under
+  /usr/local/auth/. When set to
+  'network', the request is
+  forwarded to the AUTH server
+  via the auth API; this
+  requires the auth client API
+  to be loaded and a working
+  Rednet connection.
+
+  Local AUTH stores passwords
+  in recoverable form on the
+  local computer. Do NOT reuse
+  passwords from other systems
+  with local AUTH.
+
+SEE ALSO
+  userdel - remove a user
+  usermod - manage users
+  passwd  - change a password
+  login   - switch user

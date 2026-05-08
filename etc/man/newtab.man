@@ -1,0 +1,38 @@
+newtab - open a workspace tab
+Executable: /bin/newtab.sh
+Alias: newtab
+
+DESCRIPTION
+  Opens a new tab running the
+  ReMinux workspace UI in the
+  current multishell session.
+
+USAGE
+  newtab
+
+NOTES
+  newtab requires a CC: Tweaked
+  shell environment that
+  exposes shell.openTab(), which
+  is normally available only on
+  advanced computers and inside
+  multishell-aware launchers
+  such as the workspace UI.
+
+  On normal computers, turtles
+  or pocket computers without
+  multishell support, newtab
+  prints a notice and exits
+  without doing anything; this
+  matches CC: Tweaked behaviour
+  rather than crashing.
+
+  Internally newtab calls
+  minux.safeOpenTab(), which
+  falls back to a single-shell
+  run when openTab is not
+  available.
+
+SEE ALSO
+  workspace - launch the UI
+  bash      - plain shell
