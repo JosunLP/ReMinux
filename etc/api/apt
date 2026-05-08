@@ -1114,7 +1114,7 @@ deleteMapIfExists()
 return 109
 end
 minux.debug("getpack:package executed.", "apt")
-if minux.getconfig("mapcleanup") == "enabled" and fs.exists(mapPath) then
+if minux.getconfig("mapcleanup") == "enabled" then
 deleteMapIfExists()
 end
 else
