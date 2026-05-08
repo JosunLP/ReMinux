@@ -37,13 +37,13 @@ until fs.exists(path) == false or tries > 64
 
 if fs.exists(path) then
 	print("mktemp: failed to find unique name")
-	return 0
+	return false
 end
 
 local handle = fs.open(path, "w")
 if handle == nil then
 	print("mktemp: cannot create file")
-	return 0
+	return false
 end
 handle.close()
 print(path)

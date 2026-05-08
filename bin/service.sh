@@ -23,14 +23,14 @@ end
 
 if name == nil or name == "" then
 printUsage()
-return 0
+return false
 end
 
 if action == "status" then
 local service = minux.getService(name)
 if service == nil then
 print("service: unknown service: " .. name)
-return 0
+return false
 end
 print("Name    : " .. service.name)
 print("Trigger : " .. (service.trigger or "manual"))
@@ -61,13 +61,13 @@ local handler = actions[action]
 if handler == nil then
 print("service: unknown action: " .. action)
 printUsage()
-return 0
+return false
 end
 
 local ok, err = handler(name)
 if ok ~= true then
 print("service: " .. (err or "operation failed"))
-return 0
+return false
 end
 
 print("service: " .. action .. " ok: " .. name)
