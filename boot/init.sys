@@ -311,8 +311,8 @@ end
 local firstrunDir = fs.getDir(firstrunFile)
 if firstrunDir ~= "" and not fs.exists(firstrunDir) then
 local firstrunDirOk, firstrunDirError = pcall(fs.makeDir, firstrunDir)
-if firstrunDirOk ~= true then
-minux.debug("firstrun:mkdir crashed: "..firstrunDir..": "..tostring(firstrunDirError), "minux")
+if not firstrunDirOk then
+minux.debug("firstrun:mkdir failed: "..firstrunDir..": "..tostring(firstrunDirError), "minux")
 end
 if not fs.exists(firstrunDir) then
 minux.debug("firstrun:mkdir left path missing: "..firstrunDir, "minux")
