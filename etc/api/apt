@@ -1099,9 +1099,7 @@ local originalTerminal = minux.disableoutput()
 local runOk, runResult = pcall(shell.run, mapPath.." /")
 minux.enableoutput(originalTerminal)
 local function deleteMap()
-if fs.exists(mapPath) then
 fs.delete(mapPath)
-end
 end
 if runOk ~= true then
 minux.debug("getpack:map crashed:"..tostring(runResult), "apt")
