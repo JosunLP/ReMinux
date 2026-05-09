@@ -246,14 +246,15 @@ shell.run("/etc/minux-main/sys/menulogin.sys")
 end
 end
 minux.debug("running login.sh", "minux")
-if _G.validlogin ~= true then shell.run("/bin/login.sh") end
 local loginAttempts = 0
 while _G.validlogin ~= true do
 loginAttempts = loginAttempts + 1
+if loginAttempts > 1 then
 minux.debug("login failed.", "minux")
 if term.isColor() then term.setTextColor(colors.red) end
-print("Login failed. attempt " .. loginAttempts .. " - press Enter to retry.")
+print("Login failed. Retrying now (attempt " .. loginAttempts .. ").")
 if term.isColor() then term.setTextColor(colors.white) end
+end
 shell.run("/bin/login.sh")
 end
 else
@@ -376,9 +377,9 @@ elseif initput == "update" then
 apt.update("-f")
 initput = read()
 elseif initput == "reboot" or initput == "restart" then
-minux.restart()
+shell.run("/bin/restart.sh")
 elseif initput == "halt" or initput == "shutdown" then
-minux.halt()
+shell.run("/bin/halt.sh")
 elseif initput == "help" or initput == "?" then
 print("Available commands:")
 print("  bash             launch the ReMinux shell")

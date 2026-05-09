@@ -30,6 +30,12 @@ All notable changes to this project will be documented in this file.
   non-interactive behaviour.
 
 ### Changed
+- The boot welcome prompt now routes `restart` / `halt` through
+  `/bin/restart.sh` and `/bin/halt.sh`, preserving the same `[y/N]`
+  confirmation flow as the shell commands.
+- The boot login retry copy now matches the actual control flow:
+  retries are counted from the first `login.sh` invocation and the
+  message no longer claims that Enter is required before retrying.
 - `find` now follows the newer wrapper style: `help/-h/--help/?`,
   `find:`-prefixed error lines, `false` on invalid arguments, and
   inline hints for missing option values and missing paths.

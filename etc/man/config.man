@@ -17,7 +17,7 @@ show current value plus
 the valid options
 'config <key> <value>' -
 change the setting
-'config help'         -
+'config help|-h|--help|?' -
 print usage
 
 When run with no arguments

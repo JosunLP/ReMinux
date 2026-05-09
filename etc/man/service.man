@@ -25,7 +25,7 @@ DESCRIPTION
 NOTES
   service with no arguments
   defaults to `service list`.
-  use `service list` when
+  Use `service list` when
   you are unsure of a name.
   stop/restart only work for services which
   provide a cooperative stop command. Legacy

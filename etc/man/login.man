@@ -15,7 +15,7 @@ password
 non-interactive (the
 password is visible on
 the command line)
-'login help'         -
+'login help|-h|--help|?' -
 print usage
 
 login can be used to 

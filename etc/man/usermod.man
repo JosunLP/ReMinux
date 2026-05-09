@@ -46,7 +46,7 @@ usermod requires an
 admin / owner login and
 only works while
 'config login local' is
-active. when network
+active. When network
 login is enabled, use
 the auth-client package
 instead.
