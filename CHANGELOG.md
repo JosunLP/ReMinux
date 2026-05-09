@@ -30,6 +30,10 @@ All notable changes to this project will be documented in this file.
   non-interactive behaviour.
 
 ### Changed
+- The boot welcome banner artwork (`etc/minux-main/welcome/mnx.nfp`) now
+  reads `reminux` instead of `minux` while keeping the original blocky
+  pixel-font style; `welcome.sys` shifts the banner left so the wider
+  art still fits inside the standard 51-column terminal.
 - The boot welcome prompt now routes `restart` / `halt` through
   `/bin/restart.sh` and `/bin/halt.sh`, preserving the same `[y/N]`
   confirmation flow as the shell commands.
