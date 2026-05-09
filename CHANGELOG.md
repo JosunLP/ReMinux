@@ -30,6 +30,9 @@ All notable changes to this project will be documented in this file.
   non-interactive behaviour.
 
 ### Changed
+- `find` now follows the newer wrapper style: `help/-h/--help/?`,
+  `find:`-prefixed error lines, `false` on invalid arguments, and
+  inline hints for missing option values and missing paths.
 - `service` now follows the newer command style: `help/-h/--help/?`,
   clearer missing-name and unknown-action errors, a hint toward
   `service list`, and color-gated success/failure output.
