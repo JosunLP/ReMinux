@@ -53,41 +53,20 @@ import sys
 
 path = Path(sys.argv[1])
 source = path.read_text()
-target = """if pocket or turtle then
-print("Hit Enter to start")
-else
-print("Welcome to ReMinux. Hit Enter to start.")
-end
-local initput = read()
-while initput ~= nil do
-if initput == "bash" then
-minux.debug("launching prompt", "minux")
-shell.run(bash)
-elseif initput == "update" then
-apt.update("-f")
-initput = read()
-elseif initput == "reboot" or initput == "restart" then
-minux.restart()
-elseif initput == "halt" or initput == "shutdown" then
-minux.halt()
-else
-initput = nil
-end
-end"""
-replacement = """if pocket or turtle then
-print("Hit Enter to start")
-else
-print("Welcome to ReMinux. Hit Enter to start.")
-end
-local initput = nil"""
-
-if target not in source:
+start = source.find("local initput = read()")
+launch_ui = source.find("-- Launch configured UI", start)
+if start == -1 or launch_ui == -1:
     raise SystemExit(
-        "Failed to patch boot/init.sys: the expected interactive boot prompt block was not found. "
+        "Failed to patch boot/init.sys: the welcome prompt block was not found. "
         "The boot flow likely changed and the CraftOS-PC smoke test needs updating."
     )
-
-path.write_text(source.replace(target, replacement, 1))
+block = source[start:launch_ui]
+if "while initput ~= nil do" not in block:
+    raise SystemExit(
+        "Failed to patch boot/init.sys: the welcome prompt loop was not found. "
+        "The boot flow likely changed and the CraftOS-PC smoke test needs updating."
+    )
+path.write_text(source[:start] + "local initput = nil\n" + source[launch_ui:])
 PY
 
 set +e

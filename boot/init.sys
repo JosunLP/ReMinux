@@ -378,8 +378,10 @@ apt.update("-f")
 initput = read()
 elseif initput == "reboot" or initput == "restart" then
 shell.run("/bin/restart.sh")
+initput = read()
 elseif initput == "halt" or initput == "shutdown" then
 shell.run("/bin/halt.sh")
+initput = read()
 elseif initput == "help" or initput == "?" then
 print("Available commands:")
 print("  bash             launch the ReMinux shell")
