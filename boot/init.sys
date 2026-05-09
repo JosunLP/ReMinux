@@ -252,7 +252,7 @@ while _G.validlogin ~= true do
 loginAttempts = loginAttempts + 1
 minux.debug("login failed.", "minux")
 if term.isColor() then term.setTextColor(colors.red) end
-print("Login failed. Attempt " .. loginAttempts .. " - press Enter to retry.")
+print("Login failed. attempt " .. loginAttempts .. " - press Enter to retry.")
 if term.isColor() then term.setTextColor(colors.white) end
 shell.run("/bin/login.sh")
 end
