@@ -2,17 +2,42 @@ local args = { ... }
 local action = args[1] or "list"
 local name = args[2]
 
-local function printUsage()
-print("Usage: service [list|status|start|stop|restart|enable|disable] [name]")
+local function withColor(color, callback)
+if term.isColor() then term.setTextColor(color) end
+callback()
+if term.isColor() then term.setTextColor(colors.white) end
 end
 
-if action == "?" or action == "help" then
+local function isHelpToken(token)
+return token == "help" or token == "-h" or token == "--help" or token == "?"
+end
+
+local function err(message)
+withColor(colors.red, function()
+print("service: " .. message)
+end)
+end
+
+local function ok(message)
+withColor(colors.green, function()
+print("service: " .. message)
+end)
+end
+
+local function printUsage()
+print("Usage: service [list|status|start|stop|restart|enable|disable] [name]")
+print("       service help|-h|--help|?   show this message")
+print("Use 'service list' to see available service names.")
+end
+
+if isHelpToken(action) then
 printUsage()
 return 0
 end
 
 if action == "list" then
 local services = minux.listServices()
+print("Name         Trigger  Enabled  State")
 for _, service in ipairs(services) do
 local state = service.state or "inactive"
 local enabled = service.enabled == true and "enabled" or "disabled"
@@ -22,6 +47,7 @@ return 0
 end
 
 if name == nil or name == "" then
+err("missing service name for '" .. tostring(action) .. "'")
 printUsage()
 return false
 end
@@ -29,7 +55,8 @@ end
 if action == "status" then
 local service = minux.getService(name)
 if service == nil then
-print("service: unknown service: " .. name)
+err("unknown service: " .. name)
+print("Hint: use 'service list' to see available services.")
 return false
 end
 print("Name    : " .. service.name)
@@ -59,15 +86,15 @@ end,
 
 local handler = actions[action]
 if handler == nil then
-print("service: unknown action: " .. action)
+err("unknown action: " .. action)
 printUsage()
 return false
 end
 
-local ok, err = handler(name)
-if ok ~= true then
-print("service: " .. (err or "operation failed"))
+local succeeded, handlerErr = handler(name)
+if succeeded ~= true then
+err(handlerErr or "operation failed")
 return false
 end
 
-print("service: " .. action .. " ok: " .. name)
+ok(action .. " ok: " .. name)

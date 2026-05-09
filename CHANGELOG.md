@@ -30,6 +30,12 @@ All notable changes to this project will be documented in this file.
   non-interactive behaviour.
 
 ### Changed
+- `service` now follows the newer command style: `help/-h/--help/?`,
+  clearer missing-name and unknown-action errors, a hint toward
+  `service list`, and color-gated success/failure output.
+- `doctor` now accepts `-h` and reports unknown arguments with a proper
+  `doctor:`-prefixed error plus inline usage instead of a vague
+  `try 'man doctor'` line.
 - The core shell now reports the missing command name (`No such program:
   <name>`) instead of a generic line, including multishell tab launches.
 - `usermod` now matches the newer wrapper style: `help/-h/--help/?`,

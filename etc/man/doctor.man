@@ -18,6 +18,7 @@ DESCRIPTION
 USAGE
   doctor
   doctor --repair
+  doctor help|-h|--help|?
 
 OPTIONS
   --repair
