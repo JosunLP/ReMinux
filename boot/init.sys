@@ -373,6 +373,7 @@ while initput ~= nil do
 if initput == "bash" then
 minux.debug("launching prompt", "minux")
 shell.run(bash)
+initput = read()
 elseif initput == "update" then
 apt.update("-f")
 initput = read()
