@@ -4,6 +4,8 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+## [3.1.0] - 2026-05-10
+
 ### Added
 - `apt help` / `-h` / `--help` / `?` now prints a structured usage
   block listing every command, its short flag, and which actions
@@ -75,6 +77,7 @@ All notable changes to this project will be documented in this file.
   shows an attempt counter so users can see the prompt is alive.
 - Refreshed `man config`, `man bash`, `man login`, `man useradd`, and
   `man userdel` to document the expanded CLI.
+- Bumped project package version to 3.1.0.
 
 ## [3.0.2] - 2026-05-08
 
