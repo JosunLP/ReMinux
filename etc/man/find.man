@@ -8,6 +8,7 @@ Usage:
   find [path] [-name <glob>]
        [-type f|d]
        [-maxdepth n]
+  find help|-h|--help|?
 
 Examples:
   find

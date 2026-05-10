@@ -8,9 +8,15 @@ DESCRIPTION
   (local or network).
 
 USAGE
-  userdel <username>
+  userdel <username> [-y]
+  userdel help|-h|--help|?
 
 NOTES
+  Asks for an interactive
+  [y/N] confirmation before
+  deleting unless -y / --yes
+  is given.
+
   When the login system is set
   to 'local', userdel delegates
   to /bin/usermod.sh and

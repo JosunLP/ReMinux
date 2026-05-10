@@ -20,6 +20,8 @@ to fetch.
 
 syntax: 
 'apt command app'
+'apt help|-h|--help|?' -
+print usage
 
 command parameters: 
 -l : 'list' , 

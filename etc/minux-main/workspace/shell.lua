@@ -227,7 +227,7 @@ local function runResolvedCommand(command, arguments, ioContext)
         end
         return result
     else
-        printError("No such program")
+        printError("No such program: " .. tostring(command))
         return false
     end
 end
@@ -595,7 +595,7 @@ if multishell then
             elseif sPath ~= nil then
                 return multishell.launch(createShellEnv("rom/programs"), "rom/programs/shell.lua", sCommand, table.unpack(tWords, 2))
             else
-                printError("No such program")
+                printError("No such program: " .. tostring(sCommand))
             end
         end
     end

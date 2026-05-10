@@ -2,15 +2,33 @@
 local args = { ... }
 local repair = false
 
-if args[1] == "?" or args[1] == "help" or args[1] == "--help" then
+local function withColor(color, callback)
+if term.isColor() then term.setTextColor(color) end
+callback()
+if term.isColor() then term.setTextColor(colors.white) end
+end
+
+local function isHelpToken(token)
+return token == "help" or token == "-h" or token == "--help" or token == "?"
+end
+
+local function printUsage()
 print("doctor - system health audit")
 print("Usage: doctor [--repair]")
+print("       doctor help|-h|--help|?   show this message")
 print("  --repair  recreate missing core files and directories")
+end
+
+if isHelpToken(args[1]) then
+printUsage()
 return true
 elseif args[1] == "--repair" or args[1] == "repair" then
 repair = true
 elseif args[1] ~= nil then
-print("Invalid input, try 'man doctor'")
+withColor(colors.red, function()
+print("doctor: unknown option '" .. tostring(args[1]) .. "'")
+end)
+printUsage()
 return false
 end
 

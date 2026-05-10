@@ -14,6 +14,7 @@ USAGE
   bash <command>
   bash setcolor <text>
        <background> <prompt>
+  bash help|-h|--help|?
 
 NOTES
   Without arguments bash opens
@@ -23,12 +24,16 @@ NOTES
   exits.
 
   'bash setcolor' updates the
-  shell theme. Each colour
-  argument must be a valid
-  CC: Tweaked colour name
-  (e.g. white, black, lime,
-  lightBlue, lightGray, gray).
-  On non-advanced terminals
+  shell theme. All three colour
+  arguments are required and
+  must be valid CC: Tweaked
+  colour names (e.g. white,
+  black, lime, lightBlue,
+  lightGray, gray). Unknown
+  colours are rejected with an
+  error instead of being
+  silently accepted. On
+  non-advanced terminals
   colours fall back to white
   on black automatically.
 

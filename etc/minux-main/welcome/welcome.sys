@@ -11,7 +11,7 @@ local bannerPath = "/etc/minux-main/welcome/mnx.nfp"
   paintutils.drawFilledBox(1, 1, tX, tY-2, colors.gray)
   paintutils.drawImage(img, 0, 2)
   if not pocket then
-    paintutils.drawImage(banner, 22, 5)
+    paintutils.drawImage(banner, 14, 5)
     local mX, mY = term.getCursorPos()
     term.setCursorPos(28, mY+1)
     print("Version: "..version)

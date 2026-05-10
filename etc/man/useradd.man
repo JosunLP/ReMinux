@@ -8,11 +8,14 @@ DESCRIPTION
   backend (local or network).
 
 USAGE
-  useradd <username> <password>
+  useradd <username> [password]
+  useradd help|-h|--help|?
 
 NOTES
-  Both the username and
-  password are required.
+  The username is required. If
+  no password is given,
+  useradd prompts for one
+  (input is masked).
   Usernames must start with a
   letter or digit and may then
   contain letters, digits, '-'

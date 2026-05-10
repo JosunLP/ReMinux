@@ -11,6 +11,7 @@ USAGE
   service restart <name>
   service enable <name>
   service disable <name>
+  service help|-h|--help|?
 
 DESCRIPTION
   ReMinux exposes legacy boot hooks such as
@@ -22,6 +23,10 @@ DESCRIPTION
   /usr/minux-main/data/services.db.
 
 NOTES
+  service with no arguments
+  defaults to `service list`.
+  Use `service list` when
+  you are unsure of a name.
   stop/restart only work for services which
   provide a cooperative stop command. Legacy
   tab-based services without one report an

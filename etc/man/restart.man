@@ -10,11 +10,17 @@ DESCRIPTION
   /boot/init.sys.
 
 USAGE
-  restart
+  restart [-y]
+  restart help|-h|--help|?
 
 NOTES
   Use 'halt' to power off
   instead of rebooting.
+
+  Asks for an interactive
+  [y/N] confirmation before
+  rebooting unless -y /
+  --yes is given.
 
   The crash handler in
   /boot/init.sys counts boot
