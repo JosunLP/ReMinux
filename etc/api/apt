@@ -1004,7 +1004,7 @@ end
 -- files (alias/boot/autorun).  Intentionally network-free so a clean offline
 -- install does not report a verification failure.
 function postinstall()
-local _, configError = verifyconfig()
+local repairedConfig, configError = verifyconfig()
 if configError == APT_ERROR_CONFIG_INVALID then
 return APT_ERROR_CONFIG_INVALID
 end
