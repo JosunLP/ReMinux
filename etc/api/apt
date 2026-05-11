@@ -19,6 +19,7 @@ sourceListPath = "/usr/apt/source.ls",
 sourceCachePath = "/temp/apt/source.ls",
 programListPath = "/temp/apt/programs.ls",
 manifestDirectory = "/etc/apt/list/",
+shippedManifestDirectory = "/etc/apt/manifest/",
 manifestCacheDirectory = "/temp/apt/manifest/",
 mapCacheDirectory = "/temp/apt/map/",
 githubRepo = "JosunLP/ReMinux",
@@ -759,6 +760,42 @@ self:buildFromDirectory(self.buildJobs.autorun)
 return true
 end
 
+-- Copy shipped per-package manifests from the read-only repository tree at
+-- self.shippedManifestDirectory (e.g. /etc/apt/manifest/) into the active
+-- installed manifest tree at self.manifestDirectory (/etc/apt/list/) for any
+-- non-virtual package listed in installed.db that is missing a local manifest.
+-- This bootstrap is required after a fresh file-copy install because the
+-- repository ships per-package manifests under /etc/apt/manifest/, while the
+-- apt update/install flows expect them under /etc/apt/list/.
+function AptManager:seedInstalledManifests()
+local installedPackages = self:readLines(self.installedListPath)
+if type(installedPackages) ~= "table" then
+minux.debug("seedInstalledManifests:installed list unreadable:"..self.installedListPath, "apt")
+return false
+end
+local sourceDir = self.shippedManifestDirectory
+if type(sourceDir) ~= "string" or sourceDir == "" or fs.exists(sourceDir) ~= true then
+return true
+end
+for index = 1, #installedPackages do
+local packname = installedPackages[index]
+if self:validatePackageName(packname) == true and self:isVirtualInstalledEntry(packname) ~= true then
+local installedPath = self.manifestDirectory..packname..".db"
+local shippedPath = sourceDir..packname..".db"
+if fs.exists(installedPath) ~= true and fs.exists(shippedPath) == true then
+self:ensureParentDirectory(installedPath)
+local ok, err = pcall(fs.copy, shippedPath, installedPath)
+if not ok then
+minux.debug("seedInstalledManifests:copy failed:"..packname..":"..tostring(err), "apt")
+else
+minux.debug("seedInstalledManifests:seeded:"..packname, "apt")
+end
+end
+end
+end
+return true
+end
+
 function AptManager:findSources(packname)
 if self:validatePackageName(packname) ~= true then
 return nil, APT_ERROR_PACKAGE_NOT_FOUND
@@ -952,6 +989,45 @@ end
 
 function rebuildgenerated()
 return manager:rebuildGeneratedFiles()
+end
+
+-- Bootstrap any installed.db entry whose per-package manifest is missing in
+-- /etc/apt/list/ by copying the shipped manifest from /etc/apt/manifest/.
+-- Safe to call repeatedly: it is a no-op once manifests are in place.
+function bootstrapinstalled()
+return manager:seedInstalledManifests()
+end
+
+-- Local "is this install consistent?" verification used by the first-run
+-- post-install check.  Seeds missing per-package manifests, confirms every
+-- non-virtual installed package now has a manifest, and rebuilds generated
+-- files (alias/boot/autorun).  Intentionally network-free so a clean offline
+-- install does not report a verification failure.
+function postinstall()
+manager:seedInstalledManifests()
+local installedPackages = manager:readLines(manager.installedListPath)
+if type(installedPackages) ~= "table" then
+minux.debug("postinstall:installed list unreadable:"..manager.installedListPath, "apt")
+return APT_ERROR_CONFIG_INVALID
+end
+for index = 1, #installedPackages do
+local packname = installedPackages[index]
+if manager:validatePackageName(packname) ~= true then
+minux.debug("postinstall:invalid package name:"..tostring(packname), "apt")
+return false
+end
+if manager:isVirtualInstalledEntry(packname) ~= true then
+local installedPath = manager.manifestDirectory..packname..".db"
+if fs.exists(installedPath) ~= true then
+minux.debug("postinstall:missing manifest:"..packname, "apt")
+return false
+end
+end
+end
+if manager:rebuildGeneratedFiles() ~= true then
+return false
+end
+return true
 end
 
 function install(packname)
@@ -1231,6 +1307,12 @@ local _, configError = verifyconfig()
 if configError == APT_ERROR_CONFIG_INVALID then
 return APT_ERROR_CONFIG_INVALID
 end
+
+-- Seed missing per-package manifests from the shipped /etc/apt/manifest/
+-- tree.  Without this a freshly-installed system whose installed.db lists
+-- minux-main but whose per-list manifest has never been written would
+-- always treat the update as a failure.
+manager:seedInstalledManifests()
 
 local forcedupdate = packname == "-f"
 if packname ~= nil and forcedupdate ~= true then
