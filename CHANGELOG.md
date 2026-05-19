@@ -4,6 +4,21 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### Fixed
+- First-run post-install verification ("Postinstall-Check") no longer
+  fails on a clean install. The shipped per-package manifests under
+  `/etc/apt/manifest/` are now bootstrapped into `/etc/apt/list/` before
+  the check runs, and the verification itself is network-free so an
+  offline install reports success when the local state is consistent.
+- `apt update` (and `apt -U` / `doctor --repair`) now seed the same
+  missing per-package manifests at the start of the run so a freshly
+  installed system can be refreshed from the network without first
+  hitting "installed package missing local manifest" failures.
+
+### Added
+- `apt.postinstall()` and `apt.bootstrapinstalled()` API entries on the
+  `apt` module for local-only verification and manifest seeding.
+
 ## [3.1.0] - 2026-05-10
 
 ### Added
