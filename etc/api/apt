@@ -1015,12 +1015,12 @@ minux.debug("postinstall:installed list unreadable:"..manager.installedListPath,
 return APT_ERROR_CONFIG_INVALID
 end
 for index = 1, #installedPackages do
-local packname = installedPackages[index]
-if manager:isValidPackageName(packname) ~= true then
+local packname = string.match(installedPackages[index], "^%s*(.-)%s*$")
+if packname ~= "" and manager:isValidPackageName(packname) ~= true then
 minux.debug("postinstall:invalid package name:"..tostring(packname), "apt")
 return false
 end
-if manager:isVirtualInstalledEntry(packname) ~= true then
+if packname ~= "" and manager:isVirtualInstalledEntry(packname) ~= true then
 local installedPath = manager.manifestDirectory..packname..".db"
 if fs.exists(installedPath) ~= true then
 minux.debug("postinstall:missing manifest:"..packname, "apt")
