@@ -1016,7 +1016,7 @@ return APT_ERROR_CONFIG_INVALID
 end
 for index = 1, #installedPackages do
 local packname = installedPackages[index]
-if manager:validatePackageName(packname) ~= true then
+if manager:isValidPackageName(packname) ~= true then
 minux.debug("postinstall:invalid package name:"..tostring(packname), "apt")
 return false
 end
