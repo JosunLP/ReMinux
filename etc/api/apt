@@ -207,6 +207,8 @@ end
 return string.find(packname, "..", 1, true) == nil
 end
 
+-- Normalize installed.db entries by trimming surrounding whitespace and
+-- returning nil for blank lines so apt flows treat them consistently.
 function AptManager:normalizeInstalledEntry(packname)
 if type(packname) ~= "string" then
 return nil
