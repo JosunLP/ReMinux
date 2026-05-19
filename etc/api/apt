@@ -207,6 +207,17 @@ end
 return string.find(packname, "..", 1, true) == nil
 end
 
+function AptManager:normalizeInstalledEntry(packname)
+if type(packname) ~= "string" then
+return nil
+end
+local normalized = string.match(packname, "^%s*(.-)%s*$")
+if normalized == "" then
+return nil
+end
+return normalized
+end
+
 function AptManager:validatePackageName(packname)
 if self:isValidPackageName(packname) == true then
 return true
@@ -778,8 +789,8 @@ if type(sourceDir) ~= "string" or sourceDir == "" or fs.exists(sourceDir) ~= tru
 return true
 end
 for index = 1, #installedPackages do
-local packname = installedPackages[index]
-if self:validatePackageName(packname) == true and self:isVirtualInstalledEntry(packname) ~= true then
+local packname = self:normalizeInstalledEntry(installedPackages[index])
+if packname ~= nil and self:validatePackageName(packname) == true and self:isVirtualInstalledEntry(packname) ~= true then
 local installedPath = self.manifestDirectory..packname..".db"
 local shippedPath = sourceDir..packname..".db"
 if fs.exists(installedPath) ~= true and fs.exists(shippedPath) == true then
@@ -1015,12 +1026,12 @@ minux.debug("postinstall:installed list unreadable:"..manager.installedListPath,
 return APT_ERROR_CONFIG_INVALID
 end
 for index = 1, #installedPackages do
-local packname = string.match(installedPackages[index], "^%s*(.-)%s*$")
-if packname ~= "" and manager:isValidPackageName(packname) ~= true then
+local packname = manager:normalizeInstalledEntry(installedPackages[index])
+if packname ~= nil and manager:isValidPackageName(packname) ~= true then
 minux.debug("postinstall:invalid package name:"..tostring(packname), "apt")
 return false
 end
-if packname ~= "" and manager:isVirtualInstalledEntry(packname) ~= true then
+if packname ~= nil and manager:isVirtualInstalledEntry(packname) ~= true then
 local installedPath = manager.manifestDirectory..packname..".db"
 if fs.exists(installedPath) ~= true then
 minux.debug("postinstall:missing manifest:"..packname, "apt")
@@ -1358,7 +1369,8 @@ return APT_ERROR_CONFIG_INVALID
 end
 local updateFailed = false
 for index = 1, #installedPackages do
-local nextpack = installedPackages[index]
+local nextpack = manager:normalizeInstalledEntry(installedPackages[index])
+if nextpack ~= nil then
 minux.debug("finding source", "apt")
 if manager:validatePackageName(nextpack) ~= true then
 updateFailed = true
@@ -1391,6 +1403,7 @@ updateFailed = true
 end
 else
 minux.debug("update:package already current or newer:"..nextpack, "apt")
+end
 end
 end
 end
