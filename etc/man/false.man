@@ -1,0 +1,7 @@
+false, /bin/false.sh
+alias: 'false'
+
+Do nothing and exit with a failure
+status. Handy in command lists:
+
+  false || echo runs

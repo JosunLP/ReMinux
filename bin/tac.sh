@@ -1,24 +1,15 @@
--- tac: print the lines of a file in reverse order.
+-- tac: print lines of files (or piped input) in reverse order.
 local args = { ... }
-if args[1] == nil or args[1] == "?" or args[1] == "help" then
-	print("Usage: tac <file>")
-	print("Print the file with its lines in reverse order.")
+if args[1] == "?" or args[1] == "help" or args[1] == "--help" then
+	print("Usage: tac [file...]")
+	print("Print the input with its lines in reverse order.")
 	return 0
 end
 
-local target = shell.resolve(args[1])
-if fs.exists(target) == false or fs.isDir(target) then
-	print("tac: not a file: " .. target)
-	return false
-end
+local sources, failed = minux.collectInput("tac", args, shell.resolve)
+if sources == nil then return false end
 
-local lines = {}
-local handle = fs.open(target, "r")
-local line = handle.readLine()
-while line ~= nil do
-	lines[#lines + 1] = line
-	line = handle.readLine()
+for _, source in ipairs(sources) do
+	for index = #source.lines, 1, -1 do print(source.lines[index]) end
 end
-handle.close()
-
-for index = #lines, 1, -1 do print(lines[index]) end
+return not failed

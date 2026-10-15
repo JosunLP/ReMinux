@@ -31,6 +31,7 @@ local TEMP_EDIT_FILE = "/temp/dev/removeline.tmp"
 local USERNAME_PATTERN = "^[%w][%w_-]*$"
 local USERNAME_RULE_TEXT = "username must start with a letter or digit, then may use letters, digits, '_' and '-'"
 local basePrint = print
+local LOG_ROTATE_BYTES = 32 * 1024
 -- Built-in services use low explicit order values, so 1000 keeps undeclared
 -- services after them while still allowing custom services to insert earlier.
 local DEFAULT_SERVICE_ORDER = 1000
@@ -820,13 +821,87 @@ local function serviceSessionState()
 	return _G.__minuxServicesStarted
 end
 
--- Write a single key=value line in a config file, replacing any existing entry.
-local function updateConfigLine(cfgf, key, value)
-local line = minux.findline(cfgf, key .. "=")
-if line ~= false and line ~= nil then
-minux.removeline(cfgf, line)
+-- Allowed values per setting; the first entry is the fallback used when the
+-- stored value is missing or invalid.
+local SETTING_CHOICES = {
+login        = { "disabled", "local", "network" },
+crashhandler = { "enabled", "disabled" },
+clearlogin   = { "enabled", "disabled" },
+network      = { "disabled", "enabled" },
+mapcleanup   = { "disabled", "enabled" },
+ui           = { "workspace", "prompt", "craftos", "menu" },
+debug        = { "disabled", "enabled", "logging", "full" },
+update       = { "disabled", "enabled", "always" },
+welcome      = { "disabled", "enabled" },
+}
+-- Settings that a user may override in /home/<user>/minux-config/minux.cfg.
+local USER_SCOPED_SETTINGS = { ui = true, welcome = true }
+
+local function normaliseSettingValue(key, value)
+local choices = SETTING_CHOICES[key]
+if choices == nil then
+return nil
 end
-minux.insertline(cfgf, key .. "=" .. value)
+for _, choice in ipairs(choices) do
+if value == choice then
+return value
+end
+end
+return choices[1]
+end
+
+-- Parse a key=value settings file into a table. Keys are matched exactly so
+-- that e.g. "login" never collides with "clearlogin". The last occurrence of a
+-- key wins, mirroring how the file is appended to.
+local function readSettingsFile(cfgf)
+local values = {}
+if cfgf == nil or fs.exists(cfgf) ~= true or fs.isDir(cfgf) == true then
+return values
+end
+local handle = fs.open(cfgf, "r")
+if handle == nil then
+return values
+end
+local line = handle.readLine()
+while line ~= nil do
+local key, value = string.match(line, "^%s*([%w_%-%.]+)%s*=%s*(.-)%s*$")
+if key ~= nil then
+values[key] = value
+end
+line = handle.readLine()
+end
+handle.close()
+return values
+end
+
+-- The graphical menu UI is provided by the optional "menu" package, which
+-- installs /bin/minux.sh. installed.db may list "menu" as a virtual entry
+-- even when the launcher itself is absent, so check the launcher directly.
+local function isMenuAvailable()
+return fs.exists("/bin/minux.sh") == true
+end
+
+local function hasSettingKey(cfgf, key)
+return readSettingsFile(cfgf)[key] ~= nil
+end
+
+-- Write a single key=value line in a config file, replacing every existing
+-- entry for exactly that key (other keys that merely contain it are kept).
+local function updateConfigLine(cfgf, key, value)
+local lines = {}
+if fs.exists(cfgf) == true and fs.isDir(cfgf) ~= true then
+lines = minux.readtable(cfgf) or {}
+end
+local kept = {}
+for _, line in ipairs(lines) do
+local lineKey = string.match(line, "^%s*([%w_%-%.]+)%s*=")
+if lineKey ~= key then
+kept[#kept + 1] = line
+end
+end
+kept[#kept + 1] = key .. "=" .. value
+ensureParentDirectory(cfgf)
+return minux.writetable(cfgf, kept)
 end
 
 -- Resolve the settings file path for the current user (falls back to global).
@@ -844,7 +919,7 @@ end
 -- Ensure the per-user config directory and file exist, creating them with
 -- default content when missing.
 local function ensureUserConfig(defaults)
-if _G.login == nil or _G.login == "foo" then
+if _G.login == nil or _G.login == false or _G.login == "" or _G.login == NO_USER then
 return SETTINGS_FILE
 end
 local dir = "/home/" .. _G.login .. "/minux-config/"
@@ -1133,6 +1208,86 @@ end
 end
 basePrint(line)
 return true
+end
+
+-- Read every line of a regular file. Returns the lines, or nil and a
+-- user-readable reason.
+function readFileLines(path)
+expect(1, path, "string")
+if fs.exists(path) ~= true then
+return nil, "no such file: " .. path
+end
+if fs.isDir(path) == true then
+return nil, "is a directory: " .. path
+end
+local handle = fs.open(path, "r")
+if handle == nil then
+return nil, "cannot open: " .. path
+end
+local lines = {}
+local line = handle.readLine()
+while line ~= nil do
+lines[#lines + 1] = line
+line = handle.readLine()
+end
+handle.close()
+return lines
+end
+
+-- Gather the input of a text filter (cat, head, sort, ...). Files named on
+-- the command line are read in order; "-" or an empty file list reads the
+-- piped / redirected standard input. Problems are reported as
+-- "<program>: <reason>" and skipped. Returns a list of
+-- { label = string, lines = table } and a flag telling whether any input
+-- failed, or nil when there is no input at all.
+function collectInput(program, paths, resolve)
+expect(1, program, "string")
+expect(2, paths, "table")
+expect(3, resolve, "function", "nil")
+local sources = {}
+local failed = false
+local function report(message)
+failed = true
+if term.isColor() then term.setTextColor(colors.red) end
+basePrint(program .. ": " .. message)
+if term.isColor() then term.setTextColor(colors.white) end
+end
+local function addStdin()
+local lines = minux.readInputLines()
+if type(lines) ~= "table" then
+return false
+end
+sources[#sources + 1] = { label = "(standard input)", lines = lines }
+return true
+end
+if #paths == 0 then
+if addStdin() ~= true then
+report("no input file given (pass a file or pipe data in)")
+return nil, true
+end
+return sources, false
+end
+for _, path in ipairs(paths) do
+if path == "-" then
+if addStdin() ~= true then
+report("standard input is not available")
+end
+else
+local resolved = resolve ~= nil and resolve(path) or path
+local permitted, permissionErr = minux.requirePermission(resolved, "read")
+if fs.exists(resolved) == true and permitted ~= true then
+report(permissionErr)
+else
+local lines, err = minux.readFileLines(resolved)
+if lines == nil then
+report(err)
+else
+sources[#sources + 1] = { label = resolved, lines = lines }
+end
+end
+end
+end
+return sources, failed
 end
 
 function pathInfo(path)
@@ -1639,36 +1794,86 @@ return returntable
 end
 
 function lock()
-if logintype() ~= "disabled" then
+if logintype() == "disabled" then
+print("lock: cannot lock the screen while login is disabled")
+print("Enable it first with: config login local")
+return false
+end
+if type(_G.masterpass) ~= "string" or _G.masterpass == "" then
+print("lock: no active session to lock")
+return false
+end
+_G.lockactive = true
+local attempts = 0
+while _G.lockactive == true do
+term.setBackgroundColor(colors.black)
+term.setTextColor(colors.white)
 term.clear()
 term.setCursorPos(1, 1)
-print("ReMinux V:" .. _G.version)
-print(" ")
-print("This system is currently locked by user:" .. _G.login)
-print("Type the password to unlock this system")
-print("If you already unlocked it, hit Enter")
-print(" ")
-_G.lockactive = true
-while _G.lockactive == true do
-write("password:")
-local input = read("*")
-if _G.lockactive == false then return 0 end
-local key = readEncryptKey()
-local expected = _G.masterpass
-if key ~= nil then
-expected = minux.decrypt(_G.masterpass, key)
+local width = term.getSize()
+if term.isColor() then term.setTextColor(colors.cyan) end
+print(string.rep("=", width))
+print(" ReMinux " .. tostring(_G.version or "") .. "  -  screen locked")
+print(string.rep("=", width))
+if term.isColor() then term.setTextColor(colors.white) end
+print("")
+print(" Locked by: " .. tostring(minux.displayUser()))
+if attempts > 0 then
+if term.isColor() then term.setTextColor(colors.red) end
+print(" Wrong password (" .. attempts .. " failed attempt" .. (attempts == 1 and "" or "s") .. ")")
+if term.isColor() then term.setTextColor(colors.white) end
+else
+print("")
 end
-if input == expected then
+print("")
+write(" Password: ")
+-- pullEventRaw keeps Ctrl+T from bypassing the lock screen.
+local input = minux.readProtected("*")
+if _G.lockactive ~= true then
+break
+end
+if input == _G.masterpass then
 _G.lockactive = false
 else
-print("Wrong password")
+attempts = attempts + 1
+minux.debug("lock:wrong password", "login")
+sleep(math.min(attempts, 5) * 0.5)
 end
 end
-else
-print("Cannot enable lock with users disabled")
-print("Hit Enter to continue")
-read()
+term.clear()
+term.setCursorPos(1, 1)
+return true
 end
+
+-- read() variant that ignores terminate events (used by the lock screen).
+function readProtected(replaceChar)
+expect(1, replaceChar, "string", "nil")
+local originalPullEvent = os.pullEvent
+os.pullEvent = os.pullEventRaw
+local ok, result = pcall(read, replaceChar)
+os.pullEvent = originalPullEvent
+if ok ~= true then
+return nil
+end
+return result
+end
+
+-- Human readable name of the current user ("nobody" when login is disabled).
+function displayUser()
+local user = _G.login
+if user == nil or user == false or user == "" or user == NO_USER then
+return "nobody"
+end
+return tostring(user)
+end
+
+-- Short host name used in prompts: the computer label or "computer-<id>".
+function hostname()
+local label = os.getComputerLabel and os.getComputerLabel() or nil
+if type(label) == "string" and label ~= "" then
+return label
+end
+return "computer-" .. tostring(os.getComputerID())
 end
 
 function sanitycheck()
@@ -1686,18 +1891,18 @@ tempfile.close()
 end
 -- Ensure all required keys exist.
 for _, entry in ipairs(DEFAULT_SETTINGS) do
-if minux.findline(cfl, entry.key .. "=") == false then
+if hasSettingKey(cfl, entry.key) ~= true then
 minux.insertline(cfl, entry.key .. "=" .. entry.value)
 end
 end
-if minux.findline(cfl, "ui=") == false then
+if hasSettingKey(cfl, "ui") ~= true then
 local uiDefault = "workspace"
-if minux.findline(INSTALLED_DB_FILE, "menu") ~= false then
+if isMenuAvailable() == true then
 uiDefault = "menu"
 end
 minux.insertline(cfl, "ui=" .. uiDefault)
 end
-if minux.getconfig("ui") == "menu" and minux.findline(INSTALLED_DB_FILE, "menu") == false then
+if minux.getconfig("ui") == "menu" and isMenuAvailable() ~= true then
 minux.setconfig("ui", "workspace")
 end
 if logintype() == "network" and auth == nil then
@@ -1708,7 +1913,7 @@ if logintype() == "network" and netlib == nil then
 minux.setconfig("login", "local")
 minux.debug("Warning:no netlib: setting login to local", "warning")
 end
-if turtle == true and minux.getconfig("welcome") == "enabled" then
+if turtle ~= nil and minux.getconfig("welcome") == "enabled" then
 minux.setconfig("welcome", "disabled")
 end
 if _G.version == "Cleaninstall" then
@@ -2117,7 +2322,7 @@ missingFile("/boot/autorun.ls", "Boot autorun list /boot/autorun.ls", {})
 missingFile("/boot/runonce.sh", "Boot run-once list /boot/runonce.sh", {})
 
 for _, entry in ipairs(DEFAULT_SETTINGS) do
-if minux.findline(SETTINGS_FILE, entry.key .. "=") == false then
+if hasSettingKey(SETTINGS_FILE, entry.key) ~= true then
 if repair == true then
 updateConfigLine(SETTINGS_FILE, entry.key, entry.value)
 addAuditFinding(findings, "fixed", "Missing setting '" .. entry.key .. "' was restored")
@@ -2127,7 +2332,7 @@ end
 end
 end
 
-if minux.findline(SETTINGS_FILE, "ui=") == false then
+if hasSettingKey(SETTINGS_FILE, "ui") ~= true then
 if repair == true then
 updateConfigLine(SETTINGS_FILE, "ui", "workspace")
 addAuditFinding(findings, "fixed", "Missing UI setting was restored")
@@ -2145,7 +2350,7 @@ addAuditFinding(findings, "error", "Network login is enabled while networking is
 end
 end
 
-if minux.getconfig("ui") == "menu" and minux.findline(INSTALLED_DB_FILE, "menu") == false then
+if minux.getconfig("ui") == "menu" and isMenuAvailable() ~= true then
 if repair == true then
 minux.setconfig("ui", "workspace")
 addAuditFinding(findings, "fixed", "UI fallback changed from missing 'menu' package to 'workspace'")
@@ -2154,53 +2359,115 @@ addAuditFinding(findings, "warning", "UI is set to 'menu' but the package is not
 end
 end
 
+-- Settings with invalid values (e.g. "login=lcoal") silently fall back to
+-- defaults; surface them so the user knows the file is wrong.
+local storedSettings = readSettingsFile(SETTINGS_FILE)
+for key, value in pairs(storedSettings) do
+if SETTING_CHOICES[key] ~= nil and normaliseSettingValue(key, value) ~= value then
+if repair == true then
+updateConfigLine(SETTINGS_FILE, key, normaliseSettingValue(key, value))
+addAuditFinding(findings, "fixed", "Invalid value '" .. value .. "' for setting '" .. key .. "' was reset")
+else
+addAuditFinding(findings, "warning", "Invalid value '" .. value .. "' for setting '" .. key .. "'")
+end
+end
+end
+local seenKeys, duplicateKeys = {}, {}
+for _, line in ipairs(minux.readtable(SETTINGS_FILE) or {}) do
+local key = string.match(line, "^%s*([%w_%-%.]+)%s*=")
+if key ~= nil then
+if seenKeys[key] == true then duplicateKeys[key] = true end
+seenKeys[key] = true
+end
+end
+for key in pairs(duplicateKeys) do
+if repair == true then
+updateConfigLine(SETTINGS_FILE, key, storedSettings[key])
+addAuditFinding(findings, "fixed", "Duplicate entries for setting '" .. key .. "' were merged")
+else
+addAuditFinding(findings, "warning", "Setting '" .. key .. "' is defined more than once")
+end
+end
+
+-- Generated boot files
+if fs.exists("/boot/alias.ls") ~= true then
+if repair == true and apt ~= nil and type(apt.rebuildgenerated) == "function" and pcall(apt.rebuildgenerated) then
+addAuditFinding(findings, "fixed", "Command aliases /boot/alias.ls were regenerated")
+else
+addAuditFinding(findings, "error", "Command aliases /boot/alias.ls are missing (most commands unavailable)")
+end
+else
+local brokenAliases = {}
+for _, line in ipairs(minux.readtable("/boot/alias.ls") or {}) do
+local name, target = string.match(line, '^%s*shell%.setAlias%(%s*"([^"]+)"%s*,%s*"([^"]+)"%s*%)')
+if name ~= nil and fs.exists(target) ~= true then
+brokenAliases[#brokenAliases + 1] = name
+end
+end
+if #brokenAliases > 0 then
+table.sort(brokenAliases)
+addAuditFinding(findings, "warning", "Aliases without a program (optional packages?): " .. table.concat(brokenAliases, ", "))
+else
+addAuditFinding(findings, "ok", "All command aliases point to existing programs")
+end
+end
+
+-- Installed packages need their manifest for updates and removal.
+if apt ~= nil and type(apt.checkinstall) == "function" then
+local missingManifests = {}
+for _, packname in ipairs(minux.readtable(INSTALLED_DB_FILE) or {}) do
+packname = string.match(packname, "^%s*(.-)%s*$")
+local virtual = packname == "menu" or packname == "minex" or packname == "netlib" or packname == "auth-client"
+if packname ~= "" and not virtual and fs.exists("/etc/apt/list/" .. packname .. ".db") ~= true then
+missingManifests[#missingManifests + 1] = packname
+end
+end
+if #missingManifests > 0 then
+if repair == true and type(apt.bootstrapinstalled) == "function" and pcall(apt.bootstrapinstalled) then
+addAuditFinding(findings, "fixed", "Restored package manifests for: " .. table.concat(missingManifests, ", "))
+else
+addAuditFinding(findings, "warning", "Installed packages without manifest: " .. table.concat(missingManifests, ", "))
+end
+end
+end
+
+-- Low disk space breaks updates and config writes in surprising ways.
+local okSpace, freeSpace = pcall(fs.getFreeSpace, "/")
+local okCapacity, capacity = pcall(function() return fs.getCapacity and fs.getCapacity("/") end)
+if okSpace and type(freeSpace) == "number" then
+local lowSpace = freeSpace < 32 * 1024
+if okCapacity and type(capacity) == "number" and capacity > 0 then
+lowSpace = lowSpace or freeSpace / capacity < 0.05
+end
+if lowSpace then
+addAuditFinding(findings, "warning", "Low disk space: only " .. math.floor(freeSpace / 1024) .. " KiB free")
+else
+addAuditFinding(findings, "ok", "Disk space: " .. math.floor(freeSpace / 1024) .. " KiB free")
+end
+end
+
 return findings
 end
 
 function getconfig(value)
 expect(1, value, "string")
-local cfgf = SETTINGS_FILE
-
-if value == "login" then
-if minux.findline(cfgf, "login=local") then return "local"
-elseif minux.findline(cfgf, "login=network") then return "network"
-else return "disabled" end
-elseif value == "encrypt" then
+if value == "encrypt" then
 return fs.exists(ENCRYPT_KEY_FILE) == true
-elseif value == "crashhandler" then
-if minux.findline(cfgf, "crashhandler=disabled") then return "disabled"
-else return "enabled" end
-elseif value == "clearlogin" then
-if minux.findline(cfgf, "clearlogin=disabled") then return "disabled"
-else return "enabled" end
-elseif value == "network" then
-if minux.findline(cfgf, "network=enabled") then return "enabled"
-else return "disabled" end
-elseif value == "mapcleanup" then
-if minux.findline(cfgf, "mapcleanup=enabled") then return "enabled"
-else return "disabled" end
-elseif value == "ui" then
-local settingsfile = resolveSettingsFile()
-if minux.findline(settingsfile, "ui=prompt")   then return "prompt"
-elseif minux.findline(settingsfile, "ui=craftos")  then return "craftos"
-elseif minux.findline(settingsfile, "ui=menu")     then return "menu"
-else return "workspace" end
-elseif value == "debug" then
-if     minux.findline(cfgf, "debug=enabled")  then return "enabled"
-elseif minux.findline(cfgf, "debug=logging")  then return "logging"
-elseif minux.findline(cfgf, "debug=full")     then return "full"
-else return "disabled" end
-elseif value == "update" then
-if     minux.findline(cfgf, "update=enabled") then return "enabled"
-elseif minux.findline(cfgf, "update=always")  then return "always"
-else return "disabled" end
-elseif value == "welcome" then
-local settingsfile = resolveSettingsFile()
-if minux.findline(settingsfile, "welcome=enabled") then return "enabled"
-else return "disabled" end
-else
+end
+if SETTING_CHOICES[value] == nil then
 return false
 end
+local stored = readSettingsFile(SETTINGS_FILE)[value]
+if USER_SCOPED_SETTINGS[value] == true then
+local userFile = resolveSettingsFile()
+if userFile ~= SETTINGS_FILE then
+local userValue = readSettingsFile(userFile)[value]
+if userValue ~= nil then
+stored = userValue
+end
+end
+end
+return normaliseSettingValue(value, stored)
 end
 
 function setconfig(config, setting)
@@ -2245,7 +2512,13 @@ minux.debug("config:already enabled", "minux")
 return false
 end
 minux.debug("generating key", "minux")
-local key = os.getComputerID() * 3
+-- The cipher shifts letters modulo 26 and digits modulo 10, so a key
+-- divisible by either would leave that character class unchanged (the old
+-- "computer id * 3" key was 0 on computer #0, i.e. no encryption at all).
+local key
+repeat
+key = math.random(1, 259)
+until key % 26 ~= 0 and key % 10 ~= 0
 ensureParentDirectory(ENCRYPT_KEY_FILE)
 local keyfile = fs.open(ENCRYPT_KEY_FILE, "w")
 keyfile.writeLine(key)
@@ -2321,7 +2594,7 @@ minux.debug("config:welcome-invalid setting", "minux")
 return false
 end
 minux.debug("config:option:welcome", "minux")
-local settingsfile = ensureUserConfig({ "welcome=" .. setting, "ui=menu" })
+local settingsfile = ensureUserConfig({ "welcome=" .. setting, "ui=" .. minux.getconfig("ui") })
 updateConfigLine(settingsfile, "welcome", setting)
 minux.debug("config:welcome:" .. setting, "minux")
 return true
@@ -2332,7 +2605,7 @@ minux.debug("config:menu-invalid input", "minux")
 return false
 end
 minux.debug("config:option:menu", "minux")
-local settingsfile = ensureUserConfig({ "ui=" .. setting, "welcome=enabled" })
+local settingsfile = ensureUserConfig({ "ui=" .. setting, "welcome=" .. minux.getconfig("welcome") })
 updateConfigLine(settingsfile, "ui", setting)
 minux.debug("config:ui:" .. setting, "minux")
 return true
@@ -2356,15 +2629,17 @@ end
 
 -- Color helpers
 
+local BASH_COLOR_DEFAULTS = { "green", "black", "red" }
+
+local function bashColorFile()
+return "/home/" .. tostring(_G.login or NO_USER) .. "/minux-config/bashcolours.cfg"
+end
+
 function testcolor()
-local colorFile = "/home/" .. _G.login .. "/minux-config/bashcolours.cfg"
+local colorFile = bashColorFile()
 if fs.exists(colorFile) == false then
-local defaults = {
-colors.green, colors.black, colors.red,
-"green",      "black",      "red",
-}
-fs.makeDir("/home/" .. _G.login .. "/minux-config/")
-minux.writetable(colorFile, defaults)
+ensureParentDirectory(colorFile)
+minux.writetable(colorFile, BASH_COLOR_DEFAULTS)
 end
 local colordata = minux.getbashcolor()
 if colordata[1] == colordata[2] then
@@ -2385,47 +2660,75 @@ expect(3, promptcolor,     "string", "nil")
 if textcolor       == nil then textcolor       = "white"  end
 if backgroundcolor == nil then backgroundcolor = "black"  end
 if promptcolor     == nil then promptcolor     = "yellow" end
-local dir = "/home/" .. _G.login .. "/minux-config/"
-if fs.exists(dir) == false then fs.makeDir(dir) end
-local tempfile = fs.open(dir .. "bashcolours.cfg", "w")
-tempfile.writeLine(textcolor)
-tempfile.writeLine(backgroundcolor)
-tempfile.writeLine(promptcolor)
-tempfile.close()
-return true
+for _, name in ipairs({ textcolor, backgroundcolor, promptcolor }) do
+if COLOR_NAMES[name] == nil then
+return false, "unknown colour: " .. name
+end
+end
+if textcolor == backgroundcolor then
+return false, "text and background colour must differ"
+end
+local colorFile = bashColorFile()
+ensureParentDirectory(colorFile)
+return minux.writetable(colorFile, { textcolor, backgroundcolor, promptcolor })
 end
 
+-- Returns { textColour, bgColour, promptColour, textName, bgName, promptName }.
+-- Missing or corrupt colour files fall back to the defaults instead of
+-- crashing the shell prompt.
 function getbashcolor()
-local colorFile = "/home/" .. _G.login .. "/minux-config/bashcolours.cfg"
-local fallback  = "/usr/minux-main/bash/colours.cfg"
-local source    = fs.exists(colorFile) and colorFile or fallback
-local tempfile  = fs.open(source, "r")
-local textName   = tempfile.readLine()
-local bgName     = tempfile.readLine()
-local promptName = tempfile.readLine()
-tempfile.close()
-local textColour   = resolveColor(textName,   colors.green)
-local bgColour     = resolveColor(bgName,     colors.black)
-local promptColour = resolveColor(promptName, colors.red)
-return {
-textColour, bgColour, promptColour,
-textName,   bgName,   promptName,
-}
+local candidates = { bashColorFile(), "/usr/minux-main/bash/colours.cfg" }
+local names = {}
+for _, path in ipairs(candidates) do
+local lines = minux.readtable(path)
+if type(lines) == "table" and #lines >= 1 then
+names = lines
+break
+end
+end
+local result = {}
+for index = 1, 3 do
+local name = names[index]
+if COLOR_NAMES[name] == nil then
+name = BASH_COLOR_DEFAULTS[index]
+end
+result[index] = COLOR_NAMES[name]
+result[index + 3] = name
+end
+if term.isColor() ~= true then
+-- Basic computers only render black and white.
+result[1], result[2], result[3] = colors.white, colors.black, colors.white
+end
+return result
 end
 
 -- System control
 
-function halt()
+-- Mark the boot as cleanly finished so the crash handler does not treat an
+-- intentional shutdown or reboot as a failed boot.
+local function clearCrashCounter()
+local ok = pcall(function()
+ensureDirectory("/temp/minux/boot")
 local tempfile = fs.open("/temp/minux/boot/fail4.tmp", "w")
+if tempfile ~= nil then
 tempfile.write("0")
 tempfile.close()
+end
+end)
+return ok
+end
+
+function markBootHealthy()
+return clearCrashCounter()
+end
+
+function halt()
+clearCrashCounter()
 os.shutdown()
 end
 
 function restart()
-local tempfile = fs.open("/temp/minux/boot/fail4.tmp", "w")
-tempfile.write("0")
-tempfile.close()
+clearCrashCounter()
 os.reboot()
 end
 
@@ -2437,10 +2740,21 @@ if _G.debugmode == "enabled" or _G.debugmode == "full" then
 print(printstring)
 end
 if _G.debugmode == "logging" or _G.debugmode == "full" then
+pcall(function()
 ensureDirectory("/var/log")
-local logfile = fs.open("/var/log/" .. programname .. ".txt", "a")
+local logpath = "/var/log/" .. programname .. ".txt"
+-- Rotate logs so debug logging cannot fill up the computer's disk.
+if fs.exists(logpath) and fs.getSize(logpath) > LOG_ROTATE_BYTES then
+local rotated = logpath .. ".1"
+if fs.exists(rotated) then fs.delete(rotated) end
+fs.move(logpath, rotated)
+end
+local logfile = fs.open(logpath, "a")
+if logfile ~= nil then
 logfile.writeLine(os.date() .. ":" .. printstring)
 logfile.close()
+end
+end)
 end
 return true
 end
@@ -2468,7 +2782,7 @@ local lineNumber = 0
 local line = tempfile.readLine()
 while line ~= nil do
 lineNumber = lineNumber + 1
-if string.find(line, target) ~= nil then
+if string.find(line, target, 1, true) ~= nil then
 tempfile.close()
 return lineNumber
 end
@@ -2584,11 +2898,24 @@ function writetable(fln, data)
 expect(1, fln, "string")
 expect(2, data, "table")
 if fs.isDir(fln) == true then return false end
-local tempfile = fs.open(fln, "w")
+local tempPath = fln .. ".new"
+local tempfile = fs.open(tempPath, "w")
+if tempfile == nil then
+-- Fall back to writing in place (e.g. when the name is too long).
+tempfile = fs.open(fln, "w")
+if tempfile == nil then return false end
 for index = 1, #data do
-tempfile.writeLine(data[index])
+tempfile.writeLine(tostring(data[index]))
 end
 tempfile.close()
+return true
+end
+for index = 1, #data do
+tempfile.writeLine(tostring(data[index]))
+end
+tempfile.close()
+if fs.exists(fln) then fs.delete(fln) end
+fs.move(tempPath, fln)
 return true
 end
 

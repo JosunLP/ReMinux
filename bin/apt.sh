@@ -9,6 +9,8 @@ local commandAliases = {
   remove           = "-r",
   update           = "-u",
   ["update-forced"] = "-U",
+  forceupdate      = "-U",
+  list             = "-l",
   setsource        = "-s",
   clearsource      = "-c",
   setupdate        = "-a",
@@ -115,6 +117,53 @@ local function printResult(success, successMessage, failureMessage)
   return false
 end
 
+-- Human readable descriptions for the numeric APT error codes.
+local ERROR_DESCRIPTIONS = {
+  [100] = "access denied (admin rights required)",
+  [102] = "no package sources configured",
+  [103] = "a dependency could not be installed",
+  [104] = "APT configuration is damaged (try 'doctor --repair')",
+  [105] = "package not found on any source",
+  [106] = "package is not installed",
+  [107] = "source is not a valid APT repository",
+  [109] = "package download or installer failed",
+  [110] = "package installed incompletely (key file missing)",
+  [111] = "package source unreachable",
+}
+
+local function describeError(code)
+  if code == false or code == nil then
+    return "operation failed"
+  end
+  local description = ERROR_DESCRIPTIONS[tonumber(code)]
+  if description ~= nil then
+    return description .. " (E:" .. tostring(code) .. ")"
+  end
+  return "error " .. tostring(code)
+end
+
+-- Network commands cannot work without the CC: Tweaked HTTP API.
+local function requireHttp()
+  if minux.hasHttpSupport() == true then return true end
+  err("the HTTP API is disabled, so packages cannot be downloaded")
+  withColor(colors.gray, function()
+    print("Enable 'http.enabled' in the CC: Tweaked server config.")
+  end)
+  return false
+end
+
+-- Show a file through the pager on screen, or plainly inside pipes.
+local function showFile(path)
+  if not fs.exists(path) then
+    err("file not found: " .. path)
+    return false
+  end
+  if minux.getIoContext() ~= nil then
+    return shell.run("/bin/cat.sh", path)
+  end
+  return shell.run("/bin/less.sh", path)
+end
+
 local function runInstall(targetPackage)
   if apt.checkinstall(targetPackage) == true then
     withColor(colors.gray, function() print("Already installed: " .. targetPackage) end)
@@ -130,7 +179,7 @@ local function runInstall(targetPackage)
   end
 
   printFail()
-  err("install failed for '" .. targetPackage .. "' (E:" .. tostring(result) .. ")")
+  err("install failed for '" .. targetPackage .. "': " .. describeError(result))
   return false
 end
 
@@ -150,9 +199,13 @@ local function runUninstall(targetPackage)
 
   printFail()
   if errorCode ~= nil then
-    err("removal failed for '" .. targetPackage .. "' (E:" .. tostring(errorCode) .. ")")
+    err("removal failed for '" .. targetPackage .. "': " .. describeError(errorCode))
   else
-    err("removal failed for '" .. targetPackage .. "'")
+    if targetPackage == "minux-main" then
+      err("'minux-main' is the core system and cannot be removed")
+    else
+      err("removal failed for '" .. targetPackage .. "'")
+    end
   end
   return false
 end
@@ -168,16 +221,15 @@ local function runUpdate(targetPackage)
   end
 
   printFail()
-  err("update failed (E:" .. tostring(result) .. ")")
+  err("update failed: " .. describeError(result))
+  withColor(colors.gray, function()
+    print("Enable 'config debug logging' and check /var/log/apt.txt for details.")
+  end)
   return false
 end
 
 local function describeLookupError(errorCode)
-  if errorCode == 102 then return "no package sources configured"
-  elseif errorCode == 105 then return "package not found"
-  elseif errorCode == 111 then return "source unavailable"
-  end
-  return tostring(errorCode)
+  return describeError(errorCode)
 end
 
 local function runVersion(targetPackage)
@@ -227,7 +279,7 @@ if command == "help" then
   return true
 
 elseif command == nil then
-  if apt.checkinstall("menu") == true then
+  if fs.exists("/etc/minux-main/menu/soft.sys") then
     shell.run("/etc/minux-main/menu/soft.sys")
     return true
   end
@@ -238,6 +290,7 @@ elseif command == nil then
 elseif command == "-i" then
   if requirePackage("-i") ~= true then return false end
   if packageName ~= "auth-client" and requireAdmin("-i") ~= true then return false end
+  if requireHttp() ~= true then return false end
   success = runInstall(packageName)
 
 elseif command == "-r" then
@@ -246,15 +299,18 @@ elseif command == "-r" then
   success = runUninstall(packageName)
 
 elseif command == "-u" then
+  if requireHttp() ~= true then return false end
   success = runUpdate(packageName)
 
 elseif command == "-U" then
   if requireAdmin("-U") ~= true then return false end
+  if requireHttp() ~= true then return false end
   success = runUpdate("-f")
 
 elseif command == "-s" then
   if requirePackage("-s") ~= true then return false end
   if requireAdmin("-s") ~= true then return false end
+  if requireHttp() ~= true then return false end
   success = printResult(apt.addsource(packageName), "Source added", "source not added")
 
 elseif command == "-c" then
@@ -273,11 +329,11 @@ elseif command == "-a" then
   success = true
 
 elseif command == "-ls" then
-  shell.run("/bin/less.sh /usr/apt/source.ls")
-  return true
+  return showFile("/usr/apt/source.ls")
 
 elseif command == "-la" then
   if packageName == "--update" or not fs.exists("/temp/apt/programs.ls") then
+    if requireHttp() ~= true then return false end
     progressWrite("Fetching package list")
     local result = apt.softlist()
     if result ~= true and not fs.exists("/temp/apt/programs.ls") then
@@ -287,15 +343,14 @@ elseif command == "-la" then
     end
     printDone()
   end
-  shell.run("/bin/less.sh /temp/apt/programs.ls")
-  return true
+  return showFile("/temp/apt/programs.ls")
 
 elseif command == "-l" then
-  shell.run("/bin/less.sh /etc/apt/list/installed.db")
-  return true
+  return showFile("/etc/apt/list/installed.db")
 
 elseif command == "-v" then
   if requirePackage("-v") ~= true then return false end
+  if requireHttp() ~= true then return false end
   success = runVersion(packageName)
 
 else

@@ -1,26 +1,28 @@
-less - scrollable file viewer
+less - scrollable pager
 Executable: /bin/less.sh
 Alias: less
 
 DESCRIPTION
-  Displays a text file in a
-  scrollable viewer.
+  Shows files or piped input in
+  a full-screen pager with a
+  status bar. Text that fits on
+  one screen is printed directly.
+  Inside a pipe or redirect the
+  text is passed through.
 
 USAGE
-  less <filename>
+  less [file...]
+  ls -l | less
 
-NAVIGATION
-  Up / W       - scroll up
-  Down / S     - scroll down
-  LeftCtrl     - exit viewer
-
-NOTES
-  On terminals smaller than the
-  file, scrolling is enabled
-  automatically. The last line
-  shows the filename and a
-  scroll hint.
+KEYS
+  Up/Down, W/S, K/J  one line
+  PgUp/PgDn, B/Space one page
+  Home/End, g/G      start / end
+  Mouse wheel        scroll
+  /text              search
+  n / N              next / prev
+  q, Ctrl, Ctrl+T    quit
 
 SEE ALSO
-  cat - non-scrollable viewer
+  cat - print without paging
   man - manual page viewer

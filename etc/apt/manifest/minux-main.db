@@ -204,3 +204,8 @@ php=false
 /etc/man/restart.man
 /etc/man/useradd.man
 /etc/man/userdel.man
+/bin/true.sh
+/bin/false.sh
+/etc/man/true.man
+/etc/man/false.man
+/etc/man/neofetch.man

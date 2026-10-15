@@ -32,7 +32,9 @@ print("       usermod help|-h|--help|?   show this message")
 print("Actions: add, del, psw")
 end
 
-if _G.admin ~= true then
+-- Regular users may only change their own password.
+local isSelfPasswordChange = action == "psw" and username ~= nil and username == _G.login
+if _G.admin ~= true and not isSelfPasswordChange then
 err("requires admin privileges")
 print("Hint: log in as an admin or owner before changing users.")
 return false

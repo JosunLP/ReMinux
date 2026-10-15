@@ -5,4 +5,8 @@ Print the lines of <file> in
 reverse order.
 
 Usage:
-  tac <file>
+  tac [file...]
+
+Without a file (or with -) the
+input is read from a pipe or
+redirect, e.g.  ls / | tac

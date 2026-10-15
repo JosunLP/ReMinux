@@ -7,14 +7,20 @@ DESCRIPTION
   existing user account.
 
 USAGE
-  passwd <username> [newpassword]
+  passwd [username] [newpassword]
 
-  If the new password is not
-  given on the command line,
-  the program will prompt for
-  it (input is masked).
+  Without a username your own
+  password is changed. If the
+  new password is not given on
+  the command line, passwd asks
+  for it twice (input is
+  masked). Users who are not
+  admins can only change their
+  own password and must enter
+  the current one first.
 
 EXAMPLES
+  passwd
   passwd root
   passwd alice s3cr3t
 

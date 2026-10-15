@@ -19,7 +19,11 @@ end
 
 local ok, result = pcall(string.format, format, table.unpack(converted))
 if ok == false then
-	print("printf: " .. tostring(result))
-	return 0
+	-- Strip Lua's "bad argument #n to 'format'" wording to keep it readable.
+	local reason = string.gsub(tostring(result), "bad argument #(%d+)[^(]*", function(n)
+		return "argument " .. (tonumber(n) - 1) .. " "
+	end)
+	print("printf: " .. reason)
+	return false
 end
 write(result)

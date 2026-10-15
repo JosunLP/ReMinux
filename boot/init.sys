@@ -1,3 +1,9 @@
+-- Ctrl+T must not be able to abort the boot or skip the login prompt (an
+-- aborted init would drop to an unauthenticated CraftOS shell), so ignore
+-- terminate events until the session has been established.
+local originalPullEvent = os.pullEvent
+os.pullEvent = os.pullEventRaw
+
 local bash     = "/etc/minux-main/workspace/shell.lua"
 local oldshell = "/rom/programs/shell.lua"
 local crashstage = 0
@@ -132,16 +138,64 @@ write("  Kernel  ")
 local kx, kernelRow = term.getCursorPos()
 spinAt(kx, kernelRow, 8)
 
-os.loadAPI("/etc/api/minux")
-os.loadAPI("/etc/api/apt")
-os.loadAPI("/etc/minux-main/sys/menu.lua")
 _G.expect = dofile("/rom/modules/main/cc/expect.lua")
+
+-- Load the core APIs. A missing or broken API would otherwise crash every
+-- later boot step, so stop here with a clear recovery screen instead.
+local function loadCoreApi(path, name)
+  if not fs.exists(path) then
+    return false, path .. " is missing"
+  end
+  local ok, result = pcall(os.loadAPI, path)
+  if ok ~= true then
+    return false, tostring(result)
+  end
+  if result == false or _G[name] == nil then
+    return false, "failed to load " .. path
+  end
+  return true
+end
+
+local coreApis = {
+  { path = "/etc/api/minux", name = "minux" },
+  { path = "/etc/api/apt", name = "apt" },
+}
+for _, api in ipairs(coreApis) do
+  local loaded, loadErr = loadCoreApi(api.path, api.name)
+  if loaded ~= true then
+    term.setCursorPos(1, kernelRow)
+    term.clearLine()
+    bootLine("Kernel", "failed", false)
+    print("")
+    withColor(colors.red, function() print("  Could not load the " .. api.name .. " API:") end)
+    print("  " .. tostring(loadErr))
+    print("")
+    withColor(colors.yellow, function()
+      print("  Reinstall ReMinux with the net-installer, or")
+      print("  repair the file from the CraftOS shell.")
+    end)
+    print("")
+    withColor(colors.gray, function() write("  Press Enter to open the CraftOS shell...") end)
+    read()
+    setCrashHandler("1", "0")
+    shell.run(oldshell)
+    os.shutdown()
+  end
+end
+-- The legacy menu API is optional; a broken copy must not stop the boot.
+if fs.exists("/etc/minux-main/sys/menu.lua") then
+  pcall(os.loadAPI, "/etc/minux-main/sys/menu.lua")
+end
 
 local dbfile = "/etc/apt/list/minux-main.db"
 if fs.exists(dbfile) then
   local versionLine = minux.findline(dbfile, "version=")
-  local versionData = minux.printline(dbfile, versionLine)
-  _G.version = string.sub(versionData, 9)
+  local versionData = versionLine and minux.printline(dbfile, versionLine) or nil
+  if type(versionData) == "string" and #versionData > 8 then
+    _G.version = string.sub(versionData, 9)
+  else
+    _G.version = "Unknown"
+  end
 else
   _G.version = "Cleaninstall"
 end
@@ -152,8 +206,8 @@ bootLine("Kernel", "V:" .. _G.version, true)
 
 -- Aliases
 if fs.exists("/boot/alias.ls") then
-  shell.run("/boot/alias.ls")
-  bootLine("Aliases", "loaded", true)
+  local aliasOk = shell.run("/boot/alias.ls")
+  bootLine("Aliases", aliasOk and "loaded" or "errors", aliasOk)
 else
   bootLine("Aliases", "missing", false)
   minux.debug("/boot/alias.ls not found - core aliases unavailable until APT regenerates it", "minux")
@@ -167,16 +221,23 @@ do
   sanityPreRow = sy
   spinAt(sx, sy, 4)
 end
-minux.sanitycheck()
+local sanityOk, sanityErr = pcall(minux.sanitycheck)
 term.setCursorPos(1, sanityPreRow)
 term.clearLine()
-bootLine("Sanity", "cleared", true)
+if sanityOk then
+  bootLine("Sanity", "cleared", true)
+else
+  bootLine("Sanity", "problems", false)
+  withColor(colors.orange, function() print("  " .. tostring(sanityErr)) end)
+  withColor(colors.gray, function() print("  Run 'doctor --repair' once the system is up.") end)
+  sleep(2)
+end
 
 -- Peripheral detection
 _G.modemside = minux.perfind("modem")
 bootLine("Modem", _G.modemside, _G.modemside ~= "NONE")
 if _G.modemside ~= "NONE" then
-  rednet.open(_G.modemside)
+  pcall(rednet.open, _G.modemside)
 end
 
 _G.diskside = minux.perfind("drive")
@@ -203,7 +264,7 @@ if minux.getconfig("network") == "enabled" then
   local _, dhcpRow = term.getCursorPos()
   withColor(colors.gray, function() write("  DHCP  [ connecting ]") end)
   print()
-  shell.run("/boot/network/dhcp.sys")
+  pcall(shell.run, "/boot/network/dhcp.sys")
   term.setCursorPos(1, dhcpRow)
   term.clearLine()
   local serverFound = _G.server ~= "[none]"
@@ -240,15 +301,31 @@ if not fs.exists(firstrunFile) then
 end
 
 _G.shell = shell
-shell.run("/boot/network/update.sys")
+
+-- Run an optional boot step without letting a failure abort the boot.
+local function runBootStep(label, fn, ...)
+  local ok, result, detail = pcall(fn, ...)
+  if ok ~= true then
+    minux.debug(label .. " crashed: " .. tostring(result), "minux")
+    withColor(colors.orange, function() print("  " .. label .. " failed: " .. tostring(result)) end)
+    return false
+  end
+  if result == false and detail ~= nil then
+    minux.debug(label .. " failed: " .. tostring(detail), "minux")
+    withColor(colors.orange, function() print("  " .. label .. ": " .. tostring(detail)) end)
+  end
+  return result
+end
+
+runBootStep("Update check", shell.run, "/boot/network/update.sys")
 minux.debug("running early boot services", "minux")
-minux.runServiceTrigger("boot", "early")
+runBootStep("Early services", minux.runServiceTrigger, "boot", "early")
 
 setCrashHandler("2", "0")
 checkCrashStage("3")
 
 minux.debug("running override services", "minux")
-minux.runServiceTrigger("boot", "override")
+runBootStep("Override services", minux.runServiceTrigger, "boot", "override")
 minux.debug("resetting crash handler stage 3", "minux")
 setCrashHandler("3", "0")
 
@@ -257,7 +334,7 @@ if minux.getconfig("crashhandler") == "enabled" then
 end
 
 minux.debug("running runonce services", "minux")
-minux.runServiceTrigger("boot", "runonce")
+runBootStep("Run-once services", minux.runServiceTrigger, "boot", "runonce")
 
 -- Login
 minux.debug("checking login settings", "minux")
@@ -289,10 +366,12 @@ else
   _G.admin      = true
   _G.login      = "foo"
   _G.masterpass = "bar"
-  minux.runServiceTrigger("login")
+  runBootStep("Login services", minux.runServiceTrigger, "login")
 end
 
-minux.testcolor()
+pcall(minux.testcolor)
+
+os.pullEvent = originalPullEvent
 
 -- First-run post-install verification
 if firstupdate then
@@ -377,28 +456,59 @@ end
 
 -- Welcome prompt
 local w = term.getSize()
+local BOOT_PROMPT_TIMEOUT = 10
 withColor(colors.cyan, function() print(string.rep("=", w)) end)
 
-if pocket or turtle then
-  print(" Welcome to ReMinux!")
-  withColor(colors.gray, function() print(" [Enter] start    [help] commands") end)
-else
-  print(" Welcome to ReMinux!")
-  withColor(colors.gray, function()
-    print("   [Enter] continue   [bash] shell   [halt] shutdown   [help] more")
+print(" Welcome to ReMinux " .. tostring(_G.version) .. "!")
+withColor(colors.gray, function()
+  if w >= 51 then
+    print(" [Enter] continue  [bash] shell  [help] more")
+  else
+    print(" [Enter] start  [help] more")
+  end
+  print(" Continuing automatically in " .. BOOT_PROMPT_TIMEOUT .. "s...")
+end)
+
+withColor(colors.cyan, function() print(string.rep("=", w)) end)
+
+-- Wait for input, but continue on our own if nobody is at the keyboard so
+-- unattended computers (servers, turtles) still come up after a restart.
+-- Once a key is pressed the prompt waits as long as needed.
+local function readBootPrompt()
+  local input
+  parallel.waitForAny(function()
+    input = read()
+  end, function()
+    local timer = os.startTimer(BOOT_PROMPT_TIMEOUT)
+    while true do
+      local event, value = os.pullEvent()
+      if event == "timer" and value == timer then
+        return
+      elseif event == "char" or event == "key" or event == "paste" then
+        while true do os.pullEvent("reminux_never") end
+      end
+    end
   end)
+  if input == nil then print("") end
+  return input
 end
 
-withColor(colors.cyan, function() print(string.rep("=", w)) end)
-
-local initput = read()
+local initput = readBootPrompt()
 while initput ~= nil do
   if initput == "bash" then
     minux.debug("launching prompt", "minux")
     shell.run(bash)
     initput = read()
   elseif initput == "update" then
-    apt.update("-f")
+    write("  Updating packages... ")
+    local updateOk, updateResult = pcall(apt.update, "-f")
+    if updateOk and updateResult == true then
+      withColor(colors.lime, function() print("done") end)
+    else
+      withColor(colors.red, function()
+        print("failed (" .. tostring(updateResult) .. ")")
+      end)
+    end
     initput = read()
   elseif initput == "reboot" or initput == "restart" then
     shell.run("/bin/restart.sh")
@@ -417,32 +527,61 @@ while initput ~= nil do
     print("")
     withColor(colors.gray, function() print("Press Enter to continue to the configured UI.") end)
     initput = read()
-  else
+  elseif initput == "" then
     initput = nil
+  else
+    withColor(colors.orange, function()
+      print("Unknown command '" .. initput .. "'. Type 'help' or press Enter.")
+    end)
+    initput = read()
   end
 end
 
 -- Launch configured UI
 local menuchoice = minux.getconfig("ui")
-if menuchoice == "menu" then
-  minux.debug("launching menu", "minux")
-  if fs.exists("/bin/minux.sh") then
-    shell.run("/bin/minux.sh")
-  else
-    shell.run(bash)
-  end
-elseif menuchoice == "prompt" then
-  minux.debug("launching prompt", "minux")
-  shell.run(bash)
+local uiProgram, uiArgs = bash, {}
+if menuchoice == "menu" and fs.exists("/bin/minux.sh") then
+  uiProgram = "/bin/minux.sh"
 elseif menuchoice == "craftos" then
-  minux.debug("launching craftos", "minux")
-  shell.run(oldshell)
+  uiProgram = oldshell
 elseif menuchoice == "workspace" then
-  minux.debug("launching workspace", "minux")
-  shell.run("/bin/workspace.sh")
-else
-  shell.run(bash)
+  uiProgram = "/bin/workspace.sh"
+end
+minux.debug("launching " .. tostring(menuchoice) .. ": " .. uiProgram, "minux")
+
+-- Once the UI has stayed up for a while the boot counts as successful, so
+-- a later chunk unload or power loss does not trip the crash handler.
+local HEALTHY_AFTER_SECONDS = 20
+local uiOk, uiErr
+parallel.waitForAny(function()
+  uiOk, uiErr = pcall(shell.run, uiProgram, table.unpack(uiArgs))
+end, function()
+  -- Raw events: Ctrl+T is meant for the UI and must not kill this watcher.
+  local timer = os.startTimer(HEALTHY_AFTER_SECONDS)
+  repeat
+    local _, id = os.pullEventRaw("timer")
+  until id == timer
+  minux.markBootHealthy()
+  while true do os.pullEventRaw("reminux_never") end
+end)
+
+if uiOk ~= true then
+  term.redirect(term.native())
+  term.setBackgroundColor(colors.black)
+  term.setTextColor(colors.white)
+  term.clear()
+  term.setCursorPos(1, 1)
+  divider("!", colors.red)
+  withColor(colors.red, function() print("  The user interface crashed:") end)
+  divider("!", colors.red)
+  print("  " .. tostring(uiErr))
+  print("")
+  withColor(colors.gray, function()
+    print("  Try 'config ui prompt' or 'doctor --repair'.")
+    write("  Press Enter to reboot...")
+  end)
+  read()
 end
 
-minux.debug("system crash restart", "minux")
-os.reboot()
+minux.debug("UI exited, restarting", "minux")
+minux.restart()

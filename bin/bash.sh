@@ -55,10 +55,10 @@ end)
 print("Use a CC: Tweaked colour name (e.g. white, gray, red, lime).")
 return false
 end
-local ok = minux.bashcolor(txtcolor, bgcolor, prmcolor)
+local ok, reason = minux.bashcolor(txtcolor, bgcolor, prmcolor)
 if ok ~= true then
 withColor(colors.red, function()
-print("bash setcolor: failed to write colour configuration")
+print("bash setcolor: " .. tostring(reason or "failed to write colour configuration"))
 end)
 return false
 end
@@ -69,4 +69,20 @@ end)
 return true
 end
 
-shell.run("/etc/minux-main/workspace/shell.lua", command)
+if #args > 0 then
+-- Forward the whole command line so "bash ls -l" keeps its arguments.
+-- A single argument is passed through untouched so "bash 'ls | wc -l'"
+-- still gets parsed as a pipeline by the ReMinux shell.
+if #args == 1 then
+return shell.run("/etc/minux-main/workspace/shell.lua", args[1])
+end
+local quoted = {}
+for index, value in ipairs(args) do
+if string.find(value, "[%s\"'|<>;&]") then
+value = '"' .. string.gsub(value, '(["\\])', "\\%1") .. '"'
+end
+quoted[index] = value
+end
+return shell.run("/etc/minux-main/workspace/shell.lua", table.concat(quoted, " "))
+end
+return shell.run("/etc/minux-main/workspace/shell.lua")

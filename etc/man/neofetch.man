@@ -1,0 +1,11 @@
+neofetch, /bin/neofetch.sh
+alias: 'neofetch'
+
+Show a system overview next to the
+ReMinux logo: OS version, user,
+uptime, disk usage, attached
+peripherals and in-game time,
+followed by the colour palette.
+
+Usage:
+  neofetch

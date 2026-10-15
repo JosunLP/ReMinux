@@ -219,8 +219,15 @@ function parser.parse(line)
         end
 
         state.index = state.index + 1
+        if token.value == ";" and state.index > #tokens then
+            -- A trailing ";" simply terminates the last command.
+            break
+        end
         node, err = parsePipeline(state)
         if node == nil then
+            if err == "expected command" then
+                return nil, "expected a command after '" .. token.value .. "'"
+            end
             return nil, err
         end
 

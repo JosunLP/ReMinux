@@ -135,7 +135,8 @@ if config ~= nil and isHelpToken(config) then
 end
 
 if config == nil then
-  if apt and apt.checkinstall and apt.checkinstall("menu") == true then
+  -- installed.db may list "menu" as a virtual entry, so check the file.
+  if fs.exists("/etc/minux-main/menu/config.sys") then
     shell.run("/etc/minux-main/menu/config.sys")
     return true
   end

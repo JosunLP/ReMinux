@@ -6,8 +6,12 @@ each given file, then print a total
 when more than one file is given.
 
 Usage:
-  wc [-l|-w|-c] <file> [file...]
+  wc [-l] [-w] [-c] [file...]
 
   -l  show only line counts
   -w  show only word counts
   -c  show only byte counts
+
+Without a file (or with -) the
+input is read from a pipe or
+redirect, e.g.  ls / | wc
