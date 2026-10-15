@@ -392,7 +392,11 @@ end
 function shell.resolve(path)
     expect(1, path, "string")
     if path == "~" or string.sub(path, 1, 2) == "~/" then
-        return fs.combine(homeDirectory(), string.sub(path, 3))
+        -- Without a logged-in user there is no home; don't map "~" to "/".
+        local home = homeDirectory()
+        if home ~= "" then
+            return fs.combine(home, string.sub(path, 3))
+        end
     end
     local sStartChar = string.sub(path, 1, 1)
     if sStartChar == "/" or sStartChar == "\\" then

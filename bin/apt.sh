@@ -310,7 +310,9 @@ elseif command == "-U" then
 elseif command == "-s" then
   if requirePackage("-s") ~= true then return false end
   if requireAdmin("-s") ~= true then return false end
-  if requireHttp() ~= true then return false end
+  -- Presets only rewrite the local source list; real URLs are verified online.
+  local presets = { default = true, stable = true, beta = true, goldcube = true }
+  if presets[packageName] ~= true and requireHttp() ~= true then return false end
   success = printResult(apt.addsource(packageName), "Source added", "source not added")
 
 elseif command == "-c" then

@@ -13,7 +13,7 @@ callback()
 if term.isColor() then term.setTextColor(colors.white) end
 end
 
-local function runUsermod(action, username, password)
+local function runUsermod(action, username, password, currentPassword)
 local program, loadErr = loadfile("/bin/usermod.sh")
 if program == nil then
 withColor(colors.red, function()
@@ -21,7 +21,7 @@ print("passwd: cannot load user manager: " .. tostring(loadErr))
 end)
 return false
 end
-local ok, result = pcall(program, action, username, password)
+local ok, result = pcall(program, action, username, password, currentPassword)
 if ok ~= true then
 withColor(colors.red, function()
 print("passwd: password change failed: " .. tostring(result))
@@ -61,6 +61,7 @@ end
 
 print("Changing password for " .. newusername)
 
+local currentPassword = nil
 if _G.admin ~= true then
 if newusername ~= _G.login then
 withColor(colors.red, function()
@@ -69,7 +70,8 @@ end)
 return false
 end
 write("Current password: ")
-if read("*") ~= _G.masterpass then
+currentPassword = read("*")
+if currentPassword ~= _G.masterpass then
 withColor(colors.red, function()
 print("passwd: authentication failed")
 end)
@@ -110,7 +112,7 @@ return false
 end
 ok = auth.setpass(newusername, newpassword) == true
 elseif authtype == "local" then
-ok = runUsermod("psw", newusername, newpassword)
+ok = runUsermod("psw", newusername, newpassword, currentPassword)
 printedByUsermod = true
 else
 withColor(colors.red, function()

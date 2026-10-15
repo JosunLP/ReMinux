@@ -75,6 +75,13 @@ shell.run = function(program, ...)
             end)
             return minux.checkuser("bob", "secret") ~= false
         end)())
+        -- A non-admin must know the current password to change it.
+        minux.login("bob", "secret")
+        runLine("usermod psw bob hacked wrong-current")
+        check("usermod psw needs current password", type(minux.checkuser("bob", "secret")) == "table")
+        runLine("usermod psw bob selfchanged secret")
+        check("usermod psw self change", type(minux.checkuser("bob", "selfchanged")) == "table" and _G.masterpass == "selfchanged")
+        minux.login("root", "rootpw")
         runLine("passwd bob newpw")
         check("passwd change", type(minux.checkuser("bob", "newpw")) == "table")
         runLine("userdel bob -y")

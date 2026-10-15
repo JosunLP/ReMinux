@@ -78,7 +78,7 @@ return shell.run("/etc/minux-main/workspace/shell.lua", args[1])
 end
 local quoted = {}
 for index, value in ipairs(args) do
-if string.find(value, "[%s\"'|<>;&]") then
+if value == "" or string.find(value, "[%s\"'|<>;&]") then
 value = '"' .. string.gsub(value, '(["\\])', "\\%1") .. '"'
 end
 quoted[index] = value

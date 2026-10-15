@@ -828,11 +828,11 @@ login        = { "disabled", "local", "network" },
 crashhandler = { "enabled", "disabled" },
 clearlogin   = { "enabled", "disabled" },
 network      = { "disabled", "enabled" },
-mapcleanup   = { "disabled", "enabled" },
+mapcleanup   = { "enabled", "disabled" },
 ui           = { "workspace", "prompt", "craftos", "menu" },
 debug        = { "disabled", "enabled", "logging", "full" },
 update       = { "disabled", "enabled", "always" },
-welcome      = { "disabled", "enabled" },
+welcome      = { "enabled", "disabled" },
 }
 -- Settings that a user may override in /home/<user>/minux-config/minux.cfg.
 local USER_SCOPED_SETTINGS = { ui = true, welcome = true }

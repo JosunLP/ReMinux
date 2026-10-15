@@ -101,7 +101,8 @@ local EXPECTED_OUTPUT = {
     { "which doctor", "doctor" },
     { "which service", "service" },
     { "man -k pipe", "cat" },
-    { "cd ~ && pwd", "/" },
+    -- Without a logged-in user "~" must not silently mean "/".
+    { "cd ~", "Not a directory" },
 }
 
 local function findCrash(text)
