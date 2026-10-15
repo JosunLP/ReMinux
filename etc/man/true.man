@@ -1,0 +1,7 @@
+true, /bin/true.sh
+alias: 'true'
+
+Do nothing and exit successfully.
+Handy in command lists:
+
+  true && echo runs

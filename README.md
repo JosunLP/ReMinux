@@ -13,8 +13,8 @@
 - **APT-style package manager** — install, remove, and update packages from hosted repositories, with repository-shipped packages tracking GitHub Releases
 - **Configurable UI** — choose between `workspace`, `menu`, `prompt`, or plain `craftos` as your shell
 - **Peripheral auto-detection** — modems, monitors, printers, and speakers are detected on boot
-- **Crash handler** — a staged watchdog prevents boot loops and offers a repair shell
-- **Self-healing diagnostics** — `doctor` audits core OS state and can recreate missing runtime files
+- **Crash handler** — a staged watchdog prevents boot loops and offers a repair shell; a boot counts as healthy once the UI has been up for 20 seconds, and unattended computers continue past the boot prompt automatically
+- **Self-healing diagnostics** — `doctor` audits core OS state (settings, aliases, package manifests, disk space) and `doctor --repair` fixes what it can
 - **Debug / logging system** — `disabled`, `enabled`, `logging`, or `full` verbosity levels
 - **Network DHCP** — automatic server discovery over Rednet
 - **Linux-like file management** — built-in `mkdir`, `cp`, `mv`, and `rm` commands with CC: Tweaked-safe guards
@@ -121,12 +121,12 @@
 | `doctor`      | Audit and repair missing core system state                 |
 | `edit`        | Open the text editor                                       |
 | `halt`        | Shut down the computer                                     |
-| `less`        | Scrollable file viewer (Up/Down/W/S, Ctrl to exit)         |
+| `less`        | Full-screen pager with search (`/`, `n`, `q` to quit)      |
 | `lock`        | Lock the screen until the current password is entered      |
 | `login`       | Log in as another user                                     |
 | `ls`          | List directory contents (`-a`, `-l`, `-R`, `-d`)           |
 | `makeboot`    | Write the net-installer to a disk drive                    |
-| `man`         | Display a manual page; `man list` for all topics           |
+| `man`         | Manual pages; `man list`, `man -k <word>` to search        |
 | `newtab`      | Open a new workspace tab (advanced computers only)         |
 | `passwd`      | Change a user's password                                   |
 | `programs`    | List all available programs                                |
@@ -159,7 +159,7 @@
 | `find`                              | Walk a directory tree (`-name`, `-type`, `-maxdepth`) |
 | `fold`                              | Wrap input lines at a column width                    |
 | `grep`                              | Search files or stdin (`-F`, `-i`, `-n`, `-v`, `-r`)  |
-| `head`                              | Print the first N lines of a file                     |
+| `head`                              | Print the first N lines of files or piped input       |
 | `id`                                | Print user / host / computer-id                       |
 | `mktemp`                            | Create a unique file under `/tmp`                     |
 | `mkdir`                             | Create one or more directories                        |
@@ -170,15 +170,16 @@
 | `rev`                               | Reverse the characters of every line                  |
 | `rm`                                | Remove files; `-r` also removes directories           |
 | `seq`                               | Generate a sequence of integers                       |
-| `sort`                              | Sort lines (`-r`, `-n`, `-u`)                         |
+| `sort`                              | Sort lines (`-r`, `-n`, `-u`, `-f`)                   |
 | `stat`                              | Print file metadata (owner, group, mode, times)       |
-| `tac`                               | Print a file in reverse order                         |
-| `tail`                              | Print the last N lines of a file                      |
+| `tac`                               | Print lines in reverse order                          |
+| `true` / `false`                    | Succeed / fail without doing anything (for `&&`/`\|\|`) |
+| `tail`                              | Print the last N lines of files or piped input        |
 | `touch`                             | Create empty files / ensure they exist                |
 | `tr`                                | Translate or delete characters                        |
 | `tree`                              | Print a directory tree                                |
 | `uname`                             | Print ReMinux/system identification                   |
-| `uniq`                              | Collapse runs of equal lines (`-c`, `-d`)             |
+| `uniq`                              | Collapse runs of equal lines (`-c`, `-d`, `-u`)       |
 | `uptime`                            | Time since the computer booted                        |
 | `wc`                                | Count lines, words and bytes (`-l`, `-w`, `-c`)       |
 | `which`                             | Resolve a command/alias to its path                   |
@@ -197,6 +198,22 @@
 | `rs`          | Redstone control: `get`, `on`/`off`, `set`, `pulse`, `bundled` |
 | `speak`       | Play one tone per word on an attached speaker                  |
 | `top`         | Dashboard: id, label, uptime, free disk, peripherals, modems   |
+
+### Shell basics
+
+The ReMinux shell supports pipes (`|`), redirection (`>`, `>>`, `<`) and command
+lists (`&&`, `||`, `;`). All text utilities (`cat`, `grep`, `head`, `tail`,
+`sort`, `uniq`, `wc`, `tac`, `rev`, `nl`, `fold`, `cut`, `tr`, `less`) read piped
+input when no file is given:
+
+```bash
+ls / | sort -r | head -n 3
+cat /etc/apt/list/installed.db | wc -l
+grep -i error /var/log/apt.txt > /home/errors.txt || echo "no errors"
+```
+
+`~` refers to your home directory, mistyped commands suggest close matches
+("Did you mean …?"), and `Ctrl+T` at the prompt cancels the current line.
 
 ---
 

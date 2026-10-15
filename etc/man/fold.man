@@ -2,7 +2,12 @@ fold, /bin/fold.sh
 alias: 'fold'
 
 Wrap each input line at <width>
-columns (default 80).
+columns (default: terminal width).
 
 Usage:
-  fold [-w <width>] <file>
+  fold [-w <width>] [-s] [file...]
+  -s  break at spaces
+
+Without a file (or with -) the
+input is read from a pipe or
+redirect, e.g.  ls / | fold

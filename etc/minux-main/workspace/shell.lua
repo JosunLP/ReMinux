@@ -199,6 +199,58 @@ local function executeProgram(remainingRecursion, path, args, ioContext)
     return false
 end
 
+-- Damerau-free Levenshtein distance, used for "did you mean" hints.
+local function editDistance(left, right)
+    if math.abs(#left - #right) > 2 then
+        return 3
+    end
+    local previous = {}
+    for j = 0, #right do previous[j] = j end
+    for i = 1, #left do
+        local current = { [0] = i }
+        for j = 1, #right do
+            local cost = string.sub(left, i, i) == string.sub(right, j, j) and 0 or 1
+            current[j] = math.min(previous[j] + 1, current[j - 1] + 1, previous[j - 1] + cost)
+        end
+        previous = current
+    end
+    return previous[#right]
+end
+
+local function suggestCommands(command)
+    if command:find("/") or #command < 2 then
+        return {}
+    end
+    local candidates = {}
+    for alias in pairs(tAliases) do candidates[alias] = true end
+    for _, program in ipairs(shell.programs()) do candidates[program] = true end
+    local matches = {}
+    for candidate in pairs(candidates) do
+        local distance = editDistance(command, candidate)
+        if distance <= (#command <= 3 and 1 or 2) then
+            matches[#matches + 1] = { name = candidate, distance = distance }
+        end
+    end
+    table.sort(matches, function(a, b)
+        if a.distance ~= b.distance then return a.distance < b.distance end
+        return a.name < b.name
+    end)
+    local names = {}
+    for index = 1, math.min(3, #matches) do names[index] = matches[index].name end
+    return names
+end
+
+local function reportUnknownCommand(command)
+    printError(tostring(command) .. ": command not found")
+    local suggestions = suggestCommands(tostring(command))
+    if #suggestions > 0 then
+        local previousColour = term.getTextColour()
+        if term.isColour() then term.setTextColour(colours.lightGrey) end
+        print("Did you mean: " .. table.concat(suggestions, ", ") .. "?")
+        term.setTextColour(previousColour)
+    end
+end
+
 local function runResolvedCommand(command, arguments, ioContext)
     local sPath = shell.resolveProgram(command)
     if sPath ~= nil then
@@ -227,7 +279,7 @@ local function runResolvedCommand(command, arguments, ioContext)
         end
         return result
     else
-        printError("No such program: " .. tostring(command))
+        reportUnknownCommand(command)
         return false
     end
 end
@@ -327,9 +379,25 @@ function shell.setPath(path)
     sPath = path
 end
 
---- Resolve a relative path to an absolute path.
+local function homeDirectory()
+    local user = _G.login
+    if type(user) ~= "string" or user == "" or user == "foo" then
+        return ""
+    end
+    return "home/" .. user
+end
+
+--- Resolve a relative path to an absolute path. "~" expands to the home
+-- directory of the logged-in user.
 function shell.resolve(path)
     expect(1, path, "string")
+    if path == "~" or string.sub(path, 1, 2) == "~/" then
+        -- Without a logged-in user there is no home; don't map "~" to "/".
+        local home = homeDirectory()
+        if home ~= "" then
+            return fs.combine(home, string.sub(path, 3))
+        end
+    end
     local sStartChar = string.sub(path, 1, 1)
     if sStartChar == "/" or sStartChar == "\\" then
         return fs.combine("", path)
@@ -339,7 +407,7 @@ function shell.resolve(path)
 end
 
 local function pathWithExtension(_sPath, _sExt)
-    local nLen = #sPath
+    local nLen = #_sPath
     local sEndChar = string.sub(_sPath, nLen, nLen)
     -- Remove any trailing slashes so we can add an extension to the path safely
     if sEndChar == "/" or sEndChar == "\\" then
@@ -615,15 +683,21 @@ if #tArgs > 0 then
 
 else
     local function show_prompt()
-        local colortable = minux.getbashcolor()
         if _G.lockactive == true then
             minux.lock()
-        else
-            term.setBackgroundColor(colortable[2])
-            term.setTextColour(colortable[3])
-            write(_G.login .. "@-/" .. shell.dir() .. ">")
-            term.setTextColour(colortable[1])
         end
+        local colortable = minux.getbashcolor()
+        term.setBackgroundColor(colortable[2])
+        term.setTextColour(colortable[3])
+        local user = minux.displayUser()
+        local dir = "/" .. shell.dir()
+        local home = homeDirectory()
+        if home ~= "" and (shell.dir() == home or string.sub(shell.dir(), 1, #home + 1) == home .. "/") then
+            dir = "~" .. string.sub(shell.dir(), #home + 1)
+        end
+        local symbol = _G.admin == true and "#" or "$"
+        write(user .. "@" .. minux.hostname() .. ":" .. dir .. symbol .. " ")
+        term.setTextColour(colortable[1])
     end
 
     -- "shell"
@@ -631,22 +705,14 @@ else
     local colortable = minux.getbashcolor()
     term.setBackgroundColor(colortable[2])
     term.setTextColour(colortable[3])
-	term.clear()
-	term.setCursorPos(1,1)
-    -- do we print welcome screen?
+    term.clear()
+    term.setCursorPos(1, 1)
     if minux.getconfig("welcome") == "enabled" and term.isColor() then
-        minux.debug("welcome screen compatible system","minux")
-        local findline = minux.getconfig("welcome")
-        if findline == "enabled" then
-            minux.debug("Launching welcome screen","minux")
-          shell.run("/etc/minux-main/welcome/welcome.sys")
-        elseif fs.exists(findline) == true and fs.isDir(findline) ~= true then
-            shell.run(findline) 
-        else
-            minux.debug("Welcome screen disabled by user","minux")
+        minux.debug("Launching welcome screen", "minux")
+        local welcomeOk, welcomeErr = pcall(shell.run, "/etc/minux-main/welcome/welcome.sys")
+        if not welcomeOk then
+            minux.debug("welcome screen failed: " .. tostring(welcomeErr), "minux")
         end
-    else
-        minux.debug("system is not welcome screen compatible","minux")
     end
     term.setTextColour(colortable[1])
 
@@ -668,9 +734,10 @@ else
         local ok, result
         local co = coroutine.create(read)
         assert(coroutine.resume(co, nil, tCommandHistory, complete))
+        local interrupted = false
 
         while coroutine.status(co) ~= "dead" do
-            local event = table.pack(os.pullEvent())
+            local event = table.pack(os.pullEventRaw())
             if event[1] == "file_transfer" then
                 -- Abandon the current prompt
                 local _, h = term.getSize()
@@ -693,15 +760,32 @@ else
                 event = { "term_resize", n = 1 } -- Nasty hack to force read() to redraw.
             end
 
-            if result == nil or event[1] == result or event[1] == "terminate" then
+            if event[1] == "terminate" then
+                -- Ctrl+T at the prompt cancels the current line instead of
+                -- killing the shell (which used to reboot the computer).
+                interrupted = true
+                break
+            end
+
+            if result == nil or event[1] == result then
                 ok, result = coroutine.resume(co, table.unpack(event, 1, event.n))
                 if not ok then error(result, 0) end
             end
         end
 
-        if result:match("%S") and tCommandHistory[#tCommandHistory] ~= result then
-            table.insert(tCommandHistory, result)
+        if interrupted then
+            term.setCursorBlink(false)
+            print("^C")
+        elseif type(result) == "string" then
+            if result:match("%S") and tCommandHistory[#tCommandHistory] ~= result then
+                table.insert(tCommandHistory, result)
+            end
+            local runOk, runErr = pcall(shell.run, result)
+            if not runOk then
+                -- Never let a faulty command take the whole shell down.
+                term.redirect(parentTerm)
+                printError("shell: " .. tostring(runErr))
+            end
         end
-        shell.run(result)
     end
 end

@@ -1,71 +1,60 @@
--- wc: count lines, words, and bytes in one or more files.
+-- wc: count lines, words and bytes of files or piped input.
 local args = { ... }
 
-if args[1] == nil or args[1] == "?" or args[1] == "help" or args[1] == "--help" then
-	print("Usage: wc [-l|-w|-c] <file> [file...]")
-	print("  -l  show line count only")
-	print("  -w  show word count only")
-	print("  -c  show byte count only")
+if args[1] == "?" or args[1] == "help" or args[1] == "--help" then
+	print("Usage: wc [-l] [-w] [-c] [file...]")
+	print("  -l  show line count")
+	print("  -w  show word count")
+	print("  -c  show byte count")
+	print("Without flags all three counts are shown.")
 	return 0
 end
 
-local mode = "all"
-local startIndex = 1
-if args[1] == "-l" then mode, startIndex = "lines", 2
-elseif args[1] == "-w" then mode, startIndex = "words", 2
-elseif args[1] == "-c" then mode, startIndex = "bytes", 2 end
-
-local function countFile(filepath)
-	if fs.exists(filepath) == false or fs.isDir(filepath) then
-		return nil, "not a file: " .. filepath
-	end
-	local handle = fs.open(filepath, "r")
-	local lines, words, bytes = 0, 0, 0
-	local line = handle.readLine()
-	while line ~= nil do
-		lines = lines + 1
-		bytes = bytes + #line + 1 -- count the implicit newline
-		for _ in line:gmatch("%S+") do words = words + 1 end
-		line = handle.readLine()
-	end
-	handle.close()
-	return lines, words, bytes
-end
-
-local totalLines, totalWords, totalBytes = 0, 0, 0
-local fileCount = 0
-
-for index = startIndex, #args do
-	local target = shell.resolve(args[index])
-	local lines, words, bytes = countFile(target)
-	if lines == nil then
-		print(words) -- error message stored in 'words'
-	else
-		fileCount = fileCount + 1
-		totalLines = totalLines + lines
-		totalWords = totalWords + words
-		totalBytes = totalBytes + bytes
-		if mode == "lines" then
-			print(string.format("%7d %s", lines, target))
-		elseif mode == "words" then
-			print(string.format("%7d %s", words, target))
-		elseif mode == "bytes" then
-			print(string.format("%7d %s", bytes, target))
-		else
-			print(string.format("%7d %7d %7d %s", lines, words, bytes, target))
+local show = { lines = false, words = false, bytes = false }
+local files = {}
+for _, arg in ipairs(args) do
+	if string.match(arg, "^%-[lwc]+$") then
+		for flag in string.gmatch(string.sub(arg, 2), ".") do
+			if flag == "l" then show.lines = true
+			elseif flag == "w" then show.words = true
+			elseif flag == "c" then show.bytes = true end
 		end
+	else
+		files[#files + 1] = arg
 	end
+end
+if not show.lines and not show.words and not show.bytes then
+	show.lines, show.words, show.bytes = true, true, true
 end
 
-if fileCount > 1 then
-	if mode == "lines" then
-		print(string.format("%7d total", totalLines))
-	elseif mode == "words" then
-		print(string.format("%7d total", totalWords))
-	elseif mode == "bytes" then
-		print(string.format("%7d total", totalBytes))
-	else
-		print(string.format("%7d %7d %7d total",
-			totalLines, totalWords, totalBytes))
-	end
+local sources, failed = minux.collectInput("wc", files, shell.resolve)
+if sources == nil then return false end
+
+local function format(lines, words, bytes, label)
+	local parts = {}
+	if show.lines then parts[#parts + 1] = string.format("%7d", lines) end
+	if show.words then parts[#parts + 1] = string.format("%7d", words) end
+	if show.bytes then parts[#parts + 1] = string.format("%7d", bytes) end
+	local text = table.concat(parts, " ")
+	if label ~= nil then text = text .. " " .. label end
+	return text
 end
+
+local total = { lines = 0, words = 0, bytes = 0 }
+local fromStdin = #files == 0
+for _, source in ipairs(sources) do
+	local lines, words, bytes = #source.lines, 0, 0
+	for _, line in ipairs(source.lines) do
+		bytes = bytes + #line + 1 -- count the implicit newline
+		for _ in string.gmatch(line, "%S+") do words = words + 1 end
+	end
+	total.lines = total.lines + lines
+	total.words = total.words + words
+	total.bytes = total.bytes + bytes
+	print(format(lines, words, bytes, (not fromStdin) and source.label or nil))
+end
+
+if #sources > 1 then
+	print(format(total.lines, total.words, total.bytes, "total"))
+end
+return not failed

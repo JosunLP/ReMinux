@@ -1,43 +1,62 @@
--- cat: read and print a text file, with optional paging.
-local args     = { ... }
-local filename = args[1]
-local option   = args[2]
+-- cat: concatenate files (or piped input) and print them.
+local args = { ... }
 
-if filename == "?" or filename == "help" or filename == "-h" or filename == "--help" then
-print("cat, /bin/cat.sh")
-print("Print a text file to the screen")
-print("Usage: cat <filename> [p]")
-print("  p  - pause every 15 lines")
-return 0
+local function isHelpToken(token)
+	return token == "?" or token == "help" or token == "-h" or token == "--help"
 end
 
-if filename == nil or filename == "" then
-print("Invalid filename")
-print("Use 'man cat' for the manual")
-return false
+if isHelpToken(args[1]) then
+	print("Usage: cat [-n] [-p] [file...]")
+	print("Print files (or piped input) to the screen.")
+	print("  -n      number every output line")
+	print("  -p, p   pause after each screen of output")
+	print("Use '-' as a file name to read standard input.")
+	return 0
 end
 
-local resolved = shell.resolve(filename)
-if fs.exists(resolved) == false then
-print("File not found: " .. resolved)
-return false
+local numberLines, paged = false, false
+local files = {}
+for index, arg in ipairs(args) do
+	if arg == "-n" then
+		numberLines = true
+	elseif arg == "-p" or (arg == "p" and index > 1) then
+		-- 'cat <file> p' is the historic ReMinux paging syntax.
+		paged = true
+	else
+		files[#files + 1] = arg
+	end
 end
 
-local file = fs.open(resolved, "r")
-local lineCount = 0
-local line = file.readLine()
-while line ~= nil do
-print(line)
-lineCount = lineCount + 1
-if option == "p" and lineCount == 15 then
-print("Hit Enter for next page, or 'q' to stop")
-local input = read()
-if input == "q" or input == "Q" then
-file.close()
-return 0
+local sources, failed = minux.collectInput("cat", files, shell.resolve)
+if sources == nil then
+	return false
 end
-lineCount = 0
+
+-- Paging only makes sense on the real screen, not inside a pipe/redirect.
+if minux.getIoContext() ~= nil then paged = false end
+local _, height = term.getSize()
+local pageSize = math.max(1, height - 2)
+
+local printed, lineNumber = 0, 0
+for _, source in ipairs(sources) do
+	for _, line in ipairs(source.lines) do
+		lineNumber = lineNumber + 1
+		if numberLines then
+			print(string.format("%6d  %s", lineNumber, line))
+		else
+			print(line)
+		end
+		printed = printed + 1
+		if paged and printed >= pageSize then
+			if term.isColor() then term.setTextColor(colors.gray) end
+			write("-- more -- [Enter] next page, [q] quit ")
+			if term.isColor() then term.setTextColor(colors.white) end
+			local input = read()
+			if input == "q" or input == "Q" then
+				return not failed
+			end
+			printed = 0
+		end
+	end
 end
-line = file.readLine()
-end
-file.close()
+return not failed

@@ -204,8 +204,12 @@ local function executeCommand(command, runtime, baseContext, outputSpec)
         return false, err
     end
 
-    local ok, reason = runtime.executeCommand(command, context)
+    -- Always flush/close redirect targets, even when the command errors.
+    local called, ok, reason = pcall(runtime.executeCommand, command, context)
     finishContext(context)
+    if called ~= true then
+        return false, tostring(ok)
+    end
     if ok ~= true then
         return false, reason
     end

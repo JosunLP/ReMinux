@@ -61,4 +61,17 @@ if term.isColor() then term.setTextColor(colors.white) end
 term.clear()
 term.setCursorPos(1, 1)
 
-shell.run("/boot/init.sys")
+local bootOk = shell.run("/boot/init.sys")
+
+-- init.sys normally reboots or shuts down itself. Getting here means it
+-- crashed: never fall through to an unauthenticated CraftOS shell. The
+-- crash handler in init.sys stops reboot loops after repeated failures.
+if os.pullEventRaw ~= nil then os.pullEvent = os.pullEventRaw end
+term.setTextColor(colors.white)
+print("")
+if term.isColor() then term.setTextColor(colors.red) end
+print("ReMinux init exited unexpectedly" .. (bootOk and "." or " with an error."))
+if term.isColor() then term.setTextColor(colors.white) end
+print("Rebooting in 5 seconds...")
+sleep(5)
+os.reboot()

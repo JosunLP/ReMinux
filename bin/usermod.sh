@@ -3,6 +3,8 @@ local args = { ... }
 local action   = args[1]
 local username = args[2]
 local newpass  = args[3]
+-- Current password, passed by passwd after it already prompted for it.
+local currentpass = args[4]
 
 local function withColor(color, callback)
 if term.isColor() then term.setTextColor(color) end
@@ -32,7 +34,9 @@ print("       usermod help|-h|--help|?   show this message")
 print("Actions: add, del, psw")
 end
 
-if _G.admin ~= true then
+-- Regular users may only change their own password.
+local isSelfPasswordChange = action == "psw" and username ~= nil and username == _G.login
+if _G.admin ~= true and not isSelfPasswordChange then
 err("requires admin privileges")
 print("Hint: log in as an admin or owner before changing users.")
 return false
@@ -155,6 +159,17 @@ ok("removed user '" .. username .. "'")
 return true
 
 elseif action == "psw" then
+if _G.admin ~= true then
+-- Non-admins may only change their own password and must prove they know it.
+if currentpass == nil then
+write("Current password: ")
+currentpass = read("*")
+end
+if currentpass ~= _G.masterpass then
+err("authentication failed")
+return false
+end
+end
 if username == nil or newpass == nil then
 err("missing username or password for 'psw'")
 print("Usage: usermod psw <username> <password>")
@@ -176,6 +191,10 @@ end
 if writeUserFile(userPath, newpass) ~= true then
 err("could not write user file")
 return false
+end
+if username == _G.login then
+-- Keep the lock screen in sync with the new password.
+_G.masterpass = newpass
 end
 ok("updated password for '" .. username .. "'")
 return true

@@ -1,6 +1,6 @@
 AIF=true
 https://raw.githubusercontent.com/JosunLP/ReMinux/main/etc/apt/
-version=3.2.0
+version=3.3.0
 author=minux-team
 php=false
 [filelist]
@@ -204,3 +204,8 @@ php=false
 /etc/man/restart.man
 /etc/man/useradd.man
 /etc/man/userdel.man
+/bin/true.sh
+/bin/false.sh
+/etc/man/true.man
+/etc/man/false.man
+/etc/man/neofetch.man

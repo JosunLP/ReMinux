@@ -382,6 +382,9 @@ return
 end
 self:ensureParentDirectory(self.releaseCachePath)
 local file = fs.open(self.releaseCachePath, "w")
+if file == nil then
+return
+end
 file.writeLine(now)
 file.writeLine(status)
 file.writeLine(tag or "")
@@ -507,7 +510,7 @@ end
 local bestTag = nil
 for index = 1, #releases do
 local release = releases[index]
-local tag = release.tag_name
+local tag = type(release) == "table" and release.tag_name or nil
 if type(release) == "table" and release.draft ~= true and release.prerelease ~= true and self:isStableVersionTag(tag) then
 if bestTag == nil or self:compareVersions(tag, bestTag) == VERSION_GREATER then
 bestTag = tag
@@ -749,28 +752,42 @@ minux.debug("clearing "..job.label.." build cache", "apt")
 self:deleteIfExists(job.tempPath)
 
 local buildFile = fs.open(job.tempPath, "w")
+if buildFile == nil then
+minux.debug("build:E:cannot write "..job.tempPath, "apt")
+return false
+end
 local entries = fs.list(job.sourceDir)
+table.sort(entries)
 for index = 1, #entries do
 local filename = entries[index]
+local sourcePath = fs.combine(job.sourceDir, filename)
+if fs.isDir(sourcePath) ~= true then
 minux.debug("reading:"..filename, "apt")
-local sourceFile = fs.open(fs.combine(job.sourceDir, filename), "r")
-buildFile.writeLine(sourceFile.readAll())
+local sourceFile = fs.open(sourcePath, "r")
+if sourceFile ~= nil then
+buildFile.writeLine(sourceFile.readAll() or "")
 sourceFile.close()
+end
+end
 end
 buildFile.close()
 
 minux.debug("file built, installing", "apt")
 self:deleteIfExists(job.targetPath)
-fs.move(job.tempPath, job.targetPath)
+local moved, moveError = pcall(fs.move, job.tempPath, job.targetPath)
+if moved ~= true then
+minux.debug("build:E:install failed:"..tostring(moveError), "apt")
+return false
+end
 minux.debug("done", "apt")
 return true
 end
 
 function AptManager:rebuildGeneratedFiles()
-self:buildFromDirectory(self.buildJobs.boot)
-self:buildFromDirectory(self.buildJobs.alias)
-self:buildFromDirectory(self.buildJobs.autorun)
-return true
+local bootOk = self:buildFromDirectory(self.buildJobs.boot)
+local aliasOk = self:buildFromDirectory(self.buildJobs.alias)
+local autorunOk = self:buildFromDirectory(self.buildJobs.autorun)
+return bootOk == true and aliasOk == true and autorunOk == true
 end
 
 -- Copy shipped per-package manifests from the read-only repository tree at
@@ -937,6 +954,21 @@ return false
 end
 
 local manager = AptManager.new()
+local installsInProgress = {}
+
+-- Only uninstall canonical absolute file paths from package manifests.
+-- This avoids deleting relative traversal targets or malformed section data.
+local function isValidManifestFilePath(path)
+if type(path) ~= "string" or path == "" or path == "/" then return false end
+if string.sub(path, 1, 1) ~= "/" then return false end
+if string.find(path, "..", 1, true) ~= nil then return false end
+local normalized = fs.combine("/", path)
+if string.sub(normalized, 1, 1) ~= "/" then
+normalized = "/"..normalized
+end
+return normalized == path
+end
+
 
 -- Returns true when one or more config files were repaired.
 -- Returns false when no repair was needed.
@@ -1069,8 +1101,19 @@ minux.debug("apt:pack already installed", "apt")
 return true
 end
 
+if installsInProgress[packname] == true then
+-- Dependency cycle (a -> b -> a): the outer install finishes the job.
+minux.debug("install:dependency cycle detected:"..packname, "apt")
+return true
+end
 minux.debug("install:running getpack", "apt")
-local result = apt.getpack(packname)
+installsInProgress[packname] = true
+local getpackOk, result = pcall(apt.getpack, packname)
+installsInProgress[packname] = nil
+if getpackOk ~= true then
+minux.debug("install:getpack crashed:"..tostring(result), "apt")
+return false
+end
 if result == true then
 if fs.exists(manager.manifestDirectory..packname..".db") == true then
 minux.insertline(manager.installedListPath, packname)
@@ -1108,19 +1151,21 @@ if sources == nil then
 return sourceError
 end
 
-local manifestPath = manager.manifestDirectory..packname..".db"
+local installedManifestPath = manager.manifestDirectory..packname..".db"
+manager:ensureDirectory(manager.manifestCacheDirectory)
+local manifestPath = manager.manifestCacheDirectory..packname..".pending.db"
 local packageSource = nil
 minux.debug("start search for pack", "apt")
 for index = 1, #sources do
 local source = sources[index]
 local manifestUrl = manager:joinSourcePath(source, "manifest/"..packname..".db")
 minux.debug("trying "..manifestUrl, "apt")
-fs.delete(manifestPath)
+manager:deleteIfExists(manifestPath)
 local downloaded = minux.download(manifestUrl, manifestPath)
 if downloaded == true then
 local temp = fs.open(manifestPath, "r")
-local manifestState = temp.readLine()
-temp.close()
+local manifestState = temp ~= nil and temp.readLine() or nil
+if temp ~= nil then temp.close() end
 if manifestState == "AIF=true" then
 packageSource = source
 minux.debug("getpack:Pack found:"..packname, "apt")
@@ -1135,6 +1180,7 @@ end
 end
 
 if packageSource == nil then
+manager:deleteIfExists(manifestPath)
 minux.debug("E:105:Notfound", "apt")
 return 105
 end
@@ -1142,6 +1188,10 @@ end
 local dependenciesComplete = true
 minux.debug("checking for dependencies", "apt")
 local manifest = minux.readtable(manifestPath)
+if type(manifest) ~= "table" then
+minux.debug("getpack:E:104:manifest unreadable", "apt")
+return APT_ERROR_CONFIG_INVALID
+end
 local manifestIndex = 1
 local dependenciesStarted = false
 local fileListStarted = false
@@ -1169,12 +1219,13 @@ manifestIndex = manifestIndex + 1
 end
 
 if dependenciesComplete ~= true then
+manager:deleteIfExists(manifestPath)
 minux.debug("getpack:E:103:dependencies not met", "apt")
 return 103
 end
-
-if keyfile ~= false then
-fs.delete(keyfile)
+if keyfile ~= false and isValidManifestFilePath(keyfile) ~= true then
+minux.debug("getpack:ignoring invalid keyfile:"..tostring(keyfile), "apt")
+keyfile = false
 end
 
 manager:ensureDirectory(manager.mapCacheDirectory)
@@ -1185,9 +1236,14 @@ downloadSource = packageSource.."repository/map.php?id="..packname.."&type=map&c
 end
 
 local mapPath = manager.mapCacheDirectory..packname..".map"
-fs.delete(mapPath)
+manager:deleteIfExists(mapPath)
 minux.download(downloadSource, mapPath)
 if fs.exists(mapPath) == true then
+-- Only remove the key file once the installer map is safely on disk;
+-- the map is expected to recreate it.
+if keyfile ~= false and fs.exists(keyfile) and not fs.isDir(keyfile) then
+fs.delete(keyfile)
+end
 local originalTerminal = minux.disableoutput()
 local runOk, runResult = pcall(shell.run, mapPath.." /")
 minux.enableoutput(originalTerminal)
@@ -1197,11 +1253,13 @@ end
 if runOk ~= true then
 minux.debug("getpack:map crashed:"..tostring(runResult), "apt")
 deleteMap()
+manager:deleteIfExists(manifestPath)
 return 109
 end
 if runResult == false or (type(runResult) == "number" and runResult ~= 0) then
 minux.debug("getpack:map failed:"..tostring(runResult), "apt")
 deleteMap()
+manager:deleteIfExists(manifestPath)
 return 109
 end
 minux.debug("getpack:package executed.", "apt")
@@ -1209,31 +1267,29 @@ if minux.getconfig("mapcleanup") == "enabled" then
 deleteMap()
 end
 else
+manager:deleteIfExists(manifestPath)
 minux.debug("getpack:nopack-dlfail:109", "apt")
 return 109
 end
 
 if keyfile ~= false and fs.exists(keyfile) == false then
+manager:deleteIfExists(manifestPath)
 minux.debug("getpack:E110:keyfile check failed", "apt")
 return 110
+end
+
+-- Promote the staged manifest only after the package installed cleanly.
+manager:ensureParentDirectory(installedManifestPath)
+manager:deleteIfExists(installedManifestPath)
+local promoted, promoteError = pcall(fs.move, manifestPath, installedManifestPath)
+if promoted ~= true then
+minux.debug("getpack:E:104:manifest promote failed:"..tostring(promoteError), "apt")
+return APT_ERROR_CONFIG_INVALID
 end
 
 manager.repositoryPackages = nil
 minux.debug("getpack:ending", "apt")
 return true
-end
-
--- Only uninstall canonical absolute file paths from package manifests.
--- This avoids deleting relative traversal targets or malformed section data.
-local function isValidManifestFilePath(path)
-if type(path) ~= "string" or path == "" or path == "/" then return false end
-if string.sub(path, 1, 1) ~= "/" then return false end
-if string.find(path, "..", 1, true) ~= nil then return false end
-local normalized = fs.combine("/", path)
-if string.sub(normalized, 1, 1) ~= "/" then
-normalized = "/"..normalized
-end
-return normalized == path
 end
 
 function uninstall(packname)
@@ -1525,14 +1581,15 @@ return true
 end
 
 minux.debug("reading cleanup instructions", "apt")
-local tempfile = fs.open(cleanupPath, "r")
-local line = tempfile.readLine()
-while line ~= nil do
-fs.delete(line)
-minux.debug("removing:"..line, "apt")
-line = tempfile.readLine()
+local lines = manager:readLines(cleanupPath)
+for _, line in ipairs(lines or {}) do
+if isValidManifestFilePath(line) and fs.exists(line) then
+local deleted, deleteError = pcall(fs.delete, line)
+minux.debug("removing:"..line..(deleted and "" or (" failed: "..tostring(deleteError))), "apt")
+elseif line ~= "" then
+minux.debug("cleanup:skipping invalid path:"..line, "apt")
 end
-tempfile.close()
+end
 
 minux.debug("end cleanup", "apt")
 return true

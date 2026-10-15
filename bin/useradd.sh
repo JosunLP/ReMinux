@@ -47,23 +47,41 @@ print("Usage: useradd <username> [password]")
 return false
 end
 
-if newpassword == nil or newpassword == "" then
-write("New password for " .. newusername .. ": ")
-newpassword = read("*")
-end
-if newpassword == nil or newpassword == "" then
-withColor(colors.red, function()
-print("useradd: password must not be empty")
-end)
-return false
-end
-
 local authtype = minux.logintype()
 if authtype == "disabled" then
 withColor(colors.red, function()
 print("useradd: no login system in use")
 end)
 print("Hint: enable one with 'config login local' or 'config login network'.")
+return false
+end
+
+local validName, nameError = minux.validateUsername(newusername)
+if validName ~= true then
+withColor(colors.red, function()
+print("useradd: " .. tostring(nameError))
+end)
+return false
+end
+
+if newpassword == nil or newpassword == "" then
+write("New password for " .. newusername .. ": ")
+newpassword = read("*")
+if newpassword ~= nil and newpassword ~= "" then
+write("Retype new password: ")
+local confirmation = read("*")
+if confirmation ~= newpassword then
+withColor(colors.red, function()
+print("useradd: passwords do not match")
+end)
+return false
+end
+end
+end
+if newpassword == nil or newpassword == "" then
+withColor(colors.red, function()
+print("useradd: password must not be empty")
+end)
 return false
 end
 

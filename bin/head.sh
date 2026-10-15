@@ -1,47 +1,45 @@
--- head: print the first N lines (default 10) of a file.
+-- head: print the first N lines (default 10) of files or piped input.
 local args = { ... }
 
 if args[1] == "?" or args[1] == "help" or args[1] == "--help" then
-	print("Usage: head [-n <count>] <file>")
-	print("Defaults to 10 lines.")
+	print("Usage: head [-n <count>] [file...]")
+	print("Print the first lines (default 10) of each file or of piped input.")
 	return 0
 end
 
-if args[1] == nil then
-	print("Usage: head [-n <count>] <file>")
-	print("Defaults to 10 lines.")
-	return false
-end
-
 local count = 10
-local fileArg = args[1]
-if args[1] == "-n" and args[2] ~= nil then
-	local parsed = tonumber(args[2])
-	if parsed == nil or parsed < 0 then
-		print("Invalid line count: " .. tostring(args[2]))
-		return false
+local files = {}
+local index = 1
+while index <= #args do
+	local arg = args[index]
+	local inline = string.match(arg, "^%-n(%d+)$") or string.match(arg, "^%-(%d+)$")
+	if arg == "-n" then
+		local parsed = tonumber(args[index + 1])
+		if parsed == nil or parsed < 0 then
+			print("head: invalid line count: " .. tostring(args[index + 1]))
+			return false
+		end
+		count = math.floor(parsed)
+		index = index + 2
+	elseif inline ~= nil then
+		count = tonumber(inline)
+		index = index + 1
+	else
+		files[#files + 1] = arg
+		index = index + 1
 	end
-	count = math.floor(parsed)
-	fileArg = args[3]
 end
 
-if fileArg == nil then
-	print("No file given.")
-	return false
-end
+local sources, failed = minux.collectInput("head", files, shell.resolve)
+if sources == nil then return false end
 
-local target = shell.resolve(fileArg)
-if fs.exists(target) == false or fs.isDir(target) then
-	print("Not a file: " .. target)
-	return false
+for sourceIndex, source in ipairs(sources) do
+	if #sources > 1 then
+		if sourceIndex > 1 then print("") end
+		print("==> " .. source.label .. " <==")
+	end
+	for lineIndex = 1, math.min(count, #source.lines) do
+		print(source.lines[lineIndex])
+	end
 end
-
-local handle = fs.open(target, "r")
-local printed = 0
-local line = handle.readLine()
-while line ~= nil and printed < count do
-	print(line)
-	printed = printed + 1
-	line = handle.readLine()
-end
-handle.close()
+return not failed

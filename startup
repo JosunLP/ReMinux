@@ -1,6 +1,7 @@
--- ReMinux Bootloader
-shell.run("clear")
-shell.run("/boot/init.sys")
+-- ReMinux bootloader
+-- CraftOS resolves "/startup" before "/startup.lua", so this file is the real
+-- entry point; it hands over to startup.lua (splash screen + init).
+shell.run("/startup.lua")
 
 -- in case someone wants to kill us, or init, or login
 os.shutdown()

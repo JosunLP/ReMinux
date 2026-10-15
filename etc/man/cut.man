@@ -5,7 +5,11 @@ Extract sections from each line of
 a file.
 
 Usage:
-  cut -c <ranges> <file>
-  cut -d <delim> -f <ranges> <file>
+  cut -c <ranges> [file...]
+  cut -d <delim> -f <ranges> [file...]
 Ranges: N , N-M , -M , N- (comma
 separated).
+
+Without a file (or with -) the
+input is read from a pipe or
+redirect, e.g.  echo a,b | cut -d , -f 2

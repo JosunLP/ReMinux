@@ -4,6 +4,86 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+## [3.3.0] - 2026-10-15
+
+### Fixed
+
+- **Settings corruption**: `config login …` matched the `clearlogin=` line as
+  if it were `login=`, deleting it and leaving duplicate `login=` lines, so
+  switching login back to `disabled` silently failed. Settings are now
+  parsed and rewritten by exact key.
+- `minux.findline` treated its search text as a Lua pattern, so literal
+  text such as `minux-main` or source URLs never matched. It now does a
+  plain-text search.
+- The lock screen could never be unlocked with password encryption
+  enabled (it decrypted the already-plaintext session password).
+- Password "encryption" used `computer id * 3` as key, which is `0` (no
+  encryption at all) on computer #0. New keys are random and never leave a
+  character class unchanged. This is still obfuscation, not real
+  cryptography.
+- `doctor` was missing from the APT alias source, so the first-run
+  verification removed the command; `service` had no alias at all.
+- `config` and `apt` without arguments tried to open menu-package programs
+  that are not installed ("command not found").
+- `cat` on a directory or unreadable file crashed with a Lua error;
+  `sort -n` on mixed input could crash with "invalid order function";
+  `cut -d %` crashed with a malformed pattern; `cut` dropped empty fields.
+- `bash <command> <args…>` dropped every argument after the first.
+- `halt`/`restart` crashed when `/temp/minux/boot` did not exist; a
+  missing colour file crashed the shell prompt.
+- `CraftOS` resolves `/startup` before `/startup.lua`, so the boot splash
+  never ran; `startup` now hands over to `startup.lua`.
+
+### Added
+
+- Pipes and redirects now work with all text utilities: `cat`, `head`,
+  `tail`, `sort`, `uniq`, `wc`, `tac`, `rev`, `nl`, `fold`, `cut`, `tr`
+  and `less` read piped input when no file is given (e.g.
+  `ls / | sort -r | head -n 3`). New flags: `cat -n`, `head/tail -N`,
+  `sort -f`, `uniq -u`, `fold -s`, `tr` ranges such as `a-z`.
+- `true` and `false` commands, `man -k <word>` search, man pages for
+  `true`, `false` and `neofetch`.
+- Shell: `user@host:dir$` prompt (`#` for admins), `~` expands to the home
+  directory, "Did you mean …?" suggestions for mistyped commands, trailing
+  `;` is accepted.
+- `doctor` now detects invalid or duplicate settings, a missing alias file,
+  aliases without a program, packages without a manifest and low disk
+  space; `doctor --repair` fixes the first four.
+- Tab completion for many more commands, including `man` topics and
+  `service` names.
+- CI: the CraftOS-PC smoke test now runs three scenarios (boot + command
+  matrix + interactive prompt, local login/users/encryption/lock screen,
+  workspace UI).
+
+### Changed
+
+- **Resilience**: `Ctrl+T` at the prompt cancels the line instead of
+  killing the shell (which rebooted the computer); a crashing command no
+  longer takes the shell down; `Ctrl+T` can no longer abort the boot or
+  skip the login; a crashed init reboots instead of dropping to an
+  unauthenticated CraftOS shell; a failing core API load shows a recovery
+  screen; optional boot steps (update check, services, DHCP) can fail
+  without aborting the boot; a crashed UI shows its error before rebooting.
+- The crash handler marks a boot healthy once the UI has been up for 20
+  seconds, so chunk unloads or power loss no longer lead to the repair
+  shell after two restarts.
+- The boot prompt continues automatically after 10 seconds when nobody
+  types, so unattended computers come back up after a restart.
+- `less` is a full-screen pager with status bar, page keys, `g`/`G`,
+  mouse wheel and `/` search; `q` quits.
+- APT: failed installs or updates no longer delete the installed package
+  manifest or the package key file; dependency cycles no longer recurse
+  forever; cleanup lists only delete valid absolute paths; error codes are
+  explained in plain words; commands that need the network check the
+  HTTP API first.
+- `passwd` defaults to the current user, asks for the current password for
+  non-admins and for confirmation; `useradd` validates the name and asks
+  for confirmation before prompting; regular users may change their own
+  password.
+- Writes of configuration tables are atomic (temp file + rename), and
+  debug logs rotate at 32 KiB.
+- Bumped the `minux-main` package version to 3.3.0.
+
 ## [3.2.0] - 2026-06-17
 
 ### Added

@@ -1,8 +1,12 @@
 head, /bin/head.sh
 alias: 'head'
 
-Print the first lines of a file.
-Defaults to 10 lines.
+Print the first lines of files or
+piped input. Defaults to 10 lines.
 
 Usage:
-  head [-n <count>] <file>
+  head [-n <count>] [file...]
+  head -<count> [file...]
+
+Example:
+  ls / | head -n 3

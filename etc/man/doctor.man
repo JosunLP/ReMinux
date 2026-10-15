@@ -13,7 +13,13 @@ DESCRIPTION
   broken UI/network
   combinations, disabled
   HTTP support and missing
-  tab/window APIs.
+  tab/window APIs. It also
+  finds invalid or duplicate
+  settings, a missing alias
+  file, aliases without a
+  program, installed packages
+  without a manifest and low
+  disk space.
 
 USAGE
   doctor
@@ -25,9 +31,14 @@ OPTIONS
     Recreates missing core
     files and directories,
     restores missing default
-    settings and applies safe
-    fallback values for known
-    broken configurations.
+    settings, resets invalid
+    values, merges duplicate
+    settings, regenerates
+    /boot/alias.ls, restores
+    missing package manifests
+    and applies safe fallback
+    values for known broken
+    configurations.
 
 NOTES
   doctor does not create a

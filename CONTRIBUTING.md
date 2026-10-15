@@ -26,6 +26,9 @@ Thank you for taking the time to contribute! The guidelines below keep the codeb
    CRAFTOS_PC_BIN=/path/to/craftos-pc/squashfs-root/AppRun ./.github/scripts/run-craftos-smoke.bash
    ```
 
+   It boots ReMinux three times in headless CraftOS-PC and runs the scenarios in `.github/scripts/`:
+   `craftos-smoke.lua` (boot, `doctor`, a matrix of shell commands and pipelines that must not raise Lua errors, and the interactive prompt), `craftos-auth.lua` (local login, user management, password encryption and the lock screen) and `craftos-workspace.lua` (the default workspace UI). When you add or change a command, add it to the command matrix in `craftos-smoke.lua`.
+
    This helper currently assumes a Unix-like shell with `python3` and `timeout` available, plus a Linux/AppImage-style CraftOS-PC extraction layout. On other platforms, point `CRAFTOS_PC_BIN` at the equivalent CraftOS-PC executable and ensure those helper tools are available first.
 5. Open a pull request against `main`.
 
