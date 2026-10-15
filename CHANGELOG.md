@@ -4,6 +4,8 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+## [3.3.0] - 2026-10-15
+
 ### Fixed
 
 - **Settings corruption**: `config login …` matched the `clearlogin=` line as
@@ -80,6 +82,7 @@ All notable changes to this project will be documented in this file.
   password.
 - Writes of configuration tables are atomic (temp file + rename), and
   debug logs rotate at 32 KiB.
+- Bumped the `minux-main` package version to 3.3.0.
 
 ## [3.2.0] - 2026-06-17
 
